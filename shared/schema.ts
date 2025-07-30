@@ -53,6 +53,18 @@ export const companies = pgTable("companies", {
   industry: varchar("industry"),
   notes: text("notes"),
   ytdSpend: decimal("ytd_spend", { precision: 12, scale: 2 }).default("0"),
+  // HubSpot integration fields
+  hubspotId: varchar("hubspot_id"),
+  hubspotSyncedAt: timestamp("hubspot_synced_at"),
+  // AI-powered insights
+  lastNewsUpdate: timestamp("last_news_update"),
+  newsAlerts: jsonb("news_alerts"),
+  // Customer scoring and analytics
+  customerScore: integer("customer_score").default(0),
+  engagementLevel: varchar("engagement_level"), // high, medium, low
+  // Additional addresses for multiple locations
+  shippingAddresses: jsonb("shipping_addresses"),
+  billingAddress: jsonb("billing_address"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -84,6 +96,21 @@ export const suppliers = pgTable("suppliers", {
   notes: text("notes"),
   isPreferred: boolean("is_preferred").default(false),
   doNotOrder: boolean("do_not_order").default(false),
+  // Enhanced vendor management
+  ytdSpend: decimal("ytd_spend", { precision: 12, scale: 2 }).default("0"),
+  lastYearSpend: decimal("last_year_spend", { precision: 12, scale: 2 }).default("0"),
+  preferredBenefits: jsonb("preferred_benefits"), // EQP, rebates, self-promos, etc.
+  vendorOffers: jsonb("vendor_offers"), // Current offers and programs
+  autoNotifications: boolean("auto_notifications").default(true),
+  lastOrderDate: timestamp("last_order_date"),
+  orderConfirmationReminder: boolean("order_confirmation_reminder").default(true),
+  // ESP/ASI/SAGE integration
+  espId: varchar("esp_id"),
+  asiId: varchar("asi_id"),
+  sageId: varchar("sage_id"),
+  distributorCentralId: varchar("distributor_central_id"),
+  apiIntegrationStatus: varchar("api_integration_status"), // active, inactive, error
+  lastSyncAt: timestamp("last_sync_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -339,6 +366,119 @@ export const insertActivitySchema = createInsertSchema(activities).omit({
 });
 
 // Types
+// AI Knowledge Base
+export const knowledgeBase = pgTable("knowledge_base", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: varchar("title").notNull(),
+  content: text("content").notNull(),
+  category: varchar("category"), // procedures, policies, training, etc.
+  tags: jsonb("tags"),
+  accessLevel: varchar("access_level").default("all"), // all, admin, department-specific
+  lastUpdated: timestamp("last_updated").defaultNow(),
+  createdBy: varchar("created_by").references(() => users.id),
+  searchVector: text("search_vector"), // For full-text search
+  usageCount: integer("usage_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Marketing Sequences (HubSpot-style automation)
+export const marketingSequences = pgTable("marketing_sequences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  description: text("description"),
+  targetAudience: varchar("target_audience"), // new_customers, existing_customers, etc.
+  isActive: boolean("is_active").default(true),
+  steps: jsonb("steps"), // Array of sequence steps with delays and content
+  aiGenerated: boolean("ai_generated").default(false),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Automation Tasks and AI Drafts
+export const automationTasks = pgTable("automation_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskType: varchar("task_type").notNull(), // vendor_followup, customer_outreach, etc.
+  entityType: varchar("entity_type").notNull(),
+  entityId: varchar("entity_id").notNull(),
+  status: varchar("status").default("pending"), // pending, approved, sent, cancelled
+  aiDraftContent: text("ai_draft_content"),
+  scheduledFor: timestamp("scheduled_for"),
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  metadata: jsonb("metadata"), // Context data for the task
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+// Integration Sync Logs
+export const integrationSyncs = pgTable("integration_syncs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  integrationType: varchar("integration_type").notNull(), // hubspot, slack, esp, asi, sage
+  syncType: varchar("sync_type").notNull(), // full, incremental, manual
+  status: varchar("status").notNull(), // success, error, in_progress
+  recordsProcessed: integer("records_processed").default(0),
+  errorMessage: text("error_message"),
+  metadata: jsonb("metadata"),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+// News and Media Tracking (AI-powered)
+export const newsTracking = pgTable("news_tracking", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entityType: varchar("entity_type").notNull(), // company, supplier, industry
+  entityId: varchar("entity_id"),
+  headline: varchar("headline").notNull(),
+  summary: text("summary"),
+  sourceUrl: varchar("source_url"),
+  sentiment: varchar("sentiment"), // positive, negative, neutral
+  relevanceScore: integer("relevance_score"), // 1-10
+  alertsSent: boolean("alerts_sent").default(false),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// KPI Tracking
+export const kpiMetrics = pgTable("kpi_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  metricType: varchar("metric_type").notNull(), // revenue, orders, contacts, errors, etc.
+  period: varchar("period").notNull(), // daily, weekly, monthly, yearly
+  periodDate: timestamp("period_date").notNull(),
+  value: decimal("value", { precision: 12, scale: 2 }).notNull(),
+  target: decimal("target", { precision: 12, scale: 2 }),
+  metadata: jsonb("metadata"), // Additional context
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Slack Integration Messages
+export const slackMessages = pgTable("slack_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  channelId: varchar("channel_id").notNull(),
+  messageId: varchar("message_id").notNull(),
+  userId: varchar("user_id"),
+  content: text("content"),
+  attachments: jsonb("attachments"),
+  threadTs: varchar("thread_ts"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Report Templates (AI-generated and saved)
+export const reportTemplates = pgTable("report_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  description: text("description"),
+  query: text("query").notNull(), // Natural language or SQL query
+  parameters: jsonb("parameters"), // Dynamic parameters for the report
+  schedule: varchar("schedule"), // cron-like schedule for automated reports
+  recipients: jsonb("recipients"), // Email addresses for scheduled reports
+  isActive: boolean("is_active").default(true),
+  createdBy: varchar("created_by").references(() => users.id),
+  lastRun: timestamp("last_run"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type Company = typeof companies.$inferSelect;

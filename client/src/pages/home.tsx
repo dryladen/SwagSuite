@@ -1,10 +1,10 @@
 import Layout from "@/components/Layout";
-import Dashboard from "@/components/Dashboard";
+import { EnhancedDashboard } from "@/components/dashboard/EnhancedDashboard";
 
 export default function Home() {
   return (
     <Layout>
-      <Dashboard />
+      <EnhancedDashboard />
     </Layout>
   );
 }
