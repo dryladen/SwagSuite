@@ -222,6 +222,23 @@ export const activities = pgTable("activities", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Data Upload/Import storage
+export const dataUploads = pgTable("data_uploads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fileName: varchar("file_name").notNull(),
+  originalName: varchar("original_name").notNull(),
+  fileSize: integer("file_size").notNull(),
+  mimeType: varchar("mime_type").notNull(),
+  filePath: varchar("file_path").notNull(),
+  uploadedBy: varchar("uploaded_by").references(() => users.id),
+  status: varchar("status").notNull().default("pending"), // pending, processing, completed, failed
+  processedData: jsonb("processed_data"), // AI-analyzed data
+  createdRecords: jsonb("created_records"), // IDs of created clients/orders
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+  processedAt: timestamp("processed_at"),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   orders: many(orders),
@@ -363,6 +380,12 @@ export const insertArtworkFileSchema = createInsertSchema(artworkFiles).omit({
 export const insertActivitySchema = createInsertSchema(activities).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertDataUploadSchema = createInsertSchema(dataUploads).omit({
+  id: true,
+  createdAt: true,
+  processedAt: true,
 });
 
 // Types
@@ -628,6 +651,9 @@ export type ArtworkFile = typeof artworkFiles.$inferSelect;
 export type InsertArtworkFile = z.infer<typeof insertArtworkFileSchema>;
 export type Activity = typeof activities.$inferSelect;
 export type InsertActivity = z.infer<typeof insertActivitySchema>;
+
+export type DataUpload = typeof dataUploads.$inferSelect;
+export type InsertDataUpload = z.infer<typeof insertDataUploadSchema>;
 
 // ESP/ASI/SAGE Integration Types
 export type EspProduct = typeof espProducts.$inferSelect;

@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import Layout from "@/components/Layout";
 import { IntegrationSettings } from "@/components/settings/IntegrationSettings";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,7 +35,15 @@ import {
   Globe,
   Upload,
   Save,
-  Plus
+  Plus,
+  FileText,
+  FileSpreadsheet,
+  FileImage,
+  Brain,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  Trash2
 } from "lucide-react";
 
 export default function Settings() {
@@ -104,7 +114,7 @@ export default function Settings() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="general" className="flex items-center space-x-2">
               <SettingsIcon size={16} />
               <span>General</span>
@@ -120,6 +130,10 @@ export default function Settings() {
             <TabsTrigger value="integrations" className="flex items-center space-x-2">
               <Globe size={16} />
               <span>Integrations</span>
+            </TabsTrigger>
+            <TabsTrigger value="import" className="flex items-center space-x-2">
+              <Upload size={16} />
+              <span>Data Import</span>
             </TabsTrigger>
             <TabsTrigger value="security" className="flex items-center space-x-2">
               <Shield size={16} />
@@ -428,6 +442,11 @@ export default function Settings() {
             <IntegrationSettings />
           </TabsContent>
 
+          {/* Data Import */}
+          <TabsContent value="import" className="space-y-6">
+            <DataImportSystem />
+          </TabsContent>
+
           {/* Security */}
           <TabsContent value="security" className="space-y-6">
             <Card>
@@ -488,5 +507,188 @@ export default function Settings() {
         </Tabs>
       </div>
     </Layout>
+  );
+}
+
+// Data Import System Component
+function DataImportSystem() {
+  const [uploads, setUploads] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const { toast } = useToast();
+
+  // Fetch existing uploads
+  const { data: uploadHistory = [], refetch } = useQuery({
+    queryKey: ['/api/data-uploads'],
+  });
+
+  // Upload mutation
+  const uploadMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      const response = await fetch('/api/data-uploads', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) throw new Error('Upload failed');
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "File Uploaded",
+        description: "Your file has been uploaded and is being processed by AI.",
+      });
+      refetch();
+    },
+    onError: () => {
+      toast({
+        title: "Upload Failed",
+        description: "Failed to upload file. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+    const files = Array.from(e.dataTransfer.files);
+    handleFiles(files);
+  };
+
+  const handleFiles = (files: File[]) => {
+    files.forEach(file => {
+      const formData = new FormData();
+      formData.append('file', file);
+      uploadMutation.mutate(formData);
+    });
+  };
+
+  const getSupportedFormats = () => [
+    { name: "Excel Files", ext: ".xlsx, .xls", icon: FileSpreadsheet, desc: "Customer lists, order history, product catalogs" },
+    { name: "CSV Files", ext: ".csv", icon: FileText, desc: "Data exports from other systems" },
+    { name: "Google Sheets", ext: ".gsheet", icon: FileSpreadsheet, desc: "Shared spreadsheets and databases" },
+    { name: "PDF Documents", ext: ".pdf", icon: FileText, desc: "Invoices, contracts, customer records" },
+    { name: "Word Documents", ext: ".docx, .doc", icon: FileText, desc: "Customer communications, proposals" },
+    { name: "Adobe Illustrator", ext: ".ai", icon: FileImage, desc: "Logo files and brand assets" },
+    { name: "Image Files", ext: ".jpg, .png, .gif", icon: FileImage, desc: "Product photos, logos, artwork" },
+  ];
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed': return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case 'processing': return <Clock className="h-4 w-4 text-yellow-600" />;
+      case 'failed': return <AlertCircle className="h-4 w-4 text-red-600" />;
+      default: return <Clock className="h-4 w-4 text-gray-400" />;
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Upload Zone */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-purple-600" />
+            AI-Powered Data Import
+          </CardTitle>
+          <p className="text-muted-foreground">
+            Upload your existing customer lists, order history, and business data. Our AI will analyze and organize everything into proper clients and orders.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+              dragActive ? 'border-purple-400 bg-purple-50' : 'border-gray-300'
+            }`}
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
+            onDragEnter={() => setDragActive(true)}
+            onDragLeave={() => setDragActive(false)}
+          >
+            <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium mb-2">Drop files here or click to browse</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Supports Excel, CSV, PDF, Word, AI files and more
+            </p>
+            <Input
+              type="file"
+              multiple
+              accept=".xlsx,.xls,.csv,.pdf,.docx,.doc,.ai,.jpg,.jpeg,.png,.gif"
+              onChange={(e) => e.target.files && handleFiles(Array.from(e.target.files))}
+              className="hidden"
+              id="file-upload"
+            />
+            <Label htmlFor="file-upload">
+              <Button variant="outline" className="cursor-pointer">
+                <Upload className="mr-2 h-4 w-4" />
+                Choose Files
+              </Button>
+            </Label>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Supported Formats */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Supported File Formats</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {getSupportedFormats().map((format, index) => (
+              <div key={index} className="flex items-start gap-3 p-3 border rounded-lg">
+                <format.icon className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div>
+                  <div className="font-medium">{format.name}</div>
+                  <div className="text-sm text-muted-foreground">{format.ext}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{format.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Upload History */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Import History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {uploadHistory.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <FileText className="mx-auto h-12 w-12 mb-4" />
+              <p>No files uploaded yet</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {uploadHistory.map((upload: any) => (
+                <div key={upload.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    {getStatusIcon(upload.status)}
+                    <div>
+                      <div className="font-medium">{upload.originalName}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {new Date(upload.createdAt).toLocaleDateString()} • {(upload.fileSize / 1024).toFixed(1)} KB
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {upload.status === 'completed' && (
+                      <div className="text-sm text-green-600">
+                        {upload.createdRecords?.clients || 0} clients, {upload.createdRecords?.orders || 0} orders
+                      </div>
+                    )}
+                    <Button variant="ghost" size="sm">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

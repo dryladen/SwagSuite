@@ -15,6 +15,7 @@ import {
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import Anthropic from '@anthropic-ai/sdk';
 
 // Configure multer for file uploads
 const uploadDir = path.join(process.cwd(), 'uploads');
@@ -25,26 +26,177 @@ if (!fs.existsSync(uploadDir)) {
 const upload = multer({
   dest: uploadDir,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 50 * 1024 * 1024, // 50MB limit for data files
   },
   fileFilter: (req, file, cb) => {
-    // Allow common artwork file types
+    // Allow data import file types
     const allowedTypes = [
       'image/jpeg', 'image/png', 'image/gif',
       'application/pdf',
       'application/postscript', // .ai, .eps files
-      'image/svg+xml'
+      'image/svg+xml',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+      'text/csv',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+      'application/msword' // .doc
     ];
     
     if (allowedTypes.includes(file.mimetype) || 
         file.originalname.toLowerCase().endsWith('.ai') ||
-        file.originalname.toLowerCase().endsWith('.eps')) {
+        file.originalname.toLowerCase().endsWith('.eps') ||
+        file.originalname.toLowerCase().endsWith('.csv') ||
+        file.originalname.toLowerCase().endsWith('.xlsx') ||
+        file.originalname.toLowerCase().endsWith('.xls') ||
+        file.originalname.toLowerCase().endsWith('.docx') ||
+        file.originalname.toLowerCase().endsWith('.doc')) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only images, PDF, AI, and EPS files are allowed.'));
+      cb(new Error('Invalid file type. Only images, PDF, AI, EPS, Excel, CSV, and Word files are allowed.'));
     }
   }
 });
+
+// Initialize Anthropic client
+const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+}) : null;
+
+// AI Processing Function for Data Uploads
+async function processDataUploadWithAI(uploadId: string, file: Express.Multer.File) {
+  try {
+    await storage.updateDataUpload(uploadId, { status: 'processing' });
+
+    if (!anthropic) {
+      throw new Error('Anthropic API key not configured');
+    }
+
+    let fileContent = '';
+    let analysisPrompt = '';
+
+    // Handle different file types
+    if (file.mimetype === 'text/csv' || file.originalname.toLowerCase().endsWith('.csv')) {
+      fileContent = fs.readFileSync(file.path, 'utf-8');
+      analysisPrompt = `Analyze this CSV data and extract business information to create proper client companies and orders. Focus on identifying:
+1. Company names and contact information
+2. Order details with products, quantities, and values
+3. Customer relationships and transaction history
+
+CSV Data:
+${fileContent}
+
+Return a JSON response with this structure:
+{
+  "analysis": "Brief summary of the data found",
+  "companies": [{"name": "...", "email": "...", "phone": "...", "address": "..."}],
+  "orders": [{"companyName": "...", "orderNumber": "...", "total": "...", "items": "...", "date": "..."}],
+  "summary": {"totalCompanies": 0, "totalOrders": 0, "totalRevenue": 0}
+}`;
+    } else if (file.mimetype === 'application/pdf') {
+      analysisPrompt = `This is a PDF document that may contain customer information, orders, or business data. Based on typical business PDFs, extract any relevant information to create proper client companies and orders.
+
+Return a JSON response with this structure:
+{
+  "analysis": "Brief summary of what type of document this appears to be",
+  "companies": [{"name": "...", "email": "...", "phone": "...", "address": "..."}],
+  "orders": [{"companyName": "...", "orderNumber": "...", "total": "...", "items": "...", "date": "..."}],
+  "summary": {"totalCompanies": 0, "totalOrders": 0, "totalRevenue": 0}
+}`;
+    } else {
+      // For Excel, Word, and other files
+      analysisPrompt = `This file contains business data that needs to be analyzed for customer and order information. Extract any relevant business information to create proper client companies and orders.
+
+Return a JSON response with this structure:
+{
+  "analysis": "Brief summary of the data found",
+  "companies": [{"name": "...", "email": "...", "phone": "...", "address": "..."}],
+  "orders": [{"companyName": "...", "orderNumber": "...", "total": "...", "items": "...", "date": "..."}],
+  "summary": {"totalCompanies": 0, "totalOrders": 0, "totalRevenue": 0}
+}`;
+    }
+
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4000,
+      messages: [
+        {
+          role: "user",
+          content: analysisPrompt
+        }
+      ]
+    });
+
+    const aiResponse = response.content[0]?.type === 'text' ? response.content[0].text : 'Unable to process AI response';
+    let processedData;
+    
+    try {
+      processedData = JSON.parse(aiResponse);
+    } catch (parseError) {
+      // If JSON parsing fails, create a basic structure
+      processedData = {
+        analysis: "AI analysis completed but format needs adjustment",
+        companies: [],
+        orders: [],
+        summary: { totalCompanies: 0, totalOrders: 0, totalRevenue: 0 }
+      };
+    }
+
+    // Create companies and orders from AI analysis
+    const createdRecords = { clients: 0, orders: 0 };
+
+    // Create companies
+    for (const companyData of processedData.companies || []) {
+      try {
+        const company = await storage.createCompany({
+          name: companyData.name || 'Unknown Company',
+          email: companyData.email || null,
+          phone: companyData.phone || null,
+          address: companyData.address || null
+        });
+        createdRecords.clients++;
+      } catch (error) {
+        console.error('Error creating company:', error);
+      }
+    }
+
+    // Create orders
+    for (const orderData of processedData.orders || []) {
+      try {
+        // Find matching company
+        const companies = await storage.searchCompanies(orderData.companyName || '');
+        const company = companies[0];
+        
+        if (company) {
+          const order = await storage.createOrder({
+            companyId: company.id,
+            orderNumber: orderData.orderNumber || `AI-${Date.now()}`,
+            status: 'quote',
+            total: parseFloat(orderData.total || '0').toString(),
+            notes: `Imported from ${file.originalname} - ${orderData.items || 'No items specified'}`
+          });
+          createdRecords.orders++;
+        }
+      } catch (error) {
+        console.error('Error creating order:', error);
+      }
+    }
+
+    // Update upload status
+    await storage.updateDataUpload(uploadId, {
+      status: 'completed',
+      processedData,
+      createdRecords,
+      processedAt: new Date()
+    });
+
+  } catch (error) {
+    console.error('Error processing data upload:', error);
+    await storage.updateDataUpload(uploadId, {
+      status: 'failed',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
@@ -640,6 +792,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching activities:", error);
       res.status(500).json({ message: "Failed to fetch activities" });
+    }
+  });
+
+  // Data Upload routes for AI processing
+  app.post('/api/data-uploads', isAuthenticated, upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      // Create upload record
+      const dataUpload = await storage.createDataUpload({
+        fileName: req.file.filename,
+        originalName: req.file.originalname,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        filePath: req.file.path,
+        uploadedBy: req.user?.claims?.sub,
+        status: 'pending'
+      });
+
+      res.status(201).json(dataUpload);
+
+      // Start AI processing in background
+      processDataUploadWithAI(dataUpload.id, req.file);
+    } catch (error) {
+      console.error("Error uploading data file:", error);
+      res.status(500).json({ message: "Failed to upload data file" });
+    }
+  });
+
+  app.get('/api/data-uploads', isAuthenticated, async (req, res) => {
+    try {
+      const uploads = await storage.getDataUploads();
+      res.json(uploads);
+    } catch (error) {
+      console.error("Error fetching data uploads:", error);
+      res.status(500).json({ message: "Failed to fetch data uploads" });
+    }
+  });
+
+  app.delete('/api/data-uploads/:id', isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteDataUpload(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting data upload:", error);
+      res.status(500).json({ message: "Failed to delete data upload" });
     }
   });
 

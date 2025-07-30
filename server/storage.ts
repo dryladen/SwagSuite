@@ -26,6 +26,9 @@ import {
   type InsertArtworkFile,
   type Activity,
   type InsertActivity,
+  dataUploads,
+  type DataUpload,
+  type InsertDataUpload,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, like, and, gte, lte, sql } from "drizzle-orm";
@@ -73,6 +76,12 @@ export interface IStorage {
   deleteOrder(id: string): Promise<void>;
   getOrdersByCompany(companyId: string): Promise<Order[]>;
   getOrdersByStatus(status: string): Promise<Order[]>;
+  
+  // Data Upload operations
+  createDataUpload(upload: InsertDataUpload): Promise<DataUpload>;
+  getDataUploads(): Promise<DataUpload[]>;
+  updateDataUpload(id: string, updates: Partial<DataUpload>): Promise<DataUpload>;
+  deleteDataUpload(id: string): Promise<void>;
 
   // Order item operations
   getOrderItems(orderId: string): Promise<OrderItem[]>;
@@ -445,6 +454,29 @@ export class DatabaseStorage implements IStorage {
     // This would be more complex in reality, joining with users and calculating metrics
     // For now, return empty array - would need to implement proper sales tracking
     return [];
+  }
+
+  // Data Upload operations
+  async createDataUpload(upload: InsertDataUpload): Promise<DataUpload> {
+    const [newUpload] = await db.insert(dataUploads).values(upload).returning();
+    return newUpload;
+  }
+
+  async getDataUploads(): Promise<DataUpload[]> {
+    return await db.select().from(dataUploads).orderBy(desc(dataUploads.createdAt));
+  }
+
+  async updateDataUpload(id: string, updates: Partial<DataUpload>): Promise<DataUpload> {
+    const [updatedUpload] = await db
+      .update(dataUploads)
+      .set(updates)
+      .where(eq(dataUploads.id, id))
+      .returning();
+    return updatedUpload;
+  }
+
+  async deleteDataUpload(id: string): Promise<void> {
+    await db.delete(dataUploads).where(eq(dataUploads.id, id));
   }
 }
 
