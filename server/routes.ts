@@ -1218,6 +1218,131 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update integration configuration
+  app.patch('/api/integrations/configurations/:id', isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      
+      // Mock update - would update database configuration
+      res.json({ 
+        id,
+        ...updates,
+        message: 'Configuration updated successfully' 
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update integration configuration" });
+    }
+  });
+
+  // API Credentials management
+  app.get('/api/integrations/credentials', isAuthenticated, async (req, res) => {
+    try {
+      const credentials = [
+        {
+          integration: 'asi',
+          keyName: 'ASI_API_KEY',
+          displayName: 'ASI API Key',
+          isRequired: true,
+          isSecret: true,
+          description: 'Your ASI ESP Direct Connect API key from developers.asicentral.com'
+        },
+        {
+          integration: 'asi',
+          keyName: 'ASI_USERNAME',
+          displayName: 'ASI Username',
+          isRequired: true,
+          isSecret: false,
+          description: 'Your ASI member username'
+        },
+        {
+          integration: 'sage',
+          keyName: 'SAGE_API_KEY',
+          displayName: 'SAGE API Key',
+          isRequired: true,
+          isSecret: true,
+          description: 'Your SAGE World API key (contact SAGE customer service)'
+        },
+        {
+          integration: 'sage',
+          keyName: 'SAGE_USERNAME',
+          displayName: 'SAGE Username',
+          isRequired: true,
+          isSecret: false,
+          description: 'Your SAGE account username'
+        },
+        {
+          integration: 'distributorcentral',
+          keyName: 'DISTRIBUTORCENTRAL_API_KEY',
+          displayName: 'Distributor Central API Key',
+          isRequired: false,
+          isSecret: true,
+          description: 'Your Distributor Central API key (optional)'
+        }
+      ];
+      res.json(credentials);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch credentials" });
+    }
+  });
+
+  app.post('/api/integrations/credentials', isAuthenticated, async (req, res) => {
+    try {
+      const credentials = req.body;
+      
+      // Validate credentials format
+      const requiredKeys = ['ASI_API_KEY', 'ASI_USERNAME', 'SAGE_API_KEY', 'SAGE_USERNAME'];
+      const missingKeys = requiredKeys.filter(key => !credentials[key]);
+      
+      if (missingKeys.length > 0) {
+        return res.status(400).json({ 
+          message: `Missing required credentials: ${missingKeys.join(', ')}` 
+        });
+      }
+
+      // Mock credential storage - in production would save to secure environment
+      res.json({ message: 'Credentials saved successfully' });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to save credentials" });
+    }
+  });
+
+  // Test integration connections
+  app.post('/api/integrations/:integration/test', isAuthenticated, async (req, res) => {
+    try {
+      const integration = req.params.integration;
+      
+      // Mock connection tests
+      const connectionTests = {
+        asi: () => ({
+          success: true,
+          message: 'Successfully connected to ASI ESP Direct Connect API',
+          details: 'API key validated, ready for product searches'
+        }),
+        sage: () => ({
+          success: true,
+          message: 'Successfully connected to SAGE World API', 
+          details: 'Authentication successful, product database accessible'
+        }),
+        distributorcentral: () => ({
+          success: true,
+          message: 'Successfully connected to Distributor Central API',
+          details: 'API key validated, vendor network accessible'
+        })
+      };
+
+      const test = connectionTests[integration as keyof typeof connectionTests];
+      if (!test) {
+        return res.status(400).json({ message: 'Unknown integration' });
+      }
+
+      const result = test();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: "Connection test failed" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

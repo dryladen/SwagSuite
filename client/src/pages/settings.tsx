@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Layout from "@/components/Layout";
+import { IntegrationSettings } from "@/components/settings/IntegrationSettings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,7 +32,8 @@ import {
   Mail,
   Globe,
   Upload,
-  Save
+  Save,
+  Plus
 } from "lucide-react";
 
 export default function Settings() {
@@ -423,83 +425,7 @@ export default function Settings() {
 
           {/* Integrations */}
           <TabsContent value="integrations" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>CRM & Marketing</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="hubspotApiKey">HubSpot API Key</Label>
-                  <Input
-                    id="hubspotApiKey"
-                    type="password"
-                    value={integrations.hubspotApiKey}
-                    onChange={(e) => setIntegrations(prev => ({ ...prev, hubspotApiKey: e.target.value }))}
-                    placeholder="Enter your HubSpot API key"
-                  />
-                  <p className="text-xs text-gray-600 mt-1">
-                    Real-time sync with HubSpot for leads, customers, and marketing automation
-                  </p>
-                </div>
-
-                <div>
-                  <Label htmlFor="slackWebhook">Slack Webhook URL</Label>
-                  <Input
-                    id="slackWebhook"
-                    value={integrations.slackWebhook}
-                    onChange={(e) => setIntegrations(prev => ({ ...prev, slackWebhook: e.target.value }))}
-                    placeholder="https://hooks.slack.com/services/..."
-                  />
-                </div>
-
-                <Button onClick={() => handleSaveSettings("CRM Integration")} className="bg-swag-primary hover:bg-swag-primary/90">
-                  <Save className="mr-2" size={16} />
-                  Save CRM Settings
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Financial & Shipping</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 border rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium">QuickBooks</h4>
-                      <Switch checked={integrations.quickbooksConnected} />
-                    </div>
-                    <p className="text-sm text-gray-600">Sync invoices and payments</p>
-                    <Button variant="outline" size="sm" className="mt-2 w-full">
-                      {integrations.quickbooksConnected ? "Manage" : "Connect"}
-                    </Button>
-                  </div>
-
-                  <div className="p-4 border rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium">Stripe</h4>
-                      <Switch checked={integrations.stripeConnected} />
-                    </div>
-                    <p className="text-sm text-gray-600">Process online payments</p>
-                    <Button variant="outline" size="sm" className="mt-2 w-full">
-                      {integrations.stripeConnected ? "Manage" : "Connect"}
-                    </Button>
-                  </div>
-
-                  <div className="p-4 border rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium">ShipStation</h4>
-                      <Switch checked={integrations.shipmateConnected} />
-                    </div>
-                    <p className="text-sm text-gray-600">Manage shipping & tracking</p>
-                    <Button variant="outline" size="sm" className="mt-2 w-full">
-                      {integrations.shipmateConnected ? "Manage" : "Connect"}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <IntegrationSettings />
           </TabsContent>
 
           {/* Security */}
