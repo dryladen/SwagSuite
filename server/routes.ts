@@ -285,6 +285,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Lead routes
+  app.get('/api/leads', isAuthenticated, async (req, res) => {
+    try {
+      // Mock leads data - replace with actual database query
+      const mockLeads = [
+        {
+          id: "lead_1",
+          firstName: "John",
+          lastName: "Smith",
+          email: "john.smith@example.com",
+          phone: "(555) 123-4567",
+          company: "ABC Corporation",
+          title: "Marketing Director",
+          source: "Website",
+          status: "new",
+          estimatedValue: 2500,
+          nextFollowUpDate: "2024-02-15",
+          notes: "Interested in promotional products for upcoming campaign",
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: "lead_2",
+          firstName: "Sarah",
+          lastName: "Johnson",
+          email: "sarah.j@techcorp.com",
+          phone: "(555) 987-6543",
+          company: "TechCorp Inc",
+          title: "Event Coordinator",
+          source: "Referral",
+          status: "contacted",
+          estimatedValue: 5000,
+          nextFollowUpDate: "2024-02-18",
+          notes: "Planning a tech conference, needs branded merchandise",
+          createdAt: new Date().toISOString(),
+        }
+      ];
+      res.json(mockLeads);
+    } catch (error) {
+      console.error("Error fetching leads:", error);
+      res.status(500).json({ message: "Failed to fetch leads" });
+    }
+  });
+
+  app.post('/api/leads', isAuthenticated, async (req, res) => {
+    try {
+      const leadData = req.body;
+      
+      // Validate required fields
+      if (!leadData.firstName || !leadData.lastName) {
+        return res.status(400).json({ message: "First name and last name are required" });
+      }
+
+      // Mock lead creation - replace with actual database insertion
+      const newLead = {
+        id: `lead_${Date.now()}`,
+        ...leadData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      res.status(201).json(newLead);
+    } catch (error) {
+      console.error("Error creating lead:", error);
+      res.status(500).json({ message: "Failed to create lead" });
+    }
+  });
+
+  app.delete('/api/leads/:id', isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Mock lead deletion - replace with actual database deletion
+      res.json({ message: "Lead deleted successfully", id });
+    } catch (error) {
+      console.error("Error deleting lead:", error);
+      res.status(500).json({ message: "Failed to delete lead" });
+    }
+  });
+
   // Order routes
   app.get('/api/orders', isAuthenticated, async (req, res) => {
     try {
