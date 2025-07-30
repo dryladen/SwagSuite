@@ -22,6 +22,7 @@ import {
   BarChart3,
   PieChart
 } from "lucide-react";
+import { SlackPanel } from "./SlackPanel";
 
 interface DashboardMetrics {
   totalRevenue: number;
