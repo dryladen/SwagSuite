@@ -33,7 +33,16 @@ import {
   Plus,
   ArrowRight,
   Settings,
-  Bell
+  Bell,
+  ShoppingCart,
+  FileText,
+  MessageSquare,
+  Eye,
+  ThumbsUp,
+  Package,
+  CreditCard,
+  Truck,
+  MapPin
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -46,6 +55,7 @@ interface ProductionStage {
   order: number;
   color: string;
   description?: string;
+  icon: string;
 }
 
 interface ProductionOrder {
@@ -68,15 +78,15 @@ interface ProductionOrder {
 }
 
 const defaultStages: ProductionStage[] = [
-  { id: 'sales-booked', name: 'Sales Order Booked', order: 1, color: 'bg-blue-100 text-blue-800' },
-  { id: 'po-placed', name: 'Purchase Order Placed', order: 2, color: 'bg-purple-100 text-purple-800' },
-  { id: 'confirmation-received', name: 'Confirmation Received', order: 3, color: 'bg-indigo-100 text-indigo-800' },
-  { id: 'proof-received', name: 'Proof Received', order: 4, color: 'bg-yellow-100 text-yellow-800' },
-  { id: 'proof-approved', name: 'Proof Approved', order: 5, color: 'bg-orange-100 text-orange-800' },
-  { id: 'order-placed', name: 'Order Placed', order: 6, color: 'bg-teal-100 text-teal-800' },
-  { id: 'invoice-paid', name: 'Invoice Paid', order: 7, color: 'bg-green-100 text-green-800' },
-  { id: 'shipping-scheduled', name: 'Shipping Scheduled', order: 8, color: 'bg-cyan-100 text-cyan-800' },
-  { id: 'shipped', name: 'Shipped', order: 9, color: 'bg-emerald-100 text-emerald-800' },
+  { id: 'sales-booked', name: 'Sales Order Booked', order: 1, color: 'bg-blue-100 text-blue-800', icon: 'ShoppingCart' },
+  { id: 'po-placed', name: 'Purchase Order Placed', order: 2, color: 'bg-purple-100 text-purple-800', icon: 'FileText' },
+  { id: 'confirmation-received', name: 'Confirmation Received', order: 3, color: 'bg-indigo-100 text-indigo-800', icon: 'MessageSquare' },
+  { id: 'proof-received', name: 'Proof Received', order: 4, color: 'bg-yellow-100 text-yellow-800', icon: 'Eye' },
+  { id: 'proof-approved', name: 'Proof Approved', order: 5, color: 'bg-orange-100 text-orange-800', icon: 'ThumbsUp' },
+  { id: 'order-placed', name: 'Order Placed', order: 6, color: 'bg-teal-100 text-teal-800', icon: 'Package' },
+  { id: 'invoice-paid', name: 'Invoice Paid', order: 7, color: 'bg-green-100 text-green-800', icon: 'CreditCard' },
+  { id: 'shipping-scheduled', name: 'Shipping Scheduled', order: 8, color: 'bg-cyan-100 text-cyan-800', icon: 'Truck' },
+  { id: 'shipped', name: 'Shipped', order: 9, color: 'bg-emerald-100 text-emerald-800', icon: 'MapPin' },
 ];
 
 export default function ProductionReport() {
@@ -288,6 +298,22 @@ export default function ProductionReport() {
       title: "Notes Saved",
       description: "Custom notes have been updated successfully.",
     });
+  };
+
+  const getStageIcon = (iconName: string) => {
+    const iconMap = {
+      ShoppingCart,
+      FileText,
+      MessageSquare,
+      Eye,
+      ThumbsUp,
+      Package,
+      CreditCard,
+      Truck,
+      MapPin
+    };
+    const IconComponent = iconMap[iconName as keyof typeof iconMap];
+    return IconComponent || ShoppingCart;
   };
 
   const getStageInputFields = (stageId: string) => {
@@ -579,13 +605,10 @@ export default function ProductionReport() {
                             ${isCompleted ? 'bg-green-500 text-white' : 
                               isCurrent ? 'bg-swag-primary text-white' : 'bg-gray-200 text-gray-600'}
                           `}>
-                            {isCompleted ? (
-                              <CheckCircle className="h-4 w-4" />
-                            ) : isCurrent ? (
-                              <AlertCircle className="h-4 w-4" />
-                            ) : (
-                              index + 1
-                            )}
+                            {(() => {
+                              const StageIcon = getStageIcon(stage.icon);
+                              return <StageIcon className="h-4 w-4" />;
+                            })()}
                           </div>
                           {isCurrent && (
                             <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
@@ -745,13 +768,10 @@ export default function ProductionReport() {
                                 ${isCompleted ? 'bg-green-500 text-white' : 
                                   isCurrent ? 'bg-swag-primary text-white' : 'bg-gray-200 text-gray-600'}
                               `}>
-                                {isCompleted ? (
-                                  <CheckCircle className="h-4 w-4" />
-                                ) : isCurrent ? (
-                                  <AlertCircle className="h-4 w-4" />
-                                ) : (
-                                  stage.order
-                                )}
+                                {(() => {
+                                  const StageIcon = getStageIcon(stage.icon);
+                                  return <StageIcon className="h-4 w-4" />;
+                                })()}
                               </div>
                               <Badge className={stage.color}>{stage.name}</Badge>
                             </div>
