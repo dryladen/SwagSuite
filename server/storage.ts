@@ -567,6 +567,7 @@ export class DatabaseStorage implements IStorage {
 
   // Seed dummy data method
   async seedDummyData(): Promise<void> {
+    console.log("Starting seedDummyData method...");
     // Sample companies
     const sampleCompanies = [
       {

@@ -2130,10 +2130,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Seed dummy data endpoint (for development)
   app.post('/api/seed-dummy-data', isAuthenticated, async (req, res) => {
     try {
+      console.log("Starting dummy data seeding...");
       await storage.seedDummyData();
+      console.log("Dummy data seeding completed successfully!");
       res.json({ message: 'Dummy data seeded successfully!' });
     } catch (error) {
       console.error("Error seeding dummy data:", error);
+      console.error("Error stack:", error.stack);
       res.status(500).json({ message: "Failed to seed dummy data", error: error.message });
     }
   });
