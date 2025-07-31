@@ -2770,6 +2770,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test presentation generation (development endpoint)
+  app.post('/api/test-presentation-generation', isAuthenticated, async (req, res) => {
+    try {
+      console.log("Testing presentation generation with fallback...");
+      
+      // Create a test presentation
+      const testPresentation = await storage.createPresentation({
+        title: 'Test Presentation - Corporate Event Campaign',
+        description: 'Test presentation for Q1 corporate events',
+        dealNotes: 'Looking for branded apparel, tech accessories, and drinkware for corporate events. Budget $25k, quantities 500-1000 units per item.',
+        userId: req.user.claims.sub,
+        status: 'draft'
+      });
+
+      // Generate suggestions immediately
+      await generatePresentationWithAI(testPresentation.id, testPresentation.dealNotes || '');
+      
+      res.json({ 
+        message: 'Test presentation created and generated successfully!',
+        presentationId: testPresentation.id 
+      });
+    } catch (error) {
+      console.error("Error testing presentation generation:", error);
+      res.status(500).json({ message: "Failed to test presentation generation", error: error.message });
+    }
+  });
+
   // AI Presentation Builder routes
   app.get('/api/presentations', isAuthenticated, async (req, res) => {
     try {
