@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import Sidebar from "@/components/Sidebar";
 import { 
   Search, 
   Upload, 
@@ -67,6 +68,8 @@ interface Template {
   customerLogo?: string;
   companyLogo?: string;
   isActive: boolean;
+  aiGenerated?: boolean;
+  confidence?: number;
 }
 
 export default function MockupBuilderPage() {
@@ -91,7 +94,7 @@ export default function MockupBuilderPage() {
   const [pmsValue, setPmsValue] = useState("");
 
   // API queries
-  const { data: apiTemplates = [] } = useQuery({
+  const { data: apiTemplates = [] } = useQuery<Template[]>({
     queryKey: ['/api/mockup-builder/templates'],
   });
 
@@ -105,8 +108,8 @@ export default function MockupBuilderPage() {
     setIsSearching(true);
     
     try {
-      const products = await apiRequest('GET', `/api/mockup-builder/products/search?query=${encodeURIComponent(query)}`);
-      setSearchResults(products as Product[]);
+      const products = await apiRequest('GET', `/api/mockup-builder/products/search?query=${encodeURIComponent(query)}`) as unknown as Product[];
+      setSearchResults(products);
     } catch (error) {
       console.error('Error searching products:', error);
       toast({
@@ -277,7 +280,10 @@ export default function MockupBuilderPage() {
   });
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="flex h-screen bg-gray-50">
+      <Sidebar />
+      <div className="flex-1 overflow-auto">
+        <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -737,7 +743,7 @@ export default function MockupBuilderPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {apiTemplates.map((template: any) => (
+            {apiTemplates.map((template) => (
               <div 
                 key={template.id}
                 className={`border rounded-lg p-4 cursor-pointer transition-colors ${
@@ -797,6 +803,8 @@ export default function MockupBuilderPage() {
           </div>
         </CardContent>
       </Card>
+        </div>
+      </div>
     </div>
   );
 }
