@@ -5,7 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import { 
   TrendingUp, 
   DollarSign, 
@@ -20,7 +22,8 @@ import {
   MessageSquare,
   Newspaper,
   BarChart3,
-  PieChart
+  PieChart,
+  Database
 } from "lucide-react";
 import { SlackPanel } from "./SlackPanel";
 
@@ -79,6 +82,8 @@ interface NewsAlert {
 export function EnhancedDashboard() {
   const [dateRange, setDateRange] = useState<string>("ytd");
   const [activeTab, setActiveTab] = useState<string>("overview");
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: metrics } = useQuery<DashboardMetrics>({
     queryKey: ['/api/dashboard/enhanced-stats', { range: dateRange }],
@@ -140,6 +145,29 @@ export function EnhancedDashboard() {
     }
   };
 
+  const seedDataMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/seed-dummy-data', {
+        method: 'POST'
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success!",
+        description: "Dummy data has been added to the system. You can now see sample orders, clients, vendors, and artwork cards.",
+      });
+      // Invalidate all queries to refresh the data
+      queryClient.invalidateQueries();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: `Failed to seed dummy data: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
   return (
     <div className="space-y-6">
       {/* Header with Date Range Selector */}
@@ -150,17 +178,29 @@ export function EnhancedDashboard() {
             Comprehensive overview of your promotional products business
           </p>
         </div>
-        <Select value={dateRange} onValueChange={setDateRange}>
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="today">Today</SelectItem>
-            <SelectItem value="wtd">Week to Date</SelectItem>
-            <SelectItem value="mtd">Month to Date</SelectItem>
-            <SelectItem value="ytd">Year to Date</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-4">
+          <Button
+            onClick={() => seedDataMutation.mutate()}
+            disabled={seedDataMutation.isPending}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <Database className="h-4 w-4" />
+            {seedDataMutation.isPending ? "Adding Data..." : "Add Sample Data"}
+          </Button>
+          <Select value={dateRange} onValueChange={setDateRange}>
+            <SelectTrigger className="w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="wtd">Week to Date</SelectItem>
+              <SelectItem value="mtd">Month to Date</SelectItem>
+              <SelectItem value="ytd">Year to Date</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
