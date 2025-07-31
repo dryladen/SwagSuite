@@ -12,8 +12,6 @@ import {
   DialogTitle,
   DialogTrigger 
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -62,6 +60,9 @@ interface ProductionOrder {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   dueDate?: string;
   orderValue: number;
+  stageData?: Record<string, any>; // Custom data for each stage
+  trackingNumber?: string;
+  customNotes?: Record<string, string>; // Custom notes per stage
 }
 
 const defaultStages: ProductionStage[] = [
@@ -84,6 +85,8 @@ export default function ProductionReport() {
   const [newStage, setNewStage] = useState({ name: '', description: '', color: 'bg-gray-100 text-gray-800' });
   const [filterAssignee, setFilterAssignee] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
+  const [editingStageData, setEditingStageData] = useState<Record<string, any>>({});
+  const [stageInputs, setStageInputs] = useState<Record<string, string>>({});
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -108,7 +111,15 @@ export default function ProductionReport() {
       stagesCompleted: ['sales-booked', 'po-placed', 'confirmation-received'],
       priority: 'high',
       dueDate: format(addDays(new Date(), 7), 'yyyy-MM-dd'),
-      orderValue: 12500
+      orderValue: 12500,
+      stageData: {
+        'sales-booked': { confirmedBy: 'John Smith', salesOrderNumber: 'SO-2024-001' },
+        'po-placed': { poNumber: 'PO-ABC-789', vendorConfirmation: 'Pending' },
+        'confirmation-received': { confirmedDate: '2024-01-15', estimatedShipDate: '2024-01-22' }
+      },
+      customNotes: {
+        'proof-received': 'Client requested minor color adjustments'
+      }
     },
     {
       id: '2',
@@ -123,7 +134,15 @@ export default function ProductionReport() {
       stagesCompleted: ['sales-booked', 'po-placed', 'confirmation-received', 'proof-received', 'proof-approved'],
       priority: 'medium',
       dueDate: format(addDays(new Date(), 14), 'yyyy-MM-dd'),
-      orderValue: 4800
+      orderValue: 4800,
+      stageData: {
+        'sales-booked': { confirmedBy: 'Sarah Wilson', salesOrderNumber: 'SO-2024-002' },
+        'po-placed': { poNumber: 'PO-XYZ-456', vendorConfirmation: 'Confirmed' },
+        'order-placed': { productionStartDate: '2024-01-18', estimatedCompletion: '2024-01-25' }
+      },
+      customNotes: {
+        'order-placed': 'Rush production requested - expedited timeline'
+      }
     },
     {
       id: '3',
@@ -138,7 +157,18 @@ export default function ProductionReport() {
       stagesCompleted: ['sales-booked', 'po-placed', 'confirmation-received', 'proof-received', 'proof-approved', 'order-placed', 'invoice-paid'],
       priority: 'urgent',
       dueDate: format(addDays(new Date(), 3), 'yyyy-MM-dd'),
-      orderValue: 25000
+      orderValue: 25000,
+      trackingNumber: 'UPS1Z999AA1234567890',
+      stageData: {
+        'shipping-scheduled': { 
+          carrier: 'UPS', 
+          scheduledDate: '2024-01-20',
+          deliveryAddress: '123 Business Way, Corporate City, CA 90210'
+        }
+      },
+      customNotes: {
+        'shipping-scheduled': 'Signature required on delivery - contact recipient day before'
+      }
     }
   ];
 
@@ -198,12 +228,118 @@ export default function ProductionReport() {
     setIsOrderModalOpen(true);
   };
 
-  const handleStageUpdate = (orderId: string, newStage: string) => {
+  const handleStageUpdate = (orderId: string, newStage: string, stageData?: any) => {
     // Update order stage logic would go here
+    const updatedOrder = {
+      ...selectedOrder,
+      currentStage: newStage,
+      stageData: {
+        ...selectedOrder?.stageData,
+        [newStage]: stageData || {}
+      }
+    };
+    
+    setSelectedOrder(updatedOrder as ProductionOrder);
+    
     toast({
       title: "Stage Updated",
       description: "Order stage has been updated successfully.",
     });
+  };
+
+  const handleStageDataSave = (stageId: string, data: any) => {
+    if (!selectedOrder) return;
+    
+    const updatedOrder = {
+      ...selectedOrder,
+      stageData: {
+        ...selectedOrder.stageData,
+        [stageId]: data
+      },
+      ...(stageId === 'shipped' && data.trackingNumber ? { trackingNumber: data.trackingNumber } : {})
+    };
+    
+    setSelectedOrder(updatedOrder);
+    setEditingStageData({});
+    
+    toast({
+      title: "Stage Data Saved",
+      description: "Stage information has been updated successfully.",
+    });
+  };
+
+  const handleCustomNotesSave = (stageId: string, notes: string) => {
+    if (!selectedOrder) return;
+    
+    const updatedOrder = {
+      ...selectedOrder,
+      customNotes: {
+        ...selectedOrder.customNotes,
+        [stageId]: notes
+      }
+    };
+    
+    setSelectedOrder(updatedOrder);
+    setStageInputs({});
+    
+    toast({
+      title: "Notes Saved",
+      description: "Custom notes have been updated successfully.",
+    });
+  };
+
+  const getStageInputFields = (stageId: string) => {
+    switch (stageId) {
+      case 'sales-booked':
+        return [
+          { key: 'confirmedBy', label: 'Confirmed By', type: 'text' },
+          { key: 'salesOrderNumber', label: 'Sales Order Number', type: 'text' }
+        ];
+      case 'po-placed':
+        return [
+          { key: 'poNumber', label: 'PO Number', type: 'text' },
+          { key: 'vendorConfirmation', label: 'Vendor Confirmation', type: 'select', options: ['Pending', 'Confirmed', 'Rejected'] }
+        ];
+      case 'confirmation-received':
+        return [
+          { key: 'confirmedDate', label: 'Confirmation Date', type: 'date' },
+          { key: 'estimatedShipDate', label: 'Estimated Ship Date', type: 'date' }
+        ];
+      case 'proof-received':
+        return [
+          { key: 'proofDate', label: 'Proof Received Date', type: 'date' },
+          { key: 'revisionCount', label: 'Revision Number', type: 'number' }
+        ];
+      case 'proof-approved':
+        return [
+          { key: 'approvedBy', label: 'Approved By', type: 'text' },
+          { key: 'approvalDate', label: 'Approval Date', type: 'date' }
+        ];
+      case 'order-placed':
+        return [
+          { key: 'productionStartDate', label: 'Production Start Date', type: 'date' },
+          { key: 'estimatedCompletion', label: 'Estimated Completion', type: 'date' }
+        ];
+      case 'invoice-paid':
+        return [
+          { key: 'paymentDate', label: 'Payment Date', type: 'date' },
+          { key: 'paymentMethod', label: 'Payment Method', type: 'select', options: ['Credit Card', 'Wire Transfer', 'Check', 'ACH'] }
+        ];
+      case 'shipping-scheduled':
+        return [
+          { key: 'carrier', label: 'Shipping Carrier', type: 'select', options: ['UPS', 'FedEx', 'USPS', 'DHL', 'Other'] },
+          { key: 'scheduledDate', label: 'Scheduled Ship Date', type: 'date' },
+          { key: 'deliveryAddress', label: 'Delivery Address', type: 'textarea' }
+        ];
+      case 'shipped':
+        return [
+          { key: 'trackingNumber', label: 'Tracking Number', type: 'text' },
+          { key: 'shippedDate', label: 'Shipped Date', type: 'date' },
+          { key: 'carrier', label: 'Carrier', type: 'select', options: ['UPS', 'FedEx', 'USPS', 'DHL', 'Other'] }
+        ];
+      default:
+        return [];
+    }
   };
 
   const handleAddStage = () => {
@@ -465,6 +601,49 @@ export default function ProductionReport() {
                   })}
                 </div>
 
+                {/* Stage-specific Information */}
+                {order.stageData && order.stageData[order.currentStage] && (
+                  <div className="mt-4 p-3 bg-blue-50 rounded-lg border-l-4 border-blue-400">
+                    <div className="flex items-start space-x-2">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-blue-800">Stage Information</p>
+                        <div className="grid grid-cols-2 gap-2 mt-1">
+                          {Object.entries(order.stageData[order.currentStage]).map(([key, value]) => (
+                            <div key={key} className="text-xs">
+                              <span className="font-medium text-blue-700 capitalize">{key.replace(/([A-Z])/g, ' $1')}: </span>
+                              <span className="text-blue-600">{value as string}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tracking Number for Shipped Orders */}
+                {order.trackingNumber && (order.currentStage === 'shipped' || order.stagesCompleted.includes('shipped')) && (
+                  <div className="mt-4 p-3 bg-green-50 rounded-lg border-l-4 border-green-400">
+                    <div className="flex items-center space-x-2">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-green-800">Tracking Information</p>
+                        <p className="text-sm text-green-700">Tracking Number: {order.trackingNumber}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Custom Notes for Current Stage */}
+                {order.customNotes && order.customNotes[order.currentStage] && (
+                  <div className="mt-4 p-3 bg-purple-50 rounded-lg border-l-4 border-purple-400">
+                    <div className="flex items-start space-x-2">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-purple-800">Stage Notes</p>
+                        <p className="text-sm text-purple-700">{order.customNotes[order.currentStage]}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Next Action */}
                 {order.nextActionNotes && (
                   <div className="mt-4 p-3 bg-yellow-50 rounded-lg border-l-4 border-yellow-400">
@@ -546,37 +725,200 @@ export default function ProductionReport() {
                 {/* Stage Management */}
                 <div>
                   <h3 className="font-medium mb-3">Production Stages</h3>
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {stages.map((stage) => {
                       const isCompleted = selectedOrder.stagesCompleted.includes(stage.id);
                       const isCurrent = selectedOrder.currentStage === stage.id;
+                      const stageData = selectedOrder.stageData?.[stage.id];
+                      const customNotes = selectedOrder.customNotes?.[stage.id];
+                      const isEditing = editingStageData[stage.id];
+                      const inputFields = getStageInputFields(stage.id);
                       
                       return (
-                        <div key={stage.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex items-center space-x-3">
-                            <div className={`
-                              w-6 h-6 rounded-full flex items-center justify-center
-                              ${isCompleted ? 'bg-green-500 text-white' : 
-                                isCurrent ? 'bg-swag-primary text-white' : 'bg-gray-200 text-gray-600'}
-                            `}>
-                              {isCompleted ? (
-                                <CheckCircle className="h-4 w-4" />
-                              ) : isCurrent ? (
-                                <AlertCircle className="h-4 w-4" />
-                              ) : (
-                                stage.order
-                              )}
+                        <div key={stage.id} className="border rounded-lg p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <div className={`
+                                w-6 h-6 rounded-full flex items-center justify-center
+                                ${isCompleted ? 'bg-green-500 text-white' : 
+                                  isCurrent ? 'bg-swag-primary text-white' : 'bg-gray-200 text-gray-600'}
+                              `}>
+                                {isCompleted ? (
+                                  <CheckCircle className="h-4 w-4" />
+                                ) : isCurrent ? (
+                                  <AlertCircle className="h-4 w-4" />
+                                ) : (
+                                  stage.order
+                                )}
+                              </div>
+                              <Badge className={stage.color}>{stage.name}</Badge>
                             </div>
-                            <Badge className={stage.color}>{stage.name}</Badge>
+                            <div className="flex gap-2">
+                              {!isCompleted && (
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => setEditingStageData(prev => ({ ...prev, [stage.id]: !prev[stage.id] }))}
+                                >
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Edit Info
+                                </Button>
+                              )}
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleStageUpdate(selectedOrder.id, stage.id)}
+                                disabled={isCompleted}
+                              >
+                                {isCompleted ? 'Completed' : isCurrent ? 'Current' : 'Set Current'}
+                              </Button>
+                            </div>
                           </div>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleStageUpdate(selectedOrder.id, stage.id)}
-                            disabled={isCompleted}
-                          >
-                            {isCompleted ? 'Completed' : isCurrent ? 'Current' : 'Set Current'}
-                          </Button>
+
+                          {/* Display current stage data */}
+                          {stageData && !isEditing && (
+                            <div className="bg-gray-50 rounded p-3">
+                              <p className="text-sm font-medium text-gray-700 mb-2">Stage Information:</p>
+                              <div className="grid grid-cols-2 gap-2">
+                                {Object.entries(stageData).map(([key, value]) => (
+                                  <div key={key} className="text-xs">
+                                    <span className="font-medium text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1')}: </span>
+                                    <span className="text-gray-800">{value as string}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Edit stage data form */}
+                          {isEditing && inputFields.length > 0 && (
+                            <div className="bg-blue-50 rounded p-3 space-y-3">
+                              <p className="text-sm font-medium text-blue-800">Edit Stage Information:</p>
+                              <div className="grid grid-cols-1 gap-3">
+                                {inputFields.map((field) => (
+                                  <div key={field.key}>
+                                    <Label htmlFor={`${stage.id}-${field.key}`} className="text-xs">
+                                      {field.label}
+                                    </Label>
+                                    {field.type === 'select' ? (
+                                      <Select 
+                                        value={editingStageData[`${stage.id}-${field.key}`] || stageData?.[field.key] || ''}
+                                        onValueChange={(value) => setEditingStageData(prev => ({ 
+                                          ...prev, 
+                                          [`${stage.id}-${field.key}`]: value 
+                                        }))}
+                                      >
+                                        <SelectTrigger className="h-8">
+                                          <SelectValue placeholder={`Select ${field.label.toLowerCase()}`} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {field.options?.map(option => (
+                                            <SelectItem key={option} value={option}>{option}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    ) : field.type === 'textarea' ? (
+                                      <Textarea
+                                        id={`${stage.id}-${field.key}`}
+                                        value={editingStageData[`${stage.id}-${field.key}`] || stageData?.[field.key] || ''}
+                                        onChange={(e) => setEditingStageData(prev => ({ 
+                                          ...prev, 
+                                          [`${stage.id}-${field.key}`]: e.target.value 
+                                        }))}
+                                        className="h-16"
+                                        rows={2}
+                                      />
+                                    ) : (
+                                      <Input
+                                        id={`${stage.id}-${field.key}`}
+                                        type={field.type}
+                                        value={editingStageData[`${stage.id}-${field.key}`] || stageData?.[field.key] || ''}
+                                        onChange={(e) => setEditingStageData(prev => ({ 
+                                          ...prev, 
+                                          [`${stage.id}-${field.key}`]: e.target.value 
+                                        }))}
+                                        className="h-8"
+                                      />
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="flex gap-2">
+                                <Button 
+                                  size="sm" 
+                                  onClick={() => {
+                                    const stageDataToSave = inputFields.reduce((acc, field) => {
+                                      const value = editingStageData[`${stage.id}-${field.key}`];
+                                      if (value) acc[field.key] = value;
+                                      return acc;
+                                    }, {} as any);
+                                    handleStageDataSave(stage.id, stageDataToSave);
+                                  }}
+                                  className="bg-swag-primary hover:bg-swag-primary/90"
+                                >
+                                  Save
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => setEditingStageData(prev => ({ ...prev, [stage.id]: false }))}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Custom Notes Section */}
+                          <div className="border-t pt-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-sm font-medium text-gray-700">Custom Notes:</p>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setStageInputs(prev => ({ ...prev, [stage.id]: customNotes || '' }))}
+                              >
+                                <Edit className="h-3 w-3 mr-1" />
+                                Edit
+                              </Button>
+                            </div>
+                            
+                            {stageInputs[stage.id] !== undefined ? (
+                              <div className="space-y-2">
+                                <Textarea
+                                  value={stageInputs[stage.id]}
+                                  onChange={(e) => setStageInputs(prev => ({ ...prev, [stage.id]: e.target.value }))}
+                                  placeholder="Add custom notes for this stage..."
+                                  rows={2}
+                                  className="text-sm"
+                                />
+                                <div className="flex gap-2">
+                                  <Button 
+                                    size="sm" 
+                                    onClick={() => handleCustomNotesSave(stage.id, stageInputs[stage.id])}
+                                    className="bg-swag-primary hover:bg-swag-primary/90"
+                                  >
+                                    Save Notes
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={() => setStageInputs(prev => {
+                                      const newInputs = { ...prev };
+                                      delete newInputs[stage.id];
+                                      return newInputs;
+                                    })}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-gray-600 italic">
+                                {customNotes || 'No custom notes added for this stage'}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
