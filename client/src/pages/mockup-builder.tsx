@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import Sidebar from "@/components/Sidebar";
+
 import { 
   Search, 
   Upload, 
@@ -280,10 +280,7 @@ export default function MockupBuilderPage() {
   });
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <Sidebar />
-      <div className="flex-1 overflow-auto">
-        <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -803,8 +800,6 @@ export default function MockupBuilderPage() {
           </div>
         </CardContent>
       </Card>
-        </div>
-      </div>
     </div>
   );
 }

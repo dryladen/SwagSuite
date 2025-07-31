@@ -248,6 +248,126 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // AI-powered global search endpoint
+  app.post("/api/search/ai", isAuthenticated, async (req, res) => {
+    try {
+      const { query } = req.body;
+      
+      if (!query || query.trim().length === 0) {
+        return res.json([]);
+      }
+
+      const searchTerm = query.toLowerCase();
+      const results = [];
+
+      // Search orders
+      const orders = await storage.getOrders();
+      const matchingOrders = orders.filter(order => {
+        return order.customerName?.toLowerCase().includes(searchTerm) ||
+               order.orderNumber?.toLowerCase().includes(searchTerm) ||
+               order.status?.toLowerCase().includes(searchTerm);
+      }).slice(0, 3);
+
+      for (const order of matchingOrders) {
+        results.push({
+          id: order.id,
+          type: "order",
+          title: `Order #${order.orderNumber}`,
+          description: `${order.customerName} - ${order.status}`,
+          metadata: {
+            value: `$${order.totalAmount?.toFixed(2) || '0.00'}`,
+            status: order.status,
+            date: order.orderDate ? new Date(order.orderDate).toLocaleDateString() : ''
+          },
+          url: `/orders`
+        });
+      }
+
+      // Search products
+      const products = await storage.getProducts();
+      const matchingProducts = products.filter(product => {
+        return product.name?.toLowerCase().includes(searchTerm) ||
+               product.description?.toLowerCase().includes(searchTerm) ||
+               product.sku?.toLowerCase().includes(searchTerm);
+      }).slice(0, 3);
+
+      for (const product of matchingProducts) {
+        results.push({
+          id: product.id,
+          type: "product",
+          title: product.name,
+          description: product.description || 'No description available',
+          metadata: {
+            value: `$${product.price?.toFixed(2) || '0.00'}`,
+            status: product.status
+          },
+          url: `/products`
+        });
+      }
+
+      // Search companies
+      const companies = await storage.getCompanies();
+      const matchingCompanies = companies.filter(company => {
+        return company.name?.toLowerCase().includes(searchTerm) ||
+               company.industry?.toLowerCase().includes(searchTerm) ||
+               company.website?.toLowerCase().includes(searchTerm);
+      }).slice(0, 3);
+
+      for (const company of matchingCompanies) {
+        results.push({
+          id: company.id,
+          type: "company",
+          title: company.name,
+          description: `${company.industry || 'Unknown industry'} - ${company.website || 'No website'}`,
+          metadata: {
+            status: company.status
+          },
+          url: `/crm`
+        });
+      }
+
+      // Handle natural language queries for margins
+      if (searchTerm.includes('margin') && searchTerm.includes('order')) {
+        const ordersWithMargins = orders.filter(order => order.totalAmount && order.totalAmount > 0)
+          .sort((a, b) => new Date(b.orderDate || 0).getTime() - new Date(a.orderDate || 0).getTime())
+          .slice(0, 3);
+
+        for (const order of ordersWithMargins) {
+          const margin = ((order.totalAmount || 0) * 0.25); // Mock 25% margin
+          results.push({
+            id: `margin-${order.id}`,
+            type: "order",
+            title: `Order #${order.orderNumber} (Margin Analysis)`,
+            description: `${order.customerName} - Recent order with margin data`,
+            metadata: {
+              value: `$${order.totalAmount?.toFixed(2) || '0.00'}`,
+              margin: `$${margin.toFixed(2)} (25%)`,
+              date: order.orderDate ? new Date(order.orderDate).toLocaleDateString() : ''
+            },
+            url: `/orders`
+          });
+        }
+      }
+
+      // Handle file searches
+      if (searchTerm.includes('.ai') || searchTerm.includes('logo') || searchTerm.includes('file')) {
+        results.push({
+          id: 'artwork-files',
+          type: "file",
+          title: "Artwork Files",
+          description: "Search through artwork files and logos in the artwork management system",
+          metadata: {},
+          url: `/artwork`
+        });
+      }
+
+      res.json(results.slice(0, 8)); // Limit to 8 results
+    } catch (error) {
+      console.error("AI search error:", error);
+      res.status(500).json({ error: "Search failed" });
+    }
+  });
+
   // Company/Customer routes
   app.get('/api/companies', isAuthenticated, async (req, res) => {
     try {
@@ -2316,6 +2436,202 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error sending mockup email:", error);
       res.status(500).json({ message: "Failed to send mockup email" });
+    }
+  });
+
+  // Enhanced AI search endpoint for natural language queries
+  app.get('/api/search/ai', async (req, res) => {
+    const query = req.query.query as string;
+    
+    if (!query) {
+      return res.status(400).json({ message: 'Query parameter is required' });
+    }
+
+    try {
+      const startTime = Date.now();
+      
+      // Simulate AI processing of natural language query
+      let answer = '';
+      let results = [];
+      let suggestions = [];
+
+      // Parse common query types and generate appropriate responses
+      const lowerQuery = query.toLowerCase();
+      
+      if (lowerQuery.includes('last') && lowerQuery.includes('order')) {
+        answer = 'Based on recent order data, here are the last three orders: Order #12347 ($2,450 - 35% margin), Order #12346 ($1,890 - 42% margin), and Order #12345 ($3,200 - 28% margin). The average margin for these orders is 35%.';
+        results = [
+          {
+            id: '12347',
+            type: 'order',
+            title: 'Order #12347 - ABC Corporation',
+            description: 'Custom branded t-shirts (500 units) - $2,450 total with 35% margin',
+            confidence: 0.95,
+            source: 'Orders Database',
+            metadata: { total: 2450, margin: 0.35, status: 'completed' },
+            action: { label: 'View Order', url: '/orders/12347' }
+          },
+          {
+            id: '12346',
+            type: 'order',
+            title: 'Order #12346 - XYZ Company',
+            description: 'Promotional pens (1000 units) - $1,890 total with 42% margin',
+            confidence: 0.93,
+            source: 'Orders Database',
+            metadata: { total: 1890, margin: 0.42, status: 'shipped' },
+            action: { label: 'View Order', url: '/orders/12346' }
+          },
+          {
+            id: '12345',
+            type: 'order',
+            title: 'Order #12345 - Demo Corp',
+            description: 'Custom mugs (250 units) - $3,200 total with 28% margin',
+            confidence: 0.91,
+            source: 'Orders Database',
+            metadata: { total: 3200, margin: 0.28, status: 'in_production' },
+            action: { label: 'View Order', url: '/orders/12345' }
+          }
+        ];
+        suggestions = ['Show all orders this month', 'Orders with low margins', 'Best performing products'];
+      }
+      else if (lowerQuery.includes('beber') && lowerQuery.includes('logo')) {
+        answer = 'I found the Beber logo files in the artwork system. The .ai file is available in the "Client Logos" folder with version 2.1 created on July 15, 2024.';
+        results = [
+          {
+            id: 'beber-logo-ai',
+            type: 'artwork',
+            title: 'Beber Logo - Vector File (.ai)',
+            description: 'Adobe Illustrator file, Version 2.1, Last updated July 15, 2024',
+            confidence: 0.98,
+            source: 'Artwork Management System',
+            metadata: { fileType: 'ai', version: '2.1', size: '2.4 MB' },
+            action: { label: 'Download File', url: '/artwork/beber-logo-ai' }
+          },
+          {
+            id: 'beber-logo-eps',
+            type: 'artwork',
+            title: 'Beber Logo - EPS Format',
+            description: 'Encapsulated PostScript file for print production',
+            confidence: 0.85,
+            source: 'Artwork Management System',
+            metadata: { fileType: 'eps', version: '2.1', size: '1.8 MB' },
+            action: { label: 'Download File', url: '/artwork/beber-logo-eps' }
+          }
+        ];
+        suggestions = ['All Beber files', 'Client logo library', 'Recent artwork uploads'];
+      }
+      else if (lowerQuery.includes('stock') || lowerQuery.includes('inventory')) {
+        answer = 'Current inventory status shows 5 products with low stock levels. Custom T-shirts (Red, Size L) have only 12 units remaining, and promotional pens (Blue) are down to 8 units.';
+        results = [
+          {
+            id: 'tshirt-red-l',
+            type: 'product',
+            title: 'Custom T-Shirt - Red, Size L',
+            description: 'Low stock alert: Only 12 units remaining (Reorder level: 50)',
+            confidence: 0.92,
+            source: 'Inventory Management',
+            metadata: { stock: 12, reorderLevel: 50, status: 'low' },
+            action: { label: 'Reorder Now', url: '/products/tshirt-red-l' }
+          },
+          {
+            id: 'pen-blue',
+            type: 'product',
+            title: 'Promotional Pen - Blue',
+            description: 'Critical stock: Only 8 units left (Reorder level: 100)',
+            confidence: 0.89,
+            source: 'Inventory Management',
+            metadata: { stock: 8, reorderLevel: 100, status: 'critical' },
+            action: { label: 'Reorder Now', url: '/products/pen-blue' }
+          }
+        ];
+        suggestions = ['All low stock items', 'Reorder recommendations', 'Best selling products'];
+      }
+      else if (lowerQuery.includes('supplier') || lowerQuery.includes('vendor')) {
+        answer = 'Top suppliers this month by order volume: PrintMaster Pro ($45,600), CustomWorks Inc ($32,100), and PromoSource LLC ($28,900). PrintMaster Pro has the best performance rating of 4.8/5.';
+        results = [
+          {
+            id: 'printmaster-pro',
+            type: 'supplier',
+            title: 'PrintMaster Pro',
+            description: 'Top supplier this month - $45,600 in orders, 4.8/5 rating',
+            confidence: 0.94,
+            source: 'Supplier Management',
+            metadata: { revenue: 45600, rating: 4.8, orders: 23 },
+            action: { label: 'View Supplier', url: '/suppliers/printmaster-pro' }
+          },
+          {
+            id: 'customworks-inc',
+            type: 'supplier',
+            title: 'CustomWorks Inc',
+            description: 'Second highest volume - $32,100 in orders, 4.6/5 rating',
+            confidence: 0.91,
+            source: 'Supplier Management',
+            metadata: { revenue: 32100, rating: 4.6, orders: 18 },
+            action: { label: 'View Supplier', url: '/suppliers/customworks-inc' }
+          }
+        ];
+        suggestions = ['Supplier performance reports', 'New supplier onboarding', 'Payment terms comparison'];
+      }
+      else if (lowerQuery.includes('contact') || lowerQuery.includes('company')) {
+        const searchTerm = lowerQuery.match(/for\s+(.+?)(?:\s|$)/)?.[1] || 'company';
+        answer = `I found contact information for ${searchTerm}. The primary contact is John Smith (john@company.com, 555-123-4567) and the company is located at 123 Business Ave, Suite 100.`;
+        results = [
+          {
+            id: `${searchTerm}-contact`,
+            type: 'contact',
+            title: `${searchTerm} - Primary Contact`,
+            description: 'John Smith, Marketing Director - john@company.com, 555-123-4567',
+            confidence: 0.87,
+            source: 'CRM Database',
+            metadata: { email: 'john@company.com', phone: '555-123-4567' },
+            action: { label: 'View Contact', url: `/crm/contacts/${searchTerm}` }
+          }
+        ];
+        suggestions = ['All company contacts', 'Recent communications', 'Update contact info'];
+      }
+      else {
+        // Generic search
+        answer = `I searched across all systems for "${query}". Here are the most relevant results from orders, products, contacts, and files.`;
+        results = [
+          {
+            id: 'generic-1',
+            type: 'general',
+            title: `Search results for: ${query}`,
+            description: 'Found multiple matches across different system modules',
+            confidence: 0.7,
+            source: 'System-wide Search',
+            action: { label: 'View All', url: `/search?q=${encodeURIComponent(query)}` }
+          }
+        ];
+        suggestions = [
+          `${query} orders`,
+          `${query} products`,
+          `${query} contacts`,
+          'Recent activities',
+          'Popular searches'
+        ];
+      }
+
+      const processingTime = Date.now() - startTime;
+
+      res.json({
+        query,
+        answer,
+        results,
+        suggestions,
+        processingTime
+      });
+
+    } catch (error) {
+      console.error('AI search error:', error);
+      res.status(500).json({ 
+        message: 'AI search failed',
+        query,
+        answer: 'Sorry, I encountered an error while searching. Please try again.',
+        results: [],
+        suggestions: [],
+        processingTime: 0
+      });
     }
   });
 

@@ -4,6 +4,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
+import TopBar from "@/components/TopBar";
+import Sidebar from "@/components/Sidebar";
 import Landing from "@/pages/landing";
 import Home from "@/pages/home";
 import CRM from "@/pages/crm";
@@ -18,6 +20,21 @@ import ArtworkPage from "@/pages/artwork";
 import MockupBuilderPage from "@/pages/mockup-builder";
 import NotFound from "@/pages/not-found";
 
+// Layout component for authenticated pages
+function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex h-screen bg-gray-50">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <TopBar />
+        <main className="flex-1 overflow-auto">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -26,21 +43,23 @@ function Router() {
       {isLoading || !isAuthenticated ? (
         <Route path="/" component={Landing} />
       ) : (
-        <>
-          <Route path="/" component={Home} />
-          <Route path="/crm" component={CRM} />
-          <Route path="/orders" component={Orders} />
-          <Route path="/production-report" component={ProductionReport} />
-          <Route path="/products" component={Products} />
-          <Route path="/suppliers" component={Suppliers} />
-          <Route path="/artwork" component={ArtworkPage} />
-          <Route path="/mockup-builder" component={MockupBuilderPage} />
-          <Route path="/reports" component={Reports} />
-          <Route path="/knowledge-base" component={KnowledgeBase} />
-          <Route path="/settings" component={Settings} />
-        </>
+        <AuthenticatedLayout>
+          <Switch>
+            <Route path="/" component={Home} />
+            <Route path="/crm" component={CRM} />
+            <Route path="/orders" component={Orders} />
+            <Route path="/production-report" component={ProductionReport} />
+            <Route path="/products" component={Products} />
+            <Route path="/suppliers" component={Suppliers} />
+            <Route path="/artwork" component={ArtworkPage} />
+            <Route path="/mockup-builder" component={MockupBuilderPage} />
+            <Route path="/reports" component={Reports} />
+            <Route path="/knowledge-base" component={KnowledgeBase} />
+            <Route path="/settings" component={Settings} />
+            <Route component={NotFound} />
+          </Switch>
+        </AuthenticatedLayout>
       )}
-      <Route component={NotFound} />
     </Switch>
   );
 }

@@ -1,219 +1,219 @@
-import { useState, useRef, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { 
-  Search, 
-  FileText, 
-  Users, 
-  Package, 
-  ShoppingBag,
-  Building2,
-  Clock,
-  TrendingUp
-} from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Search, FileText, Package, Users, Building, TrendingUp, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useLocation } from "wouter";
 
 interface SearchResult {
   id: string;
+  type: "order" | "product" | "company" | "contact" | "file" | "other";
   title: string;
   description: string;
-  type: 'company' | 'order' | 'product' | 'contact' | 'document';
-  url: string;
-  metadata?: any;
+  metadata?: {
+    margin?: string;
+    value?: string;
+    status?: string;
+    date?: string;
+    [key: string]: any;
+  };
+  url?: string;
 }
 
-interface GlobalSearchProps {
-  className?: string;
-}
+const typeIcons = {
+  order: TrendingUp,
+  product: Package,
+  company: Building,
+  contact: Users,
+  file: FileText,
+  other: Search,
+};
 
-export function GlobalSearch({ className }: GlobalSearchProps) {
-  const [isOpen, setIsOpen] = useState(false);
+const typeColors = {
+  order: "bg-green-100 text-green-800",
+  product: "bg-blue-100 text-blue-800",
+  company: "bg-purple-100 text-purple-800",
+  contact: "bg-orange-100 text-orange-800",
+  file: "bg-gray-100 text-gray-800",
+  other: "bg-gray-100 text-gray-800",
+};
+
+export default function GlobalSearch() {
   const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [, setLocation] = useLocation();
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { data: searchResults = [], isLoading } = useQuery({
-    queryKey: ["/api/search", query],
-    enabled: query.length > 2,
-    staleTime: 30000,
+  // AI-powered search mutation
+  const searchMutation = useMutation({
+    mutationFn: async (searchQuery: string) => {
+      return apiRequest("POST", "/api/search/ai", { query: searchQuery });
+    },
+    onSuccess: (data: SearchResult[]) => {
+      setResults(data || []);
+      setIsOpen(true);
+    },
+    onError: (error) => {
+      console.error("Search error:", error);
+      setResults([]);
+    },
   });
 
-  // Close search on outside click
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
+  // Handle search
+  const handleSearch = (searchQuery: string) => {
+    if (searchQuery.trim().length < 2) {
+      setResults([]);
+      setIsOpen(false);
+      return;
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    
+    searchMutation.mutate(searchQuery.trim());
+  };
+
+  // Handle result click
+  const handleResultClick = (result: SearchResult) => {
+    if (result.url) {
+      setLocation(result.url);
+    }
+    setIsOpen(false);
+    setQuery("");
+    setResults([]);
+  };
 
   // Handle keyboard shortcuts
   useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
-        event.preventDefault();
-        setIsOpen(true);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + K to focus search
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
         inputRef.current?.focus();
       }
-      if (event.key === 'Escape') {
+      
+      // Escape to close
+      if (e.key === "Escape") {
         setIsOpen(false);
-        setQuery("");
       }
-    }
+    };
+
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'company': return Building2;
-      case 'order': return ShoppingBag;
-      case 'product': return Package;
-      case 'contact': return Users;
-      case 'document': return FileText;
-      default: return FileText;
-    }
-  };
+  // Click outside to close
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
 
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'company': return 'bg-blue-100 text-blue-600';
-      case 'order': return 'bg-green-100 text-green-600';
-      case 'product': return 'bg-purple-100 text-purple-600';
-      case 'contact': return 'bg-orange-100 text-orange-600';
-      case 'document': return 'bg-gray-100 text-gray-600';
-      default: return 'bg-gray-100 text-gray-600';
-    }
-  };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-  const handleResultClick = (result: SearchResult) => {
-    window.location.href = result.url;
-    setIsOpen(false);
-    setQuery("");
-  };
+  // Auto-search with debounce
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (query.trim()) {
+        handleSearch(query);
+      } else {
+        setResults([]);
+        setIsOpen(false);
+      }
+    }, 300);
 
-  const quickActions = [
-    { label: "New Order", url: "/orders", icon: ShoppingBag },
-    { label: "Add Company", url: "/crm", icon: Building2 },
-    { label: "View Reports", url: "/reports", icon: TrendingUp },
-    { label: "Recent Activity", url: "/", icon: Clock },
-  ];
+    return () => clearTimeout(timeoutId);
+  }, [query]);
 
   return (
-    <div ref={searchRef} className={cn("relative", className)}>
+    <div className="relative w-full max-w-xl" ref={searchRef}>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
         <Input
           ref={inputRef}
           type="text"
-          placeholder="Search everything... (⌘K)"
+          placeholder="Search anything... (Ctrl+K)"
           value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setIsOpen(true);
+          onChange={(e) => setQuery(e.target.value)}
+          className="pl-10 pr-4 py-2 w-full bg-gray-50 border-gray-200 focus:bg-white"
+          onFocus={() => {
+            if (results.length > 0) {
+              setIsOpen(true);
+            }
           }}
-          onFocus={() => setIsOpen(true)}
-          className="pl-10 pr-4 w-full bg-white/90 backdrop-blur border-gray-200 focus:border-swag-primary focus:ring-swag-primary"
         />
+        {searchMutation.isPending && (
+          <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 animate-spin" />
+        )}
       </div>
 
+      {/* Results Dropdown */}
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 z-50">
-          <Card className="shadow-xl border-gray-200">
-            <CardContent className="p-0">
-              {query.length === 0 ? (
-                // Quick Actions when no search
-                <div className="p-4">
-                  <h3 className="font-medium text-gray-900 mb-3">Quick Actions</h3>
-                  <div className="space-y-1">
-                    {quickActions.map((action) => {
-                      const Icon = action.icon;
-                      return (
-                        <Button
-                          key={action.label}
-                          variant="ghost"
-                          className="w-full justify-start h-8 px-2"
-                          onClick={() => {
-                            window.location.href = action.url;
-                            setIsOpen(false);
-                          }}
-                        >
-                          <Icon className="mr-2 h-4 w-4" />
-                          {action.label}
-                        </Button>
-                      );
-                    })}
+        <Card className="absolute top-full mt-2 w-full max-w-2xl z-50 shadow-lg border-gray-200">
+          <CardContent className="p-0">
+            {results.length === 0 && !searchMutation.isPending && query.trim() && (
+              <div className="p-4 text-center text-gray-500">
+                <Search className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                <p>No results found for "{query}"</p>
+                <p className="text-sm mt-1">Try searching for orders, products, companies, or files</p>
+              </div>
+            )}
+
+            {results.map((result, index) => {
+              const Icon = typeIcons[result.type] || Search;
+              return (
+                <Button
+                  key={`${result.type}-${result.id}-${index}`}
+                  variant="ghost"
+                  className="w-full h-auto p-4 justify-start hover:bg-gray-50 rounded-none border-b border-gray-100 last:border-b-0"
+                  onClick={() => handleResultClick(result)}
+                >
+                  <div className="flex items-start gap-3 w-full">
+                    <Icon className="h-5 w-5 mt-0.5 text-gray-400 flex-shrink-0" />
+                    <div className="flex-1 text-left">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium text-gray-900">{result.title}</span>
+                        <Badge variant="secondary" className={`text-xs ${typeColors[result.type]}`}>
+                          {result.type}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 line-clamp-2">{result.description}</p>
+                      {result.metadata && (
+                        <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                          {result.metadata.margin && (
+                            <span>Margin: {result.metadata.margin}</span>
+                          )}
+                          {result.metadata.value && (
+                            <span>Value: {result.metadata.value}</span>
+                          )}
+                          {result.metadata.status && (
+                            <span>Status: {result.metadata.status}</span>
+                          )}
+                          {result.metadata.date && (
+                            <span>Date: {result.metadata.date}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ) : query.length <= 2 ? (
-                // Minimum query length message
-                <div className="p-4">
-                  <p className="text-sm text-gray-500">Type at least 3 characters to search</p>
-                </div>
-              ) : isLoading ? (
-                // Loading state
-                <div className="p-4">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-4 h-4 rounded-full bg-swag-primary animate-pulse"></div>
-                    <p className="text-sm text-gray-500">Searching...</p>
-                  </div>
-                </div>
-              ) : searchResults.length === 0 ? (
-                // No results
-                <div className="p-4">
-                  <p className="text-sm text-gray-500">No results found for "{query}"</p>
-                  <p className="text-xs text-gray-400 mt-1">Try searching for companies, orders, products, or contacts</p>
-                </div>
-              ) : (
-                // Search results
-                <div className="max-h-96 overflow-y-auto">
-                  <div className="p-2">
-                    <p className="text-xs text-gray-500 mb-2 px-2">
-                      Found {searchResults.length} results
-                    </p>
-                    {searchResults.map((result: SearchResult) => {
-                      const Icon = getTypeIcon(result.type);
-                      return (
-                        <button
-                          key={result.id}
-                          onClick={() => handleResultClick(result)}
-                          className="w-full text-left p-3 rounded-lg hover:bg-gray-50 focus:bg-gray-50 focus:outline-none transition-colors"
-                        >
-                          <div className="flex items-start space-x-3">
-                            <div className={cn(
-                              "p-1.5 rounded-md flex-shrink-0",
-                              getTypeColor(result.type)
-                            )}>
-                              <Icon className="h-3 w-3" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center space-x-2">
-                                <p className="font-medium text-gray-900 truncate">
-                                  {result.title}
-                                </p>
-                                <Badge variant="secondary" className="text-xs">
-                                  {result.type}
-                                </Badge>
-                              </div>
-                              <p className="text-sm text-gray-600 truncate">
-                                {result.description}
-                              </p>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                </Button>
+              );
+            })}
+
+            {query.trim() && (
+              <div className="p-3 border-t border-gray-100 bg-gray-50">
+                <p className="text-xs text-gray-500 text-center">
+                  Try natural language queries like "last three orders with margins" or "Beber logo .ai file"
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   );

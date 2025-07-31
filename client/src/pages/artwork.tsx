@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { Plus, MoreHorizontal, Search, Filter, Calendar, User, Building, Package, Paperclip, MessageSquare, CheckSquare, Upload, Image, X } from "lucide-react";
-import Sidebar from "@/components/Sidebar";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -396,16 +396,13 @@ export default function ArtworkPage() {
 
   if (columnsLoading || cardsLoading) {
     return (
-      <div className="flex min-h-screen bg-gray-50">
-        <Sidebar />
-        <div className="flex-1 p-6">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-64 mb-6"></div>
-            <div className="flex gap-4">
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                <div key={i} className="w-80 h-96 bg-gray-100 rounded-lg"></div>
-              ))}
-            </div>
+      <div className="p-6">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-64 mb-6"></div>
+          <div className="flex gap-4">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+              <div key={i} className="w-80 h-96 bg-gray-100 rounded-lg"></div>
+            ))}
           </div>
         </div>
       </div>
@@ -423,9 +420,7 @@ export default function ArtworkPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
-      <div className="flex-1 p-6 bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="p-6 bg-gradient-to-br from-blue-50 via-white to-purple-50 min-h-full">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -1148,7 +1143,6 @@ export default function ArtworkPage() {
             </Form>
           </DialogContent>
         </Dialog>
-      </div>
     </div>
   );
 }
