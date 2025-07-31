@@ -1991,6 +1991,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Artwork management routes
+  app.get('/api/artwork/columns', isAuthenticated, async (req, res) => {
+    try {
+      const columns = await storage.getArtworkColumns();
+      res.json(columns);
+    } catch (error) {
+      console.error("Error fetching artwork columns:", error);
+      res.status(500).json({ message: "Failed to fetch artwork columns" });
+    }
+  });
+
+  app.post('/api/artwork/columns/initialize', isAuthenticated, async (req, res) => {
+    try {
+      const { columns } = req.body;
+      const result = await storage.initializeArtworkColumns(columns);
+      res.json(result);
+    } catch (error) {
+      console.error("Error initializing artwork columns:", error);
+      res.status(500).json({ message: "Failed to initialize artwork columns" });
+    }
+  });
+
+  app.post('/api/artwork/columns', isAuthenticated, async (req, res) => {
+    try {
+      const column = await storage.createArtworkColumn(req.body);
+      res.json(column);
+    } catch (error) {
+      console.error("Error creating artwork column:", error);
+      res.status(500).json({ message: "Failed to create artwork column" });
+    }
+  });
+
+  app.get('/api/artwork/cards', isAuthenticated, async (req, res) => {
+    try {
+      const cards = await storage.getArtworkCards();
+      res.json(cards);
+    } catch (error) {
+      console.error("Error fetching artwork cards:", error);
+      res.status(500).json({ message: "Failed to fetch artwork cards" });
+    }
+  });
+
+  app.post('/api/artwork/cards', isAuthenticated, async (req, res) => {
+    try {
+      const card = await storage.createArtworkCard(req.body);
+      res.json(card);
+    } catch (error) {
+      console.error("Error creating artwork card:", error);
+      res.status(500).json({ message: "Failed to create artwork card" });
+    }
+  });
+
+  app.patch('/api/artwork/cards/:id/move', isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { columnId, position } = req.body;
+      const card = await storage.moveArtworkCard(id, columnId, position);
+      res.json(card);
+    } catch (error) {
+      console.error("Error moving artwork card:", error);
+      res.status(500).json({ message: "Failed to move artwork card" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

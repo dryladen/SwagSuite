@@ -9,7 +9,8 @@ import {
   ChartBar, 
   Brain, 
   Settings,
-  Factory
+  Factory,
+  Palette
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ const navigation = [
   { name: "Production Report", href: "/production-report", icon: Factory },
   { name: "Products", href: "/products", icon: Box },
   { name: "Suppliers", href: "/suppliers", icon: Truck },
+  { name: "Artwork", href: "/artwork", icon: Palette },
   { name: "Reports", href: "/reports", icon: ChartBar },
   { name: "Knowledge Base", href: "/knowledge-base", icon: Brain },
   { name: "Settings", href: "/settings", icon: Settings },

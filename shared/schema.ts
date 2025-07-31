@@ -210,6 +210,8 @@ export const artworkFiles = pgTable("artwork_files", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+
+
 // Activity log
 export const activities = pgTable("activities", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -322,6 +324,8 @@ export const artworkFilesRelations = relations(artworkFiles, ({ one }) => ({
   }),
 }));
 
+
+
 export const activitiesRelations = relations(activities, ({ one }) => ({
   user: one(users, {
     fields: [activities.userId],
@@ -387,6 +391,8 @@ export const insertDataUploadSchema = createInsertSchema(dataUploads).omit({
   createdAt: true,
   processedAt: true,
 });
+
+
 
 // Types
 // AI Knowledge Base
@@ -635,6 +641,65 @@ export const integrationConfigurations = pgTable("integration_configurations", {
 
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+
+// Artwork management tables for Kanban-style workflow
+export const artworkColumns = pgTable("artwork_columns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  position: integer("position").notNull(),
+  color: varchar("color").notNull().default("#6B7280"),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const artworkCards = pgTable("artwork_cards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: varchar("title").notNull(),
+  description: text("description"),
+  columnId: varchar("column_id").notNull().references(() => artworkColumns.id, { onDelete: "cascade" }),
+  orderId: varchar("order_id").references(() => orders.id, { onDelete: "set null" }),
+  companyId: varchar("company_id").references(() => companies.id, { onDelete: "set null" }),
+  assignedUserId: varchar("assigned_user_id").references(() => users.id, { onDelete: "set null" }),
+  position: integer("position").notNull(),
+  priority: varchar("priority", { enum: ["low", "medium", "high", "urgent"] }).default("medium"),
+  dueDate: timestamp("due_date"),
+  labels: jsonb("labels").default(sql`'[]'::jsonb`),
+  attachments: jsonb("attachments").default(sql`'[]'::jsonb`),
+  checklist: jsonb("checklist").default(sql`'[]'::jsonb`),
+  comments: jsonb("comments").default(sql`'[]'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type ArtworkColumn = typeof artworkColumns.$inferSelect;
+export type InsertArtworkColumn = typeof artworkColumns.$inferInsert;
+export type ArtworkCard = typeof artworkCards.$inferSelect;
+export type InsertArtworkCard = typeof artworkCards.$inferInsert;
+
+// Artwork relations
+export const artworkColumnsRelations = relations(artworkColumns, ({ many }) => ({
+  cards: many(artworkCards),
+}));
+
+export const artworkCardsRelations = relations(artworkCards, ({ one }) => ({
+  column: one(artworkColumns, {
+    fields: [artworkCards.columnId],
+    references: [artworkColumns.id],
+  }),
+  order: one(orders, {
+    fields: [artworkCards.orderId],
+    references: [orders.id],
+  }),
+  company: one(companies, {
+    fields: [artworkCards.companyId],
+    references: [companies.id],
+  }),
+  assignedUser: one(users, {
+    fields: [artworkCards.assignedUserId],
+    references: [users.id],
+  }),
+}));
 
 // Production stages table for customizable workflow stages
 export const productionStages = pgTable("production_stages", {

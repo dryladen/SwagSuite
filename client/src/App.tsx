@@ -14,6 +14,7 @@ import Suppliers from "@/pages/suppliers";
 import Reports from "@/pages/reports";
 import KnowledgeBase from "@/pages/knowledge-base";
 import Settings from "@/pages/settings";
+import ArtworkPage from "@/pages/artwork";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -31,6 +32,7 @@ function Router() {
           <Route path="/production-report" component={ProductionReport} />
           <Route path="/products" component={Products} />
           <Route path="/suppliers" component={Suppliers} />
+          <Route path="/artwork" component={ArtworkPage} />
           <Route path="/reports" component={Reports} />
           <Route path="/knowledge-base" component={KnowledgeBase} />
           <Route path="/settings" component={Settings} />

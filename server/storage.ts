@@ -8,6 +8,9 @@ import {
   orderItems,
   artworkFiles,
   activities,
+  dataUploads,
+  artworkColumns,
+  artworkCards,
   type User,
   type UpsertUser,
   type Company,
@@ -26,9 +29,12 @@ import {
   type InsertArtworkFile,
   type Activity,
   type InsertActivity,
-  dataUploads,
   type DataUpload,
   type InsertDataUpload,
+  type ArtworkColumn,
+  type InsertArtworkColumn,
+  type ArtworkCard,
+  type InsertArtworkCard,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, like, and, gte, lte, sql } from "drizzle-orm";
@@ -107,6 +113,18 @@ export interface IStorage {
   }>;
   getRecentOrders(limit?: number): Promise<Order[]>;
   getTeamLeaderboard(): Promise<any[]>;
+
+  // Artwork Kanban management
+  getArtworkColumns(): Promise<ArtworkColumn[]>;
+  initializeArtworkColumns(columns: any[]): Promise<ArtworkColumn[]>;
+  createArtworkColumn(column: InsertArtworkColumn): Promise<ArtworkColumn>;
+  getArtworkCards(): Promise<any[]>;
+  createArtworkCard(card: InsertArtworkCard): Promise<ArtworkCard>;
+  moveArtworkCard(cardId: string, columnId: string, position: number): Promise<ArtworkCard>;
+
+  // Search functionality
+  searchCompanies(query: string): Promise<Company[]>;
+  searchProducts(query: string): Promise<Product[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -478,6 +496,76 @@ export class DatabaseStorage implements IStorage {
   async deleteDataUpload(id: string): Promise<void> {
     await db.delete(dataUploads).where(eq(dataUploads.id, id));
   }
+
+  // Artwork Kanban management methods
+  async getArtworkColumns(): Promise<ArtworkColumn[]> {
+    return await db.select().from(artworkColumns).orderBy(artworkColumns.position);
+  }
+
+  async initializeArtworkColumns(columns: any[]): Promise<ArtworkColumn[]> {
+    const insertColumns = columns.map(col => ({
+      id: col.id,
+      name: col.name,
+      position: col.position,
+      color: col.color,
+      isDefault: col.isDefault
+    }));
+    
+    return await db.insert(artworkColumns).values(insertColumns).returning();
+  }
+
+  async createArtworkColumn(column: InsertArtworkColumn): Promise<ArtworkColumn> {
+    const [newColumn] = await db.insert(artworkColumns).values(column).returning();
+    return newColumn;
+  }
+
+  async getArtworkCards(): Promise<any[]> {
+    const cards = await db
+      .select({
+        id: artworkCards.id,
+        title: artworkCards.title,
+        description: artworkCards.description,
+        columnId: artworkCards.columnId,
+        orderId: artworkCards.orderId,
+        companyId: artworkCards.companyId,
+        assignedUserId: artworkCards.assignedUserId,
+        position: artworkCards.position,
+        priority: artworkCards.priority,
+        dueDate: artworkCards.dueDate,
+        labels: artworkCards.labels,
+        attachments: artworkCards.attachments,
+        checklist: artworkCards.checklist,
+        comments: artworkCards.comments,
+        createdAt: artworkCards.createdAt,
+        updatedAt: artworkCards.updatedAt,
+        orderNumber: orders.orderNumber,
+        companyName: companies.name,
+        assignedUserName: users.firstName
+      })
+      .from(artworkCards)
+      .leftJoin(orders, eq(artworkCards.orderId, orders.id))
+      .leftJoin(companies, eq(artworkCards.companyId, companies.id))
+      .leftJoin(users, eq(artworkCards.assignedUserId, users.id))
+      .orderBy(artworkCards.position);
+
+    return cards;
+  }
+
+  async createArtworkCard(card: InsertArtworkCard): Promise<ArtworkCard> {
+    const [newCard] = await db.insert(artworkCards).values(card).returning();
+    return newCard;
+  }
+
+  async moveArtworkCard(cardId: string, columnId: string, position: number): Promise<ArtworkCard> {
+    const [updatedCard] = await db
+      .update(artworkCards)
+      .set({ columnId, position, updatedAt: new Date() })
+      .where(eq(artworkCards.id, cardId))
+      .returning();
+    return updatedCard;
+  }
+
+
 }
 
 export const storage = new DatabaseStorage();
