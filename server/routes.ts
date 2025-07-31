@@ -2055,6 +2055,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Artwork Kanban API routes
+  app.get("/api/artwork/columns", isAuthenticated, async (req, res) => {
+    try {
+      const columns = await storage.getArtworkColumns();
+      res.json(columns);
+    } catch (error) {
+      console.error("Error fetching artwork columns:", error);
+      res.status(500).json({ error: "Failed to fetch artwork columns" });
+    }
+  });
+
+  app.post("/api/artwork/columns/initialize", isAuthenticated, async (req, res) => {
+    try {
+      const defaultColumns = [
+        { id: 'pms-colors', name: 'PMS Colors', position: 1, color: '#EF4444', isDefault: true },
+        { id: 'artist-schedule', name: 'Artist Schedule', position: 2, color: '#F97316', isDefault: true },
+        { id: 'artwork-todo', name: 'Artwork to Do', position: 3, color: '#EAB308', isDefault: true },
+        { id: 'in-progress', name: 'In Progress', position: 4, color: '#3B82F6', isDefault: true },
+        { id: 'questions', name: 'Questions and clarifications', position: 5, color: '#8B5CF6', isDefault: true },
+        { id: 'for-review', name: 'For Review', position: 6, color: '#EC4899', isDefault: true },
+        { id: 'sent-to-client', name: 'Sent to Client', position: 7, color: '#10B981', isDefault: true },
+        { id: 'completed', name: 'Completed', position: 8, color: '#22C55E', isDefault: true }
+      ];
+      
+      const columns = await storage.initializeArtworkColumns(defaultColumns);
+      res.json(columns);
+    } catch (error) {
+      console.error("Error initializing artwork columns:", error);
+      res.status(500).json({ error: "Failed to initialize artwork columns" });
+    }
+  });
+
+  app.post("/api/artwork/columns", isAuthenticated, async (req, res) => {
+    try {
+      const column = await storage.createArtworkColumn(req.body);
+      res.status(201).json(column);
+    } catch (error) {
+      console.error("Error creating artwork column:", error);
+      res.status(500).json({ error: "Failed to create artwork column" });
+    }
+  });
+
+  app.get("/api/artwork/cards", isAuthenticated, async (req, res) => {
+    try {
+      const cards = await storage.getArtworkCards();
+      res.json(cards);
+    } catch (error) {
+      console.error("Error fetching artwork cards:", error);
+      res.status(500).json({ error: "Failed to fetch artwork cards" });
+    }
+  });
+
+  app.post("/api/artwork/cards", isAuthenticated, async (req, res) => {
+    try {
+      const card = await storage.createArtworkCard(req.body);
+      res.status(201).json(card);
+    } catch (error) {
+      console.error("Error creating artwork card:", error);
+      res.status(500).json({ error: "Failed to create artwork card" });
+    }
+  });
+
+  app.patch("/api/artwork/cards/:id/move", isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { columnId, position } = req.body;
+      const card = await storage.moveArtworkCard(id, columnId, position);
+      res.json(card);
+    } catch (error) {
+      console.error("Error moving artwork card:", error);
+      res.status(500).json({ error: "Failed to move artwork card" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
