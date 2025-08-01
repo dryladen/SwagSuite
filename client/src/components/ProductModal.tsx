@@ -61,7 +61,6 @@ export default function ProductModal({ open, onOpenChange }: ProductModalProps) 
   });
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
-  const [searchType, setSearchType] = useState<'sku' | 'style' | 'name'>('sku');
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SsActivewearProduct[]>([]);
   const [selectedProductImage, setSelectedProductImage] = useState<string>("");
@@ -70,8 +69,8 @@ export default function ProductModal({ open, onOpenChange }: ProductModalProps) 
   const queryClient = useQueryClient();
 
   const searchProductMutation = useMutation({
-    mutationFn: async ({ query, type }: { query: string; type: 'sku' | 'style' | 'name' }) => {
-      const response = await fetch(`/api/ss-activewear/search?query=${encodeURIComponent(query)}&type=${type}`, {
+    mutationFn: async (query: string) => {
+      const response = await fetch(`/api/ss-activewear/search?query=${encodeURIComponent(query)}`, {
         credentials: "include",
       });
       
@@ -197,7 +196,7 @@ export default function ProductModal({ open, onOpenChange }: ProductModalProps) 
     }
     
     setIsSearching(true);
-    searchProductMutation.mutate({ query: searchQuery.trim(), type: searchType }, {
+    searchProductMutation.mutate(searchQuery.trim(), {
       onSettled: () => setIsSearching(false),
     });
   };
@@ -269,33 +268,19 @@ export default function ProductModal({ open, onOpenChange }: ProductModalProps) 
             
             <div className="space-y-3">
               <div className="flex gap-2">
-                <div className="w-32">
-                  <Label htmlFor="searchType">Search By</Label>
-                  <Select value={searchType} onValueChange={(value: 'sku' | 'style' | 'name') => setSearchType(value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sku">SKU</SelectItem>
-                      <SelectItem value="style">Style Code</SelectItem>
-                      <SelectItem value="name">Product Name</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="flex-1">
-                  <Label htmlFor="searchQuery">
-                    {searchType === 'sku' ? 'Product Number / SKU' : 
-                     searchType === 'style' ? 'Style Code' : 'Product Name'}
-                  </Label>
+                  <Label htmlFor="searchQuery">Product Search</Label>
                   <Input
                     id="searchQuery"
-                    placeholder={
-                      searchType === 'sku' ? 'Enter SKU (e.g., B00760033)' :
-                      searchType === 'style' ? 'Enter style (e.g., 00760)' :
-                      'Enter brand or product name'
-                    }
+                    placeholder="Enter SKU, style code, or product name (e.g., 3001, B00760033, Gildan)"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSearch();
+                      }
+                    }}
                   />
                 </div>
                 <div className="flex items-end">
@@ -319,6 +304,9 @@ export default function ProductModal({ open, onOpenChange }: ProductModalProps) 
                   </Button>
                 </div>
               </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                Universal search across SKU numbers, style codes, and product names. Try "3001" or "Gildan".
+              </p>
             </div>
             
             {searchError && (
