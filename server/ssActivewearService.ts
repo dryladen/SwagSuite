@@ -107,6 +107,9 @@ export class SsActivewearService {
         searchPromises.push(this.searchByName(query));
       }
 
+      // 4. Try broad pattern matching as fallback
+      searchPromises.push(this.searchByPattern(query));
+
       // Execute all searches in parallel and combine results
       const allResults = await Promise.allSettled(searchPromises);
       const combinedResults: SsActivewearProduct[] = [];
@@ -179,24 +182,35 @@ export class SsActivewearService {
 
   private async searchByStyle(styleNumber: string): Promise<SsActivewearProduct[]> {
     try {
-      const queryUrl = `${this.baseUrl}/products/?style=${styleNumber}`;
-      console.log(`Style search with URL: ${queryUrl}`);
+      // Try multiple style variations for better matching
+      const styleVariations = [
+        styleNumber,
+        styleNumber.padStart(5, '0'), // pad with zeros: 3001 -> 00301
+        styleNumber.replace(/^0+/, ''), // remove leading zeros: 00301 -> 301
+      ].filter((v, i, arr) => arr.indexOf(v) === i); // remove duplicates
 
-      const response = await fetch(queryUrl, {
-        method: 'GET',
-        headers: this.getAuthHeaders(),
-      });
+      for (const style of styleVariations) {
+        const queryUrl = `${this.baseUrl}/products/?style=${style}`;
+        console.log(`Style search with URL: ${queryUrl}`);
 
-      if (!response.ok) {
-        console.log(`Style search failed: ${response.status}`);
-        return [];
+        const response = await fetch(queryUrl, {
+          method: 'GET',
+          headers: this.getAuthHeaders(),
+        });
+
+        if (response.ok) {
+          const products = await response.json();
+          if (Array.isArray(products) && products.length > 0) {
+            console.log(`Found ${products.length} products for style ${style}`);
+            // Limit results to prevent memory issues
+            return products.slice(0, 50);
+          }
+        } else {
+          console.log(`Style search failed for ${style}: ${response.status}`);
+        }
       }
 
-      const products = await response.json();
-      if (!Array.isArray(products)) return [];
-
-      // Limit results to prevent memory issues
-      return products.slice(0, 50);
+      return [];
     } catch (error) {
       console.log('Style search error:', error);
       return [];
@@ -205,32 +219,121 @@ export class SsActivewearService {
 
   private async searchByName(query: string): Promise<SsActivewearProduct[]> {
     try {
-      // Try searching by brand first (more specific)
-      const brandUrl = `${this.baseUrl}/products/?brand=${encodeURIComponent(query)}`;
-      console.log(`Brand search with URL: ${brandUrl}`);
+      // Try common brand variations and known style patterns
+      const searchTerms = [
+        query,
+        query.toLowerCase(),
+        query.charAt(0).toUpperCase() + query.slice(1).toLowerCase(),
+      ].filter((v, i, arr) => arr.indexOf(v) === i);
 
-      const response = await fetch(brandUrl, {
-        method: 'GET',
-        headers: this.getAuthHeaders(),
-      });
+      for (const term of searchTerms) {
+        try {
+          const brandUrl = `${this.baseUrl}/products/?brand=${encodeURIComponent(term)}`;
+          console.log(`Brand search with URL: ${brandUrl}`);
 
-      if (!response.ok) {
-        console.log(`Brand search failed: ${response.status}`);
-        return [];
+          const response = await fetch(brandUrl, {
+            method: 'GET',
+            headers: this.getAuthHeaders(),
+            // Add timeout to prevent hanging
+          });
+
+          if (response.ok) {
+            // Check content length before parsing to avoid memory issues
+            const contentLength = response.headers.get('content-length');
+            if (contentLength && parseInt(contentLength) > 10000000) { // 10MB limit
+              console.log(`Response too large for brand ${term}, skipping`);
+              continue;
+            }
+
+            const text = await response.text();
+            if (text.length > 10000000) { // Additional safety check
+              console.log(`Response text too large for brand ${term}, skipping`);
+              continue;
+            }
+
+            const products = JSON.parse(text);
+            if (Array.isArray(products) && products.length > 0) {
+              console.log(`Found ${products.length} products for brand ${term}`);
+              
+              // Filter by brand name or style name and limit results aggressively
+              const filtered = products.filter((product: SsActivewearProduct) => 
+                product.brandName?.toLowerCase().includes(query.toLowerCase()) ||
+                product.styleName?.toLowerCase().includes(query.toLowerCase())
+              ).slice(0, 10); // Limit to just 10 results
+
+              if (filtered.length > 0) {
+                return filtered;
+              }
+            }
+          } else {
+            console.log(`Brand search failed for ${term}: ${response.status}`);
+          }
+        } catch (searchError) {
+          console.log(`Error searching brand ${term}:`, searchError);
+          continue;
+        }
       }
 
-      const products = await response.json();
-      if (!Array.isArray(products)) return [];
-
-      // Filter by brand name or style name and limit results
-      const filtered = products.filter((product: SsActivewearProduct) => 
-        product.brandName?.toLowerCase().includes(query.toLowerCase()) ||
-        product.styleName?.toLowerCase().includes(query.toLowerCase())
-      ).slice(0, 20);
-
-      return filtered;
+      return [];
     } catch (error) {
       console.log('Name search error:', error);
+      return [];
+    }
+  }
+
+  private async searchByPattern(query: string): Promise<SsActivewearProduct[]> {
+    try {
+      // Try popular style patterns and common searches
+      const patterns = [];
+      
+      // If query is numeric, try common style variations
+      if (query.match(/^\d+$/)) {
+        patterns.push(
+          query.padStart(5, '0'), // 3001 -> 00301
+          query.padStart(4, '0'), // 3001 -> 3001 (already is)
+          query.substring(0, 3) + '*', // 3001 -> 300*
+        );
+      }
+      
+      // Try common style numbers that might be related
+      const commonStyles = ['00760', '18000', '42000', '64000', '88000', '8000'];
+      
+      for (const style of commonStyles) {
+        if (style.includes(query) || query.includes(style.substring(0, 3))) {
+          patterns.push(style);
+        }
+      }
+
+      // Remove duplicates and limit patterns
+      const uniquePatterns = [...new Set(patterns)].slice(0, 3);
+      
+      for (const pattern of uniquePatterns) {
+        try {
+          const cleanPattern = pattern.replace('*', '');
+          const queryUrl = `${this.baseUrl}/products/?style=${cleanPattern}`;
+          console.log(`Pattern search with URL: ${queryUrl}`);
+
+          const response = await fetch(queryUrl, {
+            method: 'GET',
+            headers: this.getAuthHeaders(),
+          });
+
+          if (response.ok) {
+            const products = await response.json();
+            if (Array.isArray(products) && products.length > 0) {
+              console.log(`Found ${products.length} products for pattern ${pattern}`);
+              return products.slice(0, 20); // Limit results
+            }
+          }
+        } catch (patternError) {
+          console.log(`Pattern search error for ${pattern}:`, patternError);
+          continue;
+        }
+      }
+
+      return [];
+    } catch (error) {
+      console.log('Pattern search error:', error);
       return [];
     }
   }
