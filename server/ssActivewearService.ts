@@ -218,99 +218,52 @@ export class SsActivewearService {
   }
 
   private async searchByName(query: string): Promise<SsActivewearProduct[]> {
-    try {
-      // Try common brand variations and known style patterns
-      const searchTerms = [
-        query,
-        query.toLowerCase(),
-        query.charAt(0).toUpperCase() + query.slice(1).toLowerCase(),
-      ].filter((v, i, arr) => arr.indexOf(v) === i);
-
-      for (const term of searchTerms) {
-        try {
-          const brandUrl = `${this.baseUrl}/products/?brand=${encodeURIComponent(term)}`;
-          console.log(`Brand search with URL: ${brandUrl}`);
-
-          const response = await fetch(brandUrl, {
-            method: 'GET',
-            headers: this.getAuthHeaders(),
-            // Add timeout to prevent hanging
-          });
-
-          if (response.ok) {
-            // Check content length before parsing to avoid memory issues
-            const contentLength = response.headers.get('content-length');
-            if (contentLength && parseInt(contentLength) > 10000000) { // 10MB limit
-              console.log(`Response too large for brand ${term}, skipping`);
-              continue;
-            }
-
-            const text = await response.text();
-            if (text.length > 10000000) { // Additional safety check
-              console.log(`Response text too large for brand ${term}, skipping`);
-              continue;
-            }
-
-            const products = JSON.parse(text);
-            if (Array.isArray(products) && products.length > 0) {
-              console.log(`Found ${products.length} products for brand ${term}`);
-              
-              // Filter by brand name or style name and limit results aggressively
-              const filtered = products.filter((product: SsActivewearProduct) => 
-                product.brandName?.toLowerCase().includes(query.toLowerCase()) ||
-                product.styleName?.toLowerCase().includes(query.toLowerCase())
-              ).slice(0, 10); // Limit to just 10 results
-
-              if (filtered.length > 0) {
-                return filtered;
-              }
-            }
-          } else {
-            console.log(`Brand search failed for ${term}: ${response.status}`);
-          }
-        } catch (searchError) {
-          console.log(`Error searching brand ${term}:`, searchError);
-          continue;
-        }
-      }
-
-      return [];
-    } catch (error) {
-      console.log('Name search error:', error);
-      return [];
-    }
+    // Skip brand search to avoid memory overflow - it's causing the ERR_STRING_TOO_LONG error
+    console.log(`Skipping brand search for "${query}" to avoid memory issues`);
+    return [];
   }
 
   private async searchByPattern(query: string): Promise<SsActivewearProduct[]> {
     try {
-      // Try popular style patterns and common searches
-      const patterns = [];
+      // Focus on known working patterns based on S&S Activewear API behavior
+      const patterns = new Set<string>();
       
-      // If query is numeric, try common style variations
+      // If query is numeric, try variations that we know work
       if (query.match(/^\d+$/)) {
-        patterns.push(
-          query.padStart(5, '0'), // 3001 -> 00301
-          query.padStart(4, '0'), // 3001 -> 3001 (already is)
-          query.substring(0, 3) + '*', // 3001 -> 300*
-        );
+        // The working pattern seems to be zero-padding to 5 digits
+        patterns.add(query.padStart(5, '0')); // 3001 -> 03001, 2000 -> 02000
+        patterns.add(query.padStart(4, '0')); // 3001 -> 3001, 200 -> 0200
+        
+        // Also try without leading zeros in case they were added
+        patterns.add(query.replace(/^0+/, '') || query); // 03001 -> 3001
       }
-      
-      // Try common style numbers that might be related
-      const commonStyles = ['00760', '18000', '42000', '64000', '88000', '8000'];
-      
-      for (const style of commonStyles) {
-        if (style.includes(query) || query.includes(style.substring(0, 3))) {
-          patterns.push(style);
+
+      // Add specific patterns for known product lines
+      const knownProductMappings: { [key: string]: string[] } = {
+        '3001': ['03001', '3001CVC', '3001C'],
+        '2000': ['02000', '2000L'],
+        '980': ['00980', '0980'],
+        'cvc': ['3001CVC', '3001C'],
+        'tultex': ['0241', '0293', '0214', '0202'], // Common Tultex styles
+        '241': ['0241'], // Tultex 241
+        '293': ['0293'], // Tultex 293  
+        '214': ['0214'], // Tultex 214
+        '202': ['0202'], // Tultex 202
+      };
+
+      const lowerQuery = query.toLowerCase();
+      for (const [key, values] of Object.entries(knownProductMappings)) {
+        if (lowerQuery.includes(key) || key.includes(lowerQuery)) {
+          values.forEach(v => patterns.add(v));
         }
       }
 
-      // Remove duplicates and limit patterns
-      const uniquePatterns = [...new Set(patterns)].slice(0, 3);
-      
-      for (const pattern of uniquePatterns) {
+      console.log(`Trying patterns for "${query}": ${Array.from(patterns).join(', ')}`);
+
+      // Try each pattern
+      for (const pattern of patterns) {
         try {
-          const cleanPattern = pattern.replace('*', '');
-          const queryUrl = `${this.baseUrl}/products/?style=${cleanPattern}`;
+          const queryUrl = `${this.baseUrl}/products/?style=${pattern}`;
           console.log(`Pattern search with URL: ${queryUrl}`);
 
           const response = await fetch(queryUrl, {
@@ -324,6 +277,8 @@ export class SsActivewearService {
               console.log(`Found ${products.length} products for pattern ${pattern}`);
               return products.slice(0, 20); // Limit results
             }
+          } else {
+            console.log(`Pattern search failed for ${pattern}: ${response.status}`);
           }
         } catch (patternError) {
           console.log(`Pattern search error for ${pattern}:`, patternError);
