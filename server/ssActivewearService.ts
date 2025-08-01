@@ -86,27 +86,35 @@ export class SsActivewearService {
     }
   }
 
-  async getProductBySku(sku: string): Promise<SsActivewearProduct | null> {
+  async searchProducts(query: string, searchType: 'sku' | 'style' | 'name' = 'sku'): Promise<SsActivewearProduct[]> {
     try {
-      // Parse S&S SKU format - they use different patterns
-      // For B00760033: B = brand prefix, 00760 = style, 033 = size/color
-      // For 00760033: 00760 = style, 033 = size/color  
-      let styleNumber = '';
+      let queryUrl = `${this.baseUrl}/products/`;
       
-      if (sku.match(/^[A-Z]\d+/)) {
-        // Format like B00760033 - extract digits after letter
-        const match = sku.match(/^[A-Z](\d+)/);
-        if (match) {
-          styleNumber = match[1].substring(0, 5); // First 5 digits after letter
+      if (searchType === 'sku') {
+        // Parse S&S SKU format to get style for efficient searching
+        let styleNumber = '';
+        
+        if (query.match(/^[A-Z]\d+/)) {
+          // Format like B00760033 - extract digits after letter
+          const match = query.match(/^[A-Z](\d+)/);
+          if (match) {
+            styleNumber = match[1].substring(0, 5); // First 5 digits after letter
+          }
+        } else if (query.match(/^\d+/)) {
+          // Format like 00760033 - first 5 digits are style
+          styleNumber = query.substring(0, 5);
         }
-      } else if (sku.match(/^\d+/)) {
-        // Format like 00760033 - first 5 digits are style
-        styleNumber = sku.substring(0, 5);
+        
+        queryUrl += `?style=${styleNumber || '00760'}`;
+      } else if (searchType === 'style') {
+        queryUrl += `?style=${encodeURIComponent(query)}`;
+      } else if (searchType === 'name') {
+        // For name search, we'll search by brand or style name
+        // This might require multiple API calls or a broader search
+        queryUrl += `?brand=${encodeURIComponent(query)}`;
       }
-      
-      const queryUrl = `${this.baseUrl}/products/?style=${styleNumber || '00760'}`;
 
-      console.log(`Searching S&S Activewear with URL: ${queryUrl}`);
+      console.log(`Searching S&S Activewear with URL: ${queryUrl} (type: ${searchType})`);
 
       const response = await fetch(queryUrl, {
         method: 'GET',
@@ -116,34 +124,43 @@ export class SsActivewearService {
       if (!response.ok) {
         console.log(`S&S API response not OK: ${response.status} ${response.statusText}`);
         if (response.status === 404) {
-          return null;
+          return [];
         }
         throw new Error(`S&S Activewear API error: ${response.status} ${response.statusText}`);
       }
 
       const products = await response.json();
-      console.log(`Found ${products.length} products, searching for SKU: ${sku}`);
+      console.log(`Found ${products.length} products for ${searchType} search: ${query}`);
       
-      // Find the exact SKU match in the results
-      if (Array.isArray(products)) {
-        const exactMatch = products.find((product: SsActivewearProduct) => 
-          product.sku?.toLowerCase() === sku.toLowerCase()
-        );
-        
-        if (exactMatch) {
-          console.log(`Found exact match for SKU ${sku}: ${exactMatch.brandName} ${exactMatch.styleName}`);
-        } else {
-          console.log(`No exact match found for SKU ${sku}. Available SKUs:`, products.slice(0, 5).map(p => p.sku));
-        }
-        
-        return exactMatch || null;
+      if (!Array.isArray(products)) {
+        return [];
       }
-      
-      return null;
+
+      // Filter results based on search type
+      if (searchType === 'sku') {
+        const exactMatch = products.find((product: SsActivewearProduct) => 
+          product.sku?.toLowerCase() === query.toLowerCase()
+        );
+        return exactMatch ? [exactMatch] : [];
+      } else if (searchType === 'name') {
+        // Filter by brand name or style name containing the query
+        return products.filter((product: SsActivewearProduct) => 
+          product.brandName?.toLowerCase().includes(query.toLowerCase()) ||
+          product.styleName?.toLowerCase().includes(query.toLowerCase())
+        );
+      } else {
+        // For style search, return all products with that style
+        return products;
+      }
     } catch (error) {
-      console.error('Error fetching S&S Activewear product by SKU:', error);
+      console.error('Error searching S&S Activewear products:', error);
       throw error;
     }
+  }
+
+  async getProductBySku(sku: string): Promise<SsActivewearProduct | null> {
+    const results = await this.searchProducts(sku, 'sku');
+    return results.length > 0 ? results[0] : null;
   }
 
   async getCategories(): Promise<any[]> {

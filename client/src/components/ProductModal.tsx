@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectValue, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -60,43 +61,57 @@ export default function ProductModal({ open, onOpenChange }: ProductModalProps) 
   });
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [searchType, setSearchType] = useState<'sku' | 'style' | 'name'>('sku');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SsActivewearProduct[]>([]);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const searchProductMutation = useMutation({
-    mutationFn: async (sku: string) => {
-      const response = await fetch(`/api/ss-activewear/product/${sku}`, {
+    mutationFn: async ({ query, type }: { query: string; type: 'sku' | 'style' | 'name' }) => {
+      const response = await fetch(`/api/ss-activewear/search?query=${encodeURIComponent(query)}&type=${type}`, {
         credentials: "include",
       });
       
       if (!response.ok) {
         if (response.status === 404) {
-          throw new Error("Product not found in S&S Activewear catalog");
+          throw new Error("No products found in S&S Activewear catalog");
         }
-        throw new Error("Failed to fetch product details");
+        throw new Error("Failed to search products");
       }
       
-      return response.json() as Promise<SsActivewearProduct>;
+      return response.json() as Promise<SsActivewearProduct[]>;
     },
-    onSuccess: (product) => {
-      setFormData({
-        sku: product.sku,
-        name: `${product.brandName} ${product.styleName} - ${product.colorName}`,
-        description: `${product.brandName} ${product.styleName} in ${product.colorName}, Size: ${product.sizeName}`,
-        price: product.piecePrice?.toString() || "",
-        supplier: "S&S Activewear",
-        category: "",
-        brand: product.brandName,
-        style: product.styleName,
-        color: product.colorName,
-        size: product.sizeName || "",
-      });
+    onSuccess: (products) => {
+      setSearchResults(products);
       setSearchError("");
-      toast({
-        title: "Product Found",
-        description: `Found ${product.brandName} ${product.styleName} in S&S Activewear catalog`,
-      });
+      
+      if (products.length === 1) {
+        // If only one product found, auto-populate the form
+        const product = products[0];
+        setFormData({
+          sku: product.sku,
+          name: `${product.brandName} ${product.styleName} - ${product.colorName}`,
+          description: `${product.brandName} ${product.styleName} in ${product.colorName}, Size: ${product.sizeName}`,
+          price: product.piecePrice?.toString() || "",
+          supplier: "S&S Activewear",
+          category: "",
+          brand: product.brandName,
+          style: product.styleName,
+          color: product.colorName,
+          size: product.sizeName || "",
+        });
+        toast({
+          title: "Product Found",
+          description: `Found ${product.brandName} ${product.styleName} in S&S Activewear catalog`,
+        });
+      } else {
+        toast({
+          title: "Search Results",
+          description: `Found ${products.length} products matching your search`,
+        });
+      }
     },
     onError: (error: Error) => {
       if (isUnauthorizedError(error)) {
@@ -171,16 +186,37 @@ export default function ProductModal({ open, onOpenChange }: ProductModalProps) 
   };
 
   const handleSearch = () => {
-    if (!formData.sku.trim()) {
-      setSearchError("Please enter a product number/SKU");
+    if (!searchQuery.trim()) {
+      setSearchError("Please enter a search query");
       return;
     }
     
     setIsSearching(true);
-    searchProductMutation.mutate(formData.sku.trim(), {
+    searchProductMutation.mutate({ query: searchQuery.trim(), type: searchType }, {
       onSettled: () => setIsSearching(false),
     });
   };
+
+  const selectProduct = (product: SsActivewearProduct) => {
+    setFormData({
+      sku: product.sku,
+      name: `${product.brandName} ${product.styleName} - ${product.colorName}`,
+      description: `${product.brandName} ${product.styleName} in ${product.colorName}, Size: ${product.sizeName}`,
+      price: product.piecePrice?.toString() || "",
+      supplier: "S&S Activewear",
+      category: "",
+      brand: product.brandName,
+      style: product.styleName,
+      color: product.colorName,
+      size: product.sizeName || "",
+    });
+    setSearchResults([]);
+    setSearchQuery("");
+    toast({
+      title: "Product Selected",
+      description: `Selected ${product.brandName} ${product.styleName}`,
+    });
+  };;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -225,40 +261,90 @@ export default function ProductModal({ open, onOpenChange }: ProductModalProps) 
               S&S Activewear Product Lookup
             </h3>
             
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <Label htmlFor="sku">Product Number / SKU</Label>
-                <Input
-                  id="sku"
-                  placeholder="Enter product SKU (e.g., B00760033)"
-                  value={formData.sku}
-                  onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                />
-              </div>
-              <div className="flex items-end">
-                <Button
-                  type="button"
-                  onClick={handleSearch}
-                  disabled={isSearching || !formData.sku.trim()}
-                  className="whitespace-nowrap"
-                >
-                  {isSearching ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Searching...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="w-4 h-4 mr-2" />
-                      Search
-                    </>
-                  )}
-                </Button>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <div className="w-32">
+                  <Label htmlFor="searchType">Search By</Label>
+                  <Select value={searchType} onValueChange={(value: 'sku' | 'style' | 'name') => setSearchType(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sku">SKU</SelectItem>
+                      <SelectItem value="style">Style Code</SelectItem>
+                      <SelectItem value="name">Product Name</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1">
+                  <Label htmlFor="searchQuery">
+                    {searchType === 'sku' ? 'Product Number / SKU' : 
+                     searchType === 'style' ? 'Style Code' : 'Product Name'}
+                  </Label>
+                  <Input
+                    id="searchQuery"
+                    placeholder={
+                      searchType === 'sku' ? 'Enter SKU (e.g., B00760033)' :
+                      searchType === 'style' ? 'Enter style (e.g., 00760)' :
+                      'Enter brand or product name'
+                    }
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    type="button"
+                    onClick={handleSearch}
+                    disabled={isSearching || !searchQuery.trim()}
+                    className="whitespace-nowrap"
+                  >
+                    {isSearching ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Searching...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-4 h-4 mr-2" />
+                        Search
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
             
             {searchError && (
               <p className="text-sm text-red-600 dark:text-red-400">{searchError}</p>
+            )}
+
+            {/* Search Results */}
+            {searchResults.length > 1 && (
+              <div className="space-y-2">
+                <Label>Search Results ({searchResults.length} found)</Label>
+                <div className="max-h-48 overflow-y-auto space-y-2 border rounded-lg p-2">
+                  {searchResults.map((product) => (
+                    <div
+                      key={product.sku}
+                      className="flex items-center justify-between p-2 border rounded hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+                      onClick={() => selectProduct(product)}
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">
+                          {product.brandName} {product.styleName} - {product.colorName}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          SKU: {product.sku} | Size: {product.sizeName} | ${product.piecePrice}
+                        </div>
+                      </div>
+                      <Button size="sm" variant="outline">
+                        Select
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 

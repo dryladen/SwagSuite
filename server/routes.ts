@@ -3017,6 +3017,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // S&S Activewear product search (by style, name, or SKU)
+  app.get('/api/ss-activewear/search', isAuthenticated, async (req, res) => {
+    try {
+      const { query, type = 'sku' } = req.query;
+      
+      if (!query || typeof query !== 'string') {
+        return res.status(400).json({ error: 'Search query is required' });
+      }
+      
+      const searchType = ['sku', 'style', 'name'].includes(type as string) ? type as 'sku' | 'style' | 'name' : 'sku';
+      const service = new SsActivewearService({ 
+        accountNumber: '52733', 
+        apiKey: '1812622b-59cd-4863-8a9f-ad64eee5cd22' 
+      });
+      const products = await service.searchProducts(query, searchType);
+      
+      res.json(products);
+    } catch (error) {
+      console.error('Error searching S&S Activewear products:', error);
+      res.status(500).json({ error: 'Failed to search products' });
+    }
+  });
+
   app.post('/api/ss-activewear/import', isAuthenticated, async (req, res) => {
     try {
       const { accountNumber, apiKey, styleFilter } = req.body;
