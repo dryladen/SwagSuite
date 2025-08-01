@@ -19,6 +19,7 @@ import Settings from "@/pages/settings";
 import ArtworkPage from "@/pages/artwork";
 import MockupBuilderPage from "@/pages/mockup-builder";
 import AIPresentationBuilder from "@/pages/ai-presentation-builder";
+import SsActivewearPage from "@/pages/ss-activewear";
 import NotFound from "@/pages/not-found";
 import { SlackSidebar } from "@/components/SlackSidebar";
 import { useState } from 'react';
@@ -63,6 +64,7 @@ function Router() {
             <Route path="/artwork" component={ArtworkPage} />
             <Route path="/mockup-builder" component={MockupBuilderPage} />
             <Route path="/ai-presentation-builder" component={AIPresentationBuilder} />
+            <Route path="/ss-activewear" component={SsActivewearPage} />
             <Route path="/reports" component={Reports} />
             <Route path="/knowledge-base" component={KnowledgeBase} />
             <Route path="/settings" component={Settings} />

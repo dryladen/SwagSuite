@@ -15,6 +15,8 @@ import {
   presentationFiles,
   presentationProducts,
   slackMessages,
+  ssActivewearProducts,
+  ssActivewearImportJobs,
   type User,
   type UpsertUser,
   type Company,
@@ -47,6 +49,10 @@ import {
   type InsertPresentationProduct,
   type SlackMessage,
   type InsertSlackMessage,
+  type SsActivewearProduct,
+  type InsertSsActivewearProduct,
+  type SsActivewearImportJob,
+  type InsertSsActivewearImportJob,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, like, and, gte, lte, sql } from "drizzle-orm";
@@ -154,6 +160,20 @@ export interface IStorage {
   // Slack Message operations
   getSlackMessages(): Promise<SlackMessage[]>;
   createSlackMessage(message: InsertSlackMessage): Promise<SlackMessage>;
+  
+  // S&S Activewear operations
+  getSsActivewearProducts(): Promise<SsActivewearProduct[]>;
+  getSsActivewearProductBySku(sku: string): Promise<SsActivewearProduct | undefined>;
+  createSsActivewearProduct(product: InsertSsActivewearProduct): Promise<SsActivewearProduct>;
+  updateSsActivewearProduct(id: string, product: Partial<InsertSsActivewearProduct>): Promise<SsActivewearProduct>;
+  deleteSsActivewearProduct(id: string): Promise<void>;
+  searchSsActivewearProducts(query: string): Promise<SsActivewearProduct[]>;
+  
+  // S&S Activewear Import Job operations
+  getSsActivewearImportJobs(userId?: string): Promise<SsActivewearImportJob[]>;
+  getSsActivewearImportJob(id: string): Promise<SsActivewearImportJob | undefined>;
+  createSsActivewearImportJob(job: InsertSsActivewearImportJob): Promise<SsActivewearImportJob>;
+  updateSsActivewearImportJob(id: string, job: Partial<InsertSsActivewearImportJob>): Promise<SsActivewearImportJob>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1455,6 +1475,89 @@ export class DatabaseStorage implements IStorage {
       .values(message)
       .returning();
     return newMessage;
+  }
+
+  // S&S Activewear operations
+  async getSsActivewearProducts(): Promise<SsActivewearProduct[]> {
+    return await db.select().from(ssActivewearProducts)
+      .where(eq(ssActivewearProducts.isActive, true))
+      .orderBy(desc(ssActivewearProducts.updatedAt));
+  }
+
+  async getSsActivewearProductBySku(sku: string): Promise<SsActivewearProduct | undefined> {
+    const [product] = await db.select().from(ssActivewearProducts)
+      .where(eq(ssActivewearProducts.sku, sku));
+    return product;
+  }
+
+  async createSsActivewearProduct(product: InsertSsActivewearProduct): Promise<SsActivewearProduct> {
+    const [newProduct] = await db.insert(ssActivewearProducts)
+      .values(product)
+      .returning();
+    return newProduct;
+  }
+
+  async updateSsActivewearProduct(id: string, product: Partial<InsertSsActivewearProduct>): Promise<SsActivewearProduct> {
+    const [updatedProduct] = await db.update(ssActivewearProducts)
+      .set({ ...product, updatedAt: new Date() })
+      .where(eq(ssActivewearProducts.id, id))
+      .returning();
+    return updatedProduct;
+  }
+
+  async deleteSsActivewearProduct(id: string): Promise<void> {
+    await db.update(ssActivewearProducts)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(ssActivewearProducts.id, id));
+  }
+
+  async searchSsActivewearProducts(query: string): Promise<SsActivewearProduct[]> {
+    return await db.select().from(ssActivewearProducts)
+      .where(
+        and(
+          eq(ssActivewearProducts.isActive, true),
+          or(
+            ilike(ssActivewearProducts.sku, `%${query}%`),
+            ilike(ssActivewearProducts.brandName, `%${query}%`),
+            ilike(ssActivewearProducts.styleName, `%${query}%`),
+            ilike(ssActivewearProducts.colorName, `%${query}%`)
+          )
+        )
+      )
+      .orderBy(desc(ssActivewearProducts.updatedAt))
+      .limit(50);
+  }
+
+  // S&S Activewear Import Job operations
+  async getSsActivewearImportJobs(userId?: string): Promise<SsActivewearImportJob[]> {
+    const query = db.select().from(ssActivewearImportJobs);
+    
+    if (userId) {
+      query.where(eq(ssActivewearImportJobs.userId, userId));
+    }
+    
+    return await query.orderBy(desc(ssActivewearImportJobs.createdAt));
+  }
+
+  async getSsActivewearImportJob(id: string): Promise<SsActivewearImportJob | undefined> {
+    const [job] = await db.select().from(ssActivewearImportJobs)
+      .where(eq(ssActivewearImportJobs.id, id));
+    return job;
+  }
+
+  async createSsActivewearImportJob(job: InsertSsActivewearImportJob): Promise<SsActivewearImportJob> {
+    const [newJob] = await db.insert(ssActivewearImportJobs)
+      .values(job)
+      .returning();
+    return newJob;
+  }
+
+  async updateSsActivewearImportJob(id: string, job: Partial<InsertSsActivewearImportJob>): Promise<SsActivewearImportJob> {
+    const [updatedJob] = await db.update(ssActivewearImportJobs)
+      .set(job)
+      .where(eq(ssActivewearImportJobs.id, id))
+      .returning();
+    return updatedJob;
   }
 }
 

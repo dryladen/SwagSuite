@@ -19,6 +19,7 @@ import {
 } from "@shared/schema";
 import Anthropic from '@anthropic-ai/sdk';
 import { sendSlackMessage } from "../shared/slack";
+import { SsActivewearService } from "./ssActivewearService";
 
 // Configure multer for file uploads
 const uploadDir = path.join(process.cwd(), 'uploads');
@@ -2963,6 +2964,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error sending Slack message:", error);
       res.status(500).json({ message: "Failed to send Slack message" });
+    }
+  });
+
+  // S&S Activewear Integration Routes
+  app.get('/api/ss-activewear/products', isAuthenticated, async (req, res) => {
+    try {
+      const products = await storage.getSsActivewearProducts();
+      res.json(products);
+    } catch (error) {
+      console.error("Error fetching S&S Activewear products:", error);
+      res.status(500).json({ message: "Failed to fetch S&S Activewear products" });
+    }
+  });
+
+  app.post('/api/ss-activewear/test-connection', isAuthenticated, async (req, res) => {
+    try {
+      const { accountNumber, apiKey } = req.body;
+      
+      if (!accountNumber || !apiKey) {
+        return res.status(400).json({ message: "Account number and API key are required" });
+      }
+
+      const ssService = new SsActivewearService({ accountNumber, apiKey });
+      const isConnected = await ssService.testConnection();
+      
+      res.json({ connected: isConnected });
+    } catch (error) {
+      console.error("Error testing S&S Activewear connection:", error);
+      res.status(500).json({ message: "Failed to test connection" });
+    }
+  });
+
+  app.post('/api/ss-activewear/import', isAuthenticated, async (req, res) => {
+    try {
+      const { accountNumber, apiKey, styleFilter } = req.body;
+      
+      if (!accountNumber || !apiKey) {
+        return res.status(400).json({ message: "Account number and API key are required" });
+      }
+
+      const ssService = new SsActivewearService({ accountNumber, apiKey });
+      const jobId = await ssService.importProducts(req.user.claims.sub, styleFilter);
+      
+      res.json({ jobId, message: "Import started" });
+    } catch (error) {
+      console.error("Error starting S&S Activewear import:", error);
+      res.status(500).json({ message: "Failed to start import" });
+    }
+  });
+
+  app.get('/api/ss-activewear/import-jobs', isAuthenticated, async (req, res) => {
+    try {
+      const jobs = await storage.getSsActivewearImportJobs(req.user.claims.sub);
+      res.json(jobs);
+    } catch (error) {
+      console.error("Error fetching import jobs:", error);
+      res.status(500).json({ message: "Failed to fetch import jobs" });
+    }
+  });
+
+  app.get('/api/ss-activewear/import-jobs/:id', isAuthenticated, async (req, res) => {
+    try {
+      const job = await storage.getSsActivewearImportJob(req.params.id);
+      
+      if (!job || job.userId !== req.user.claims.sub) {
+        return res.status(404).json({ message: "Import job not found" });
+      }
+      
+      res.json(job);
+    } catch (error) {
+      console.error("Error fetching import job:", error);
+      res.status(500).json({ message: "Failed to fetch import job" });
+    }
+  });
+
+  app.get('/api/ss-activewear/search', isAuthenticated, async (req, res) => {
+    try {
+      const { q } = req.query;
+      
+      if (!q || typeof q !== 'string') {
+        return res.status(400).json({ message: "Search query is required" });
+      }
+
+      const products = await storage.searchSsActivewearProducts(q);
+      res.json(products);
+    } catch (error) {
+      console.error("Error searching S&S Activewear products:", error);
+      res.status(500).json({ message: "Failed to search products" });
     }
   });
 
