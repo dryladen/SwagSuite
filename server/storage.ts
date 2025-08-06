@@ -1373,8 +1373,10 @@ export class DatabaseStorage implements IStorage {
       }
     });
 
-    // Insert order items
-    await db.insert(orderItems).values(sampleOrderItems).onConflictDoNothing();
+    // Insert order items only if we have items to insert
+    if (sampleOrderItems.length > 0) {
+      await db.insert(orderItems).values(sampleOrderItems).onConflictDoNothing();
+    }
 
     // Get artwork columns
     const columns = await this.getArtworkColumns();
