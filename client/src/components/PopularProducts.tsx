@@ -285,7 +285,7 @@ export function PopularProducts({
               </CardHeader>
               <CardContent>
                 {isLoading ? (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
                     {Array.from({ length: 5 }).map((_, i) => (
                       <div key={i} className="flex items-center space-x-3">
                         <Skeleton className="w-10 h-10 rounded-lg" />
@@ -298,10 +298,10 @@ export function PopularProducts({
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
                     {products
                       .filter(p => p.productType === 'apparel')
-                      .slice(0, 5)
+                      .slice(0, 10)
                       .map((product, index) => renderProductCard(product, index))}
                     {products.filter(p => p.productType === 'apparel').length === 0 && (
                       <div className="text-center text-gray-500 py-4">
@@ -324,7 +324,7 @@ export function PopularProducts({
               </CardHeader>
               <CardContent>
                 {isLoading ? (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
                     {Array.from({ length: 5 }).map((_, i) => (
                       <div key={i} className="flex items-center space-x-3">
                         <Skeleton className="w-10 h-10 rounded-lg" />
@@ -337,10 +337,10 @@ export function PopularProducts({
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
                     {products
                       .filter(p => p.productType === 'hard_goods')
-                      .slice(0, 5)
+                      .slice(0, 10)
                       .map((product, index) => renderProductCard(product, index))}
                     {products.filter(p => p.productType === 'hard_goods').length === 0 && (
                       <div className="text-center text-gray-500 py-4">
@@ -367,7 +367,7 @@ export function PopularProducts({
               </CardHeader>
               <CardContent>
                 {suggestedLoading ? (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
                     {Array.from({ length: 3 }).map((_, i) => (
                       <div key={i} className="flex items-center space-x-3">
                         <Skeleton className="w-10 h-10 rounded-lg" />
@@ -380,10 +380,10 @@ export function PopularProducts({
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
                     {suggestedProducts
                       .filter(p => p.productType === 'apparel')
-                      .slice(0, 3)
+                      .slice(0, 10)
                       .map((product, index) => renderSuggestedCard(product, index))}
                     {suggestedProducts.filter(p => p.productType === 'apparel').length === 0 && (
                       <div className="text-center text-gray-500 py-4">
@@ -407,7 +407,7 @@ export function PopularProducts({
               </CardHeader>
               <CardContent>
                 {suggestedLoading ? (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
                     {Array.from({ length: 3 }).map((_, i) => (
                       <div key={i} className="flex items-center space-x-3">
                         <Skeleton className="w-10 h-10 rounded-lg" />
@@ -420,10 +420,10 @@ export function PopularProducts({
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
                     {suggestedProducts
                       .filter(p => p.productType === 'hard_goods')
-                      .slice(0, 3)
+                      .slice(0, 10)
                       .map((product, index) => renderSuggestedCard(product, index))}
                     {suggestedProducts.filter(p => p.productType === 'hard_goods').length === 0 && (
                       <div className="text-center text-gray-500 py-4">
@@ -449,7 +449,7 @@ export function PopularProducts({
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[400px] overflow-y-auto">
                   {Array.from({ length: 10 }).map((_, i) => (
                     <div key={i} className="flex items-center space-x-3">
                       <Skeleton className="w-10 h-10 rounded-lg" />
@@ -462,7 +462,7 @@ export function PopularProducts({
                   ))}
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[400px] overflow-y-auto">
                   {products.slice(0, 10).map((product, index) => renderProductCard(product, index))}
                   {products.length === 0 && (
                     <div className="text-center text-gray-500 py-4">
@@ -486,7 +486,7 @@ export function PopularProducts({
             </CardHeader>
             <CardContent>
               {suggestedLoading ? (
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[400px] overflow-y-auto">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <div key={i} className="flex items-center space-x-3">
                       <Skeleton className="w-10 h-10 rounded-lg" />
@@ -499,8 +499,8 @@ export function PopularProducts({
                   ))}
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {suggestedProducts.slice(0, 5).map((product, index) => renderSuggestedCard(product, index))}
+                <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                  {suggestedProducts.slice(0, 10).map((product, index) => renderSuggestedCard(product, index))}
                   {suggestedProducts.length === 0 && (
                     <div className="text-center text-gray-500 py-4">
                       <Lightbulb className="w-8 h-8 mx-auto mb-2 text-gray-400" />
