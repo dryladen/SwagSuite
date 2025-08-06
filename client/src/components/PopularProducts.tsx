@@ -201,9 +201,9 @@ export function PopularProducts() {
               </CardHeader>
               <CardContent>
                 {isLoading ? (
-                  <div className="space-y-3 max-h-[860px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                     {Array.from({ length: 10 }).map((_, i) => (
-                      <div key={i} className="flex items-center space-x-3">
+                      <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                         <Skeleton className="w-10 h-10 rounded-lg" />
                         <Skeleton className="w-12 h-12 rounded-lg" />
                         <div className="flex-1 space-y-2">
@@ -214,7 +214,7 @@ export function PopularProducts() {
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3 max-h-[860px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                     {products
                       .filter(p => p.productType === 'apparel')
                       .slice(0, 10)
@@ -240,9 +240,9 @@ export function PopularProducts() {
               </CardHeader>
               <CardContent>
                 {isLoading ? (
-                  <div className="space-y-3 max-h-[860px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                     {Array.from({ length: 10 }).map((_, i) => (
-                      <div key={i} className="flex items-center space-x-3">
+                      <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                         <Skeleton className="w-10 h-10 rounded-lg" />
                         <Skeleton className="w-12 h-12 rounded-lg" />
                         <div className="flex-1 space-y-2">
@@ -253,7 +253,7 @@ export function PopularProducts() {
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3 max-h-[860px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                     {products
                       .filter(p => p.productType === 'hard_goods')
                       .slice(0, 10)
@@ -283,9 +283,9 @@ export function PopularProducts() {
               </CardHeader>
               <CardContent>
                 {suggestedLoading ? (
-                  <div className="space-y-3 max-h-[860px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                     {Array.from({ length: 10 }).map((_, i) => (
-                      <div key={i} className="flex items-center space-x-3">
+                      <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                         <Skeleton className="w-10 h-10 rounded-lg" />
                         <Skeleton className="w-12 h-12 rounded-lg" />
                         <div className="flex-1 space-y-2">
@@ -296,7 +296,7 @@ export function PopularProducts() {
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3 max-h-[860px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                     {suggestedProducts
                       .filter(p => p.productType === 'apparel')
                       .slice(0, 10)
@@ -323,9 +323,9 @@ export function PopularProducts() {
               </CardHeader>
               <CardContent>
                 {suggestedLoading ? (
-                  <div className="space-y-3 max-h-[860px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                     {Array.from({ length: 10 }).map((_, i) => (
-                      <div key={i} className="flex items-center space-x-3">
+                      <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                         <Skeleton className="w-10 h-10 rounded-lg" />
                         <Skeleton className="w-12 h-12 rounded-lg" />
                         <div className="flex-1 space-y-2">
@@ -336,7 +336,7 @@ export function PopularProducts() {
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3 max-h-[860px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                     {suggestedProducts
                       .filter(p => p.productType === 'hard_goods')
                       .slice(0, 10)
@@ -365,9 +365,9 @@ export function PopularProducts() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="space-y-3 max-h-[860px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                   {Array.from({ length: 10 }).map((_, i) => (
-                    <div key={i} className="flex items-center space-x-3">
+                    <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                       <Skeleton className="w-10 h-10 rounded-lg" />
                       <Skeleton className="w-12 h-12 rounded-lg" />
                       <div className="flex-1 space-y-2">
@@ -378,7 +378,7 @@ export function PopularProducts() {
                   ))}
                 </div>
               ) : (
-                <div className="space-y-3 max-h-[860px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                   {products.slice(0, 10).map((product, index) => renderProductCard(product, index))}
                   {products.length === 0 && (
                     <div className="text-center text-gray-500 py-4">
@@ -402,9 +402,9 @@ export function PopularProducts() {
             </CardHeader>
             <CardContent>
               {suggestedLoading ? (
-                <div className="space-y-3 max-h-[860px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                   {Array.from({ length: 10 }).map((_, i) => (
-                    <div key={i} className="flex items-center space-x-3">
+                    <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                       <Skeleton className="w-10 h-10 rounded-lg" />
                       <Skeleton className="w-12 h-12 rounded-lg" />
                       <div className="flex-1 space-y-2">
@@ -415,7 +415,7 @@ export function PopularProducts() {
                   ))}
                 </div>
               ) : (
-                <div className="space-y-3 max-h-[860px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                   {suggestedProducts.slice(0, 10).map((product, index) => renderSuggestedCard(product, index))}
                   {suggestedProducts.length === 0 && (
                     <div className="text-center text-gray-500 py-4">
