@@ -201,8 +201,8 @@ export function PopularProducts() {
               </CardHeader>
               <CardContent>
                 {isLoading ? (
-                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
-                    {Array.from({ length: 10 }).map((_, i) => (
+                  <div className="space-y-4 h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                    {Array.from({ length: 3 }).map((_, i) => (
                       <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                         <Skeleton className="w-10 h-10 rounded-lg" />
                         <Skeleton className="w-12 h-12 rounded-lg" />
@@ -214,10 +214,9 @@ export function PopularProducts() {
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  <div className="space-y-4 h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                     {products
                       .filter(p => p.productType === 'apparel')
-                      .slice(0, 10)
                       .map((product, index) => renderProductCard(product, index))}
                     {products.filter(p => p.productType === 'apparel').length === 0 && (
                       <div className="text-center text-gray-500 py-4">
@@ -240,8 +239,8 @@ export function PopularProducts() {
               </CardHeader>
               <CardContent>
                 {isLoading ? (
-                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
-                    {Array.from({ length: 10 }).map((_, i) => (
+                  <div className="space-y-4 h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                    {Array.from({ length: 3 }).map((_, i) => (
                       <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                         <Skeleton className="w-10 h-10 rounded-lg" />
                         <Skeleton className="w-12 h-12 rounded-lg" />
@@ -253,10 +252,9 @@ export function PopularProducts() {
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  <div className="space-y-4 h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                     {products
                       .filter(p => p.productType === 'hard_goods')
-                      .slice(0, 10)
                       .map((product, index) => renderProductCard(product, index))}
                     {products.filter(p => p.productType === 'hard_goods').length === 0 && (
                       <div className="text-center text-gray-500 py-4">
@@ -283,8 +281,8 @@ export function PopularProducts() {
               </CardHeader>
               <CardContent>
                 {suggestedLoading ? (
-                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
-                    {Array.from({ length: 10 }).map((_, i) => (
+                  <div className="space-y-4 h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                    {Array.from({ length: 3 }).map((_, i) => (
                       <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                         <Skeleton className="w-10 h-10 rounded-lg" />
                         <Skeleton className="w-12 h-12 rounded-lg" />
@@ -296,10 +294,9 @@ export function PopularProducts() {
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  <div className="space-y-4 h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                     {suggestedProducts
                       .filter(p => p.productType === 'apparel')
-                      .slice(0, 10)
                       .map((product, index) => renderSuggestedCard(product, index))}
                     {suggestedProducts.filter(p => p.productType === 'apparel').length === 0 && (
                       <div className="text-center text-gray-500 py-4">
@@ -323,8 +320,8 @@ export function PopularProducts() {
               </CardHeader>
               <CardContent>
                 {suggestedLoading ? (
-                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
-                    {Array.from({ length: 10 }).map((_, i) => (
+                  <div className="space-y-4 h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                    {Array.from({ length: 3 }).map((_, i) => (
                       <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                         <Skeleton className="w-10 h-10 rounded-lg" />
                         <Skeleton className="w-12 h-12 rounded-lg" />
@@ -336,10 +333,9 @@ export function PopularProducts() {
                     ))}
                   </div>
                 ) : (
-                  <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  <div className="space-y-4 h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
                     {suggestedProducts
                       .filter(p => p.productType === 'hard_goods')
-                      .slice(0, 10)
                       .map((product, index) => renderSuggestedCard(product, index))}
                     {suggestedProducts.filter(p => p.productType === 'hard_goods').length === 0 && (
                       <div className="text-center text-gray-500 py-4">
@@ -365,8 +361,8 @@ export function PopularProducts() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
-                  {Array.from({ length: 10 }).map((_, i) => (
+                <div className="space-y-4 h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  {Array.from({ length: 3 }).map((_, i) => (
                     <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                       <Skeleton className="w-10 h-10 rounded-lg" />
                       <Skeleton className="w-12 h-12 rounded-lg" />
@@ -378,8 +374,8 @@ export function PopularProducts() {
                   ))}
                 </div>
               ) : (
-                <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
-                  {products.slice(0, 10).map((product, index) => renderProductCard(product, index))}
+                <div className="space-y-4 h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  {products.map((product, index) => renderProductCard(product, index))}
                   {products.length === 0 && (
                     <div className="text-center text-gray-500 py-4">
                       <Package className="w-8 h-8 mx-auto mb-2 text-gray-400" />
@@ -402,8 +398,8 @@ export function PopularProducts() {
             </CardHeader>
             <CardContent>
               {suggestedLoading ? (
-                <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
-                  {Array.from({ length: 10 }).map((_, i) => (
+                <div className="space-y-4 h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  {Array.from({ length: 3 }).map((_, i) => (
                     <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
                       <Skeleton className="w-10 h-10 rounded-lg" />
                       <Skeleton className="w-12 h-12 rounded-lg" />
@@ -415,8 +411,8 @@ export function PopularProducts() {
                   ))}
                 </div>
               ) : (
-                <div className="space-y-3 h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
-                  {suggestedProducts.slice(0, 10).map((product, index) => renderSuggestedCard(product, index))}
+                <div className="space-y-4 h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 hover:scrollbar-thumb-gray-400">
+                  {suggestedProducts.map((product, index) => renderSuggestedCard(product, index))}
                   {suggestedProducts.length === 0 && (
                     <div className="text-center text-gray-500 py-4">
                       <Lightbulb className="w-8 h-8 mx-auto mb-2 text-gray-400" />
