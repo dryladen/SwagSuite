@@ -31,6 +31,7 @@ const navigation = [
   { name: "Reports", href: "/reports", icon: ChartBar },
   { name: "Knowledge Base", href: "/knowledge-base", icon: Brain },
   { name: "Sequence Builder", href: "/sequence-builder", icon: Zap },
+  { name: "Team Performance", href: "/team-performance", icon: ChartBar },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

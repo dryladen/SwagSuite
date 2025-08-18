@@ -1425,6 +1425,307 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Team Performance Dashboard Routes
+  app.get('/api/dashboard/team-performance', isAuthenticated, async (req, res) => {
+    try {
+      const teamPerformanceData = {
+        teamStats: {
+          totalRevenue: 2850000,
+          teamTargetRevenue: 3200000,
+          achievementPercentage: 89.1,
+          totalOrders: 342,
+          avgOrderValue: 8333,
+          conversionRate: 24.5,
+          customerSatisfaction: 4.7,
+          activeDeals: 127,
+          newClients: 23,
+          repeatClients: 89
+        },
+        salesTeam: [
+          {
+            id: 1,
+            name: "Sarah Johnson",
+            role: "Senior Sales Rep",
+            avatar: "/avatars/sarah.jpg",
+            revenue: 485000,
+            target: 520000,
+            achievement: 93.3,
+            orders: 67,
+            avgOrderValue: 7239,
+            conversionRate: 28.5,
+            newClients: 8,
+            activities: 145,
+            lastActivity: "2024-01-15T14:30:00Z",
+            status: "active",
+            trend: "up",
+            monthlyProgress: [
+              { month: "Jan", revenue: 52000, target: 45000 },
+              { month: "Feb", revenue: 48000, target: 45000 },
+              { month: "Mar", revenue: 51000, target: 45000 },
+              { month: "Apr", revenue: 49000, target: 45000 },
+              { month: "May", revenue: 53000, target: 45000 },
+              { month: "Jun", revenue: 47000, target: 45000 }
+            ]
+          },
+          {
+            id: 2,
+            name: "Mike Chen",
+            role: "Account Manager",
+            avatar: "/avatars/mike.jpg",
+            revenue: 423000,
+            target: 450000,
+            achievement: 94.0,
+            orders: 59,
+            avgOrderValue: 7169,
+            conversionRate: 26.8,
+            newClients: 6,
+            activities: 128,
+            lastActivity: "2024-01-15T16:45:00Z",
+            status: "active",
+            trend: "up",
+            monthlyProgress: [
+              { month: "Jan", revenue: 41000, target: 37500 },
+              { month: "Feb", revenue: 43000, target: 37500 },
+              { month: "Mar", revenue: 45000, target: 37500 },
+              { month: "Apr", revenue: 42000, target: 37500 },
+              { month: "May", revenue: 46000, target: 37500 },
+              { month: "Jun", revenue: 44000, target: 37500 }
+            ]
+          },
+          {
+            id: 3,
+            name: "Emma Rodriguez",
+            role: "Sales Rep",
+            avatar: "/avatars/emma.jpg",
+            revenue: 367000,
+            target: 380000,
+            achievement: 96.6,
+            orders: 52,
+            avgOrderValue: 7058,
+            conversionRate: 31.2,
+            newClients: 9,
+            activities: 167,
+            lastActivity: "2024-01-15T11:20:00Z",
+            status: "active",
+            trend: "up",
+            monthlyProgress: [
+              { month: "Jan", revenue: 35000, target: 32000 },
+              { month: "Feb", revenue: 37000, target: 32000 },
+              { month: "Mar", revenue: 39000, target: 32000 },
+              { month: "Apr", revenue: 36000, target: 32000 },
+              { month: "May", revenue: 41000, target: 32000 },
+              { month: "Jun", revenue: 38000, target: 32000 }
+            ]
+          },
+          {
+            id: 4,
+            name: "David Park",
+            role: "Inside Sales",
+            avatar: "/avatars/david.jpg",
+            revenue: 298000,
+            target: 320000,
+            achievement: 93.1,
+            orders: 71,
+            avgOrderValue: 4197,
+            conversionRate: 22.4,
+            newClients: 12,
+            activities: 203,
+            lastActivity: "2024-01-15T13:15:00Z",
+            status: "active",
+            trend: "steady",
+            monthlyProgress: [
+              { month: "Jan", revenue: 28000, target: 27000 },
+              { month: "Feb", revenue: 29000, target: 27000 },
+              { month: "Mar", revenue: 31000, target: 27000 },
+              { month: "Apr", revenue: 30000, target: 27000 },
+              { month: "May", revenue: 32000, target: 27000 },
+              { month: "Jun", revenue: 29000, target: 27000 }
+            ]
+          },
+          {
+            id: 5,
+            name: "Lisa Thompson",
+            role: "Regional Manager",
+            avatar: "/avatars/lisa.jpg",
+            revenue: 521000,
+            target: 550000,
+            achievement: 94.7,
+            orders: 43,
+            avgOrderValue: 12116,
+            conversionRate: 35.8,
+            newClients: 5,
+            activities: 89,
+            lastActivity: "2024-01-15T15:30:00Z",
+            status: "active",
+            trend: "up",
+            monthlyProgress: [
+              { month: "Jan", revenue: 48000, target: 46000 },
+              { month: "Feb", revenue: 52000, target: 46000 },
+              { month: "Mar", revenue: 55000, target: 46000 },
+              { month: "Apr", revenue: 51000, target: 46000 },
+              { month: "May", revenue: 58000, target: 46000 },
+              { month: "Jun", revenue: 53000, target: 46000 }
+            ]
+          },
+          {
+            id: 6,
+            name: "James Wilson",
+            role: "Sales Rep",
+            avatar: "/avatars/james.jpg",
+            revenue: 245000,
+            target: 290000,
+            achievement: 84.5,
+            orders: 38,
+            avgOrderValue: 6447,
+            conversionRate: 19.7,
+            newClients: 4,
+            activities: 95,
+            lastActivity: "2024-01-14T17:20:00Z",
+            status: "needs_attention",
+            trend: "down",
+            monthlyProgress: [
+              { month: "Jan", revenue: 25000, target: 24000 },
+              { month: "Feb", revenue: 23000, target: 24000 },
+              { month: "Mar", revenue: 26000, target: 24000 },
+              { month: "Apr", revenue: 22000, target: 24000 },
+              { month: "May", revenue: 27000, target: 24000 },
+              { month: "Jun", revenue: 21000, target: 24000 }
+            ]
+          }
+        ],
+        teamKPIs: [
+          {
+            metric: "Total Revenue",
+            value: "$2.85M",
+            target: "$3.2M",
+            achievement: 89.1,
+            trend: "up",
+            change: "+12.3%",
+            period: "YTD"
+          },
+          {
+            metric: "Average Order Value",
+            value: "$8,333",
+            target: "$8,500",
+            achievement: 98.0,
+            trend: "up",
+            change: "+5.7%",
+            period: "This Month"
+          },
+          {
+            metric: "Conversion Rate",
+            value: "24.5%",
+            target: "25.0%",
+            achievement: 98.0,
+            trend: "steady",
+            change: "+1.2%",
+            period: "This Quarter"
+          },
+          {
+            metric: "Customer Satisfaction",
+            value: "4.7/5",
+            target: "4.5/5",
+            achievement: 104.4,
+            trend: "up",
+            change: "+0.3",
+            period: "This Month"
+          },
+          {
+            metric: "New Clients",
+            value: "23",
+            target: "25",
+            achievement: 92.0,
+            trend: "steady",
+            change: "+15.0%",
+            period: "This Month"
+          },
+          {
+            metric: "Pipeline Value",
+            value: "$1.2M",
+            target: "$1.1M",
+            achievement: 109.1,
+            trend: "up",
+            change: "+18.5%",
+            period: "Current"
+          }
+        ],
+        activityMetrics: {
+          totalCalls: 1247,
+          totalEmails: 3456,
+          totalMeetings: 156,
+          totalProposals: 89,
+          avgResponseTime: "2.3 hours",
+          followUpRate: 87.5
+        },
+        productPerformance: [
+          {
+            category: "Apparel",
+            revenue: 1240000,
+            orders: 187,
+            avgOrderValue: 6631,
+            topSalesperson: "Sarah Johnson"
+          },
+          {
+            category: "Promotional Items",
+            revenue: 856000,
+            orders: 98,
+            avgOrderValue: 8735,
+            topSalesperson: "Lisa Thompson"
+          },
+          {
+            category: "Custom Bags",
+            revenue: 423000,
+            orders: 34,
+            avgOrderValue: 12441,
+            topSalesperson: "Mike Chen"
+          },
+          {
+            category: "Drinkware",
+            revenue: 331000,
+            orders: 23,
+            avgOrderValue: 14391,
+            topSalesperson: "Emma Rodriguez"
+          }
+        ],
+        monthlyTrends: {
+          revenue: [
+            { month: "Jul 2023", value: 220000 },
+            { month: "Aug 2023", value: 235000 },
+            { month: "Sep 2023", value: 245000 },
+            { month: "Oct 2023", value: 228000 },
+            { month: "Nov 2023", value: 252000 },
+            { month: "Dec 2023", value: 267000 },
+            { month: "Jan 2024", value: 275000 },
+            { month: "Feb 2024", value: 268000 },
+            { month: "Mar 2024", value: 285000 },
+            { month: "Apr 2024", value: 292000 },
+            { month: "May 2024", value: 301000 },
+            { month: "Jun 2024", value: 295000 }
+          ],
+          orders: [
+            { month: "Jul 2023", value: 45 },
+            { month: "Aug 2023", value: 48 },
+            { month: "Sep 2023", value: 52 },
+            { month: "Oct 2023", value: 47 },
+            { month: "Nov 2023", value: 54 },
+            { month: "Dec 2023", value: 59 },
+            { month: "Jan 2024", value: 61 },
+            { month: "Feb 2024", value: 58 },
+            { month: "Mar 2024", value: 63 },
+            { month: "Apr 2024", value: 65 },
+            { month: "May 2024", value: 67 },
+            { month: "Jun 2024", value: 64 }
+          ]
+        }
+      };
+
+      res.json(teamPerformanceData);
+    } catch (error) {
+      console.error('Error fetching team performance data:', error);
+      res.status(500).json({ message: "Failed to fetch team performance data" });
+    }
+  });
+
   app.get('/api/dashboard/team-leaderboard', isAuthenticated, async (req, res) => {
     try {
       // Mock team leaderboard - would calculate from actual user data
