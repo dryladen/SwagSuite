@@ -44,6 +44,8 @@ Preferred communication style: Simple, everyday language.
 7. **Order Items**: Line items within orders with product details
 8. **Artwork Files**: File management for product customization assets
 9. **Activities**: Audit trail and activity logging
+10. **Sales Sequences**: Automated outreach campaigns with AI-generated content and performance tracking
+11. **Team Performance**: Individual and team sales analytics with KPIs and trend analysis
 
 ### Admin Management System
 - **Feature Toggles**: Comprehensive system for enabling/disabling features by category
@@ -53,6 +55,8 @@ Preferred communication style: Simple, everyday language.
 
 ### UI Components
 - **Dashboard**: Customizable home screen with KPIs and quick actions
+- **Team Performance Dashboard**: Comprehensive analytics with individual and team KPIs, charts, and performance tracking
+- **Sequence Builder**: HubSpot-style sales automation tool with AI-generated sequences and performance metrics
 - **Layout System**: Consistent sidebar navigation and top bar
 - **Data Tables**: Reusable table components for entity management
 - **Modal System**: Dialog-based forms for CRUD operations
@@ -139,3 +143,16 @@ Preferred communication style: Simple, everyday language.
 - Error handling with status codes
 - Activity tracking for audit trails
 - Performance monitoring through query tracking
+
+## Recent Updates (January 2025)
+
+### Sales Automation & Analytics
+- **Sequence Builder**: Complete HubSpot-style sales automation tool with AI-generated email sequences, step management, and performance tracking
+- **Team Performance Dashboard**: Comprehensive analytics dashboard with individual team member performance, KPIs, revenue trends, and activity metrics
+- **Sample Data Integration**: Realistic performance data including team stats, individual metrics, monthly trends, and product category performance
+
+### Technical Enhancements
+- **Progress & Tabs Components**: Added Radix UI components for enhanced dashboard interactivity
+- **Chart Integration**: Recharts library integration for data visualization
+- **Advanced API Endpoints**: Backend routes for team performance analytics and sequence management
+- **Responsive Design**: Mobile-friendly layouts for all dashboard components
