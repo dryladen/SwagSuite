@@ -694,6 +694,29 @@ export default function ProductionReport() {
                     </div>
                   </div>
                 )}
+
+                {/* Production Team & CSR Assignment */}
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-500">Production:</span>
+                      <UserAvatar 
+                        name={order.assignedTo}
+                        size="sm"
+                      />
+                      <span className="text-sm text-gray-700">{order.assignedTo}</span>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-500">CSR:</span>
+                      <UserAvatar 
+                        name="Sarah Johnson"
+                        size="sm"
+                      />
+                      <span className="text-sm text-gray-700">Sarah Johnson</span>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -723,13 +746,28 @@ export default function ProductionReport() {
                   <div>
                     <h3 className="font-medium mb-3">Production Details</h3>
                     <div className="space-y-2 text-sm">
-                      <p><span className="font-medium">Assigned To:</span> {selectedOrder.assignedTo}</p>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium">Assigned To:</span>
+                        <UserAvatar 
+                          name={selectedOrder.assignedTo}
+                          size="sm"
+                        />
+                        <span>{selectedOrder.assignedTo}</span>
+                      </div>
                       <p><span className="font-medium">Priority:</span> 
                         <Badge className={`ml-2 ${getPriorityColor(selectedOrder.priority)}`}>
                           {selectedOrder.priority.toUpperCase()}
                         </Badge>
                       </p>
                       <p><span className="font-medium">Due Date:</span> {selectedOrder.dueDate ? format(new Date(selectedOrder.dueDate), 'MMM dd, yyyy') : 'TBD'}</p>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <span className="font-medium">CSR:</span>
+                        <UserAvatar 
+                          name="Sarah Johnson"
+                          size="sm"
+                        />
+                        <span>Sarah Johnson</span>
+                      </div>
                     </div>
                   </div>
                 </div>

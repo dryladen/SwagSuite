@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import { 
   Form, 
   FormControl, 
@@ -640,11 +640,10 @@ export default function ArtworkPage() {
                               </div>
                             )}
                             {card.assignedUserName && (
-                              <Avatar className="w-6 h-6">
-                                <AvatarFallback className="text-xs bg-gray-200 text-gray-700">
-                                  {card.assignedUserName.charAt(0).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
+                              <UserAvatar 
+                                name={card.assignedUserName}
+                                size="sm"
+                              />
                             )}
                           </div>
                         </div>

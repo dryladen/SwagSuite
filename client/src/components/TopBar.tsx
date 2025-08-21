@@ -1,6 +1,6 @@
 import { Bell, Settings, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,12 +39,14 @@ export default function TopBar() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-              <Avatar className="h-8 w-8">
-                <AvatarImage src={(user as any)?.profileImageUrl} alt={(user as any)?.firstName || 'User'} />
-                <AvatarFallback>
-                  {(user as any)?.firstName?.[0] || (user as any)?.email?.[0] || 'U'}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar 
+                name={(user as any)?.firstName && (user as any)?.lastName 
+                  ? `${(user as any).firstName} ${(user as any).lastName}`
+                  : (user as any)?.email || 'User'
+                }
+                imageUrl={(user as any)?.profileImageUrl}
+                size="sm"
+              />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56" align="end" forceMount>
