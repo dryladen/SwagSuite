@@ -6,6 +6,7 @@ import { z } from "zod";
 // Note: This component is used within the CRM layout, so no separate Layout needed
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -531,16 +532,22 @@ export default function Leads() {
                 <Card key={lead.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-lg text-swag-navy">
-                          {lead.firstName} {lead.lastName}
-                        </CardTitle>
-                        {lead.company && (
-                          <p className="text-sm text-muted-foreground">{lead.company}</p>
-                        )}
-                        {lead.title && (
-                          <p className="text-xs text-muted-foreground">{lead.title}</p>
-                        )}
+                      <div className="flex items-center space-x-3 flex-1">
+                        <UserAvatar 
+                          name={`${lead.firstName} ${lead.lastName}`}
+                          size="md"
+                        />
+                        <div>
+                          <CardTitle className="text-lg text-swag-navy">
+                            {lead.firstName} {lead.lastName}
+                          </CardTitle>
+                          {lead.company && (
+                            <p className="text-sm text-muted-foreground">{lead.company}</p>
+                          )}
+                          {lead.title && (
+                            <p className="text-xs text-muted-foreground">{lead.title}</p>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge className={STATUS_COLORS[lead.status as keyof typeof STATUS_COLORS]}>

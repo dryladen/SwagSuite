@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -758,16 +759,22 @@ export default function Clients() {
               <Card key={client.id} className="hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <CardTitle className="text-lg text-swag-navy">
-                        {client.firstName} {client.lastName}
-                      </CardTitle>
-                      {client.company && (
-                        <p className="text-sm text-muted-foreground">{client.company}</p>
-                      )}
-                      {client.title && (
-                        <p className="text-xs text-muted-foreground">{client.title}</p>
-                      )}
+                    <div className="flex items-center space-x-3 flex-1">
+                      <UserAvatar 
+                        name={`${client.firstName} ${client.lastName}`}
+                        size="md"
+                      />
+                      <div>
+                        <CardTitle className="text-lg text-swag-navy">
+                          {client.firstName} {client.lastName}
+                        </CardTitle>
+                        {client.company && (
+                          <p className="text-sm text-muted-foreground">{client.company}</p>
+                        )}
+                        {client.title && (
+                          <p className="text-xs text-muted-foreground">{client.title}</p>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge className={STATUS_COLORS[client.status as keyof typeof STATUS_COLORS]}>

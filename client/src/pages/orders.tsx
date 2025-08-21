@@ -27,6 +27,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { PlusCircle, Search, FileText, Calendar, DollarSign } from "lucide-react";
 import type { Order } from "@shared/schema";
+import { UserAvatar } from "@/components/UserAvatar";
 
 const statusColorMap = {
   quote: "bg-blue-100 text-blue-800",
@@ -279,7 +280,13 @@ export default function Orders() {
                         {order.orderNumber}
                       </TableCell>
                       <TableCell>
-                        {getCompanyName(order.companyId!)}
+                        <div className="flex items-center space-x-3">
+                          <UserAvatar 
+                            name={getCompanyName(order.companyId!)}
+                            size="sm"
+                          />
+                          <span>{getCompanyName(order.companyId!)}</span>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">

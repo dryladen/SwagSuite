@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Order } from "@shared/schema";
@@ -98,7 +99,13 @@ export default function RecentOrdersTable({ orders, loading }: RecentOrdersTable
                       {order.orderNumber}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      Company Name
+                      <div className="flex items-center space-x-3">
+                        <UserAvatar 
+                          name="Company Name"
+                          size="sm"
+                        />
+                        <span>Company Name</span>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge 

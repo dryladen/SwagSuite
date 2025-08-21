@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/UserAvatar";
 
 // Mock data for team leaderboard
 const mockTeamData = [
@@ -56,11 +56,10 @@ export default function TeamLeaderboard() {
               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${getRankBadgeColor(member.rank)}`}>
                 <span className="font-bold text-sm">{member.rank}</span>
               </div>
-              <Avatar className="w-8 h-8">
-                <AvatarFallback className="text-xs">
-                  {member.name.split(' ').map(n => n[0]).join('')}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar 
+                name={member.name}
+                size="sm"
+              />
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">{member.name}</p>
                 <p className="text-xs text-gray-500">

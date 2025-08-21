@@ -44,6 +44,7 @@ import {
   Truck,
   MapPin
 } from "lucide-react";
+import { UserAvatar } from "@/components/UserAvatar";
 import { format, addDays } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -567,8 +568,20 @@ export default function ProductionReport() {
                         </Badge>
                       )}
                     </div>
-                    <p className="text-gray-600">{order.companyName} • {order.productName} (Qty: {order.quantity})</p>
-                    <p className="text-sm text-gray-500">Assigned to: {order.assignedTo}</p>
+                    <div className="flex items-center space-x-3 mb-2">
+                      <UserAvatar 
+                        name={order.companyName}
+                        size="sm"
+                      />
+                      <span className="text-gray-600">{order.companyName} • {order.productName} (Qty: {order.quantity})</span>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <UserAvatar 
+                        name={order.assignedTo}
+                        size="sm"
+                      />
+                      <span className="text-sm text-gray-500">Assigned to: {order.assignedTo}</span>
+                    </div>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold">${order.orderValue.toLocaleString()}</p>

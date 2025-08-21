@@ -29,6 +29,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { UserAvatar } from "@/components/UserAvatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -674,13 +675,19 @@ export default function Companies() {
               <Card key={company.id} className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setLocation(`/crm/companies/${company.id}`)}>
                 <CardHeader>
                   <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <CardTitle className="text-lg text-swag-navy line-clamp-1">
-                        {company.name}
-                      </CardTitle>
-                      {company.industry && (
-                        <p className="text-sm text-muted-foreground">{company.industry}</p>
-                      )}
+                    <div className="flex items-center space-x-3 flex-1">
+                      <UserAvatar 
+                        name={company.name}
+                        size="md"
+                      />
+                      <div>
+                        <CardTitle className="text-lg text-swag-navy line-clamp-1">
+                          {company.name}
+                        </CardTitle>
+                        {company.industry && (
+                          <p className="text-sm text-muted-foreground">{company.industry}</p>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {company.engagementLevel && (
