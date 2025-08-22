@@ -4259,6 +4259,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Project Activities API Routes
+  app.get("/api/projects/:orderId/activities", async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      
+      // Mock data for project activities
+      const activities = [
+        {
+          id: "1",
+          orderId: orderId,
+          userId: "user1",
+          activityType: "system_action",
+          content: "Project created",
+          metadata: {},
+          mentionedUsers: [],
+          isSystemGenerated: true,
+          createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+          user: {
+            id: "user1",
+            firstName: "System",
+            lastName: "Admin",
+            email: "system@swag.com"
+          }
+        },
+        {
+          id: "2", 
+          orderId: orderId,
+          userId: "user2",
+          activityType: "status_change",
+          content: "Status changed",
+          metadata: { oldStatus: "New", newStatus: "In Progress" },
+          mentionedUsers: [],
+          isSystemGenerated: false,
+          createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+          user: {
+            id: "user2",
+            firstName: "Mike",
+            lastName: "Chen",
+            email: "mike@swag.com"
+          }
+        },
+        {
+          id: "3",
+          orderId: orderId,
+          userId: "user3",
+          activityType: "comment",
+          content: "Customer confirmed the artwork, ready to proceed with production @Sarah Johnson",
+          metadata: {},
+          mentionedUsers: ["user4"],
+          isSystemGenerated: false,
+          createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+          user: {
+            id: "user3",
+            firstName: "Alex",
+            lastName: "Rodriguez",
+            email: "alex@swag.com"
+          }
+        }
+      ];
+      
+      res.json(activities);
+    } catch (error) {
+      console.error("Error fetching project activities:", error);
+      res.status(500).json({ error: "Failed to fetch project activities" });
+    }
+  });
+
+  app.post("/api/projects/:orderId/activities", async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const { activityType, content, mentionedUsers } = req.body;
+      
+      // In a real app, you would save to database here
+      const newActivity = {
+        id: Date.now().toString(),
+        orderId: orderId,
+        userId: "current-user",
+        activityType,
+        content,
+        metadata: {},
+        mentionedUsers: mentionedUsers || [],
+        isSystemGenerated: false,
+        createdAt: new Date().toISOString(),
+        user: {
+          id: "current-user",
+          firstName: "Current",
+          lastName: "User",
+          email: "user@swag.com"
+        }
+      };
+      
+      res.json(newActivity);
+    } catch (error) {
+      console.error("Error creating project activity:", error);
+      res.status(500).json({ error: "Failed to create project activity" });
+    }
+  });
+
+  // Team members API for @ mentions
+  app.get("/api/users/team", async (req, res) => {
+    try {
+      const teamMembers = [
+        { id: "user1", firstName: "Sarah", lastName: "Johnson", email: "sarah@swag.com" },
+        { id: "user2", firstName: "Mike", lastName: "Chen", email: "mike@swag.com" },
+        { id: "user3", firstName: "Alex", lastName: "Rodriguez", email: "alex@swag.com" },
+        { id: "user4", firstName: "Emily", lastName: "Davis", email: "emily@swag.com" },
+        { id: "user5", firstName: "David", lastName: "Wilson", email: "david@swag.com" },
+        { id: "user6", firstName: "Lisa", lastName: "Thompson", email: "lisa@swag.com" }
+      ];
+      
+      res.json(teamMembers);
+    } catch (error) {
+      console.error("Error fetching team members:", error);
+      res.status(500).json({ error: "Failed to fetch team members" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

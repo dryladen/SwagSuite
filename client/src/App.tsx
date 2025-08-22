@@ -20,6 +20,7 @@ import KnowledgeBase from "@/pages/knowledge-base";
 import Settings from "@/pages/settings";
 import SequenceBuilder from "@/pages/sequence-builder";
 import TeamPerformance from "@/pages/team-performance";
+import ProjectPage from "@/pages/project";
 import ArtworkPage from "@/pages/artwork";
 import MockupBuilderPage from "@/pages/mockup-builder";
 import AIPresentationBuilder from "@/pages/ai-presentation-builder";
@@ -85,6 +86,7 @@ function Router() {
             <Route path="/knowledge-base" component={KnowledgeBase} />
             <Route path="/sequence-builder" component={SequenceBuilder} />
             <Route path="/team-performance" component={TeamPerformance} />
+            <Route path="/project/:orderId" component={ProjectPage} />
             <Route path="/settings" component={Settings} />
             <Route component={NotFound} />
           </Switch>

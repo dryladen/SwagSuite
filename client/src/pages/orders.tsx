@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 
 import OrderModal from "@/components/OrderModal";
 import { Button } from "@/components/ui/button";
@@ -327,9 +328,19 @@ export default function Orders() {
                         {new Date(order.createdAt!).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm">
-                          View
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button variant="ghost" size="sm">
+                            View
+                          </Button>
+                          <Button 
+                            variant="default" 
+                            size="sm"
+                            onClick={() => setLocation(`/project/${order.id}`)}
+                            data-testid={`button-project-${order.id}`}
+                          >
+                            Project
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
