@@ -36,6 +36,14 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   Search, 
   Plus, 
@@ -50,8 +58,14 @@ import {
   TrendingUp,
   Clock,
   Target,
-  Activity
+  Activity,
+  Grid,
+  List,
+  MoreHorizontal,
+  Eye,
+  MapPin
 } from "lucide-react";
+import { CRMViewToggle } from "@/components/CRMViewToggle";
 
 interface Lead {
   id: string;
@@ -128,6 +142,9 @@ export default function Leads() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterSource, setFilterSource] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [isLeadDetailOpen, setIsLeadDetailOpen] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -467,8 +484,8 @@ export default function Leads() {
         </div>
 
         {/* Search and Filters */}
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1">
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+          <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={16} />
             <Input
               placeholder="Search leads by name, email, or company..."
@@ -477,56 +494,95 @@ export default function Leads() {
               className="pl-10"
             />
           </div>
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              {LEAD_STATUSES.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterSource} onValueChange={setFilterSource}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sources</SelectItem>
-              {LEAD_SOURCES.map((source) => (
-                <SelectItem key={source} value={source}>
-                  {source}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Badge variant="outline" className="whitespace-nowrap">
-            {filteredLeads.length} leads
-          </Badge>
+          
+          <div className="flex items-center gap-2">
+            <CRMViewToggle viewMode={viewMode} onViewModeChange={setViewMode} />
+            
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                {LEAD_STATUSES.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterSource} onValueChange={setFilterSource}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sources</SelectItem>
+                {LEAD_SOURCES.map((source) => (
+                  <SelectItem key={source} value={source}>
+                    {source}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Badge variant="outline" className="whitespace-nowrap">
+              {filteredLeads.length} leads
+            </Badge>
+          </div>
         </div>
 
-        {/* Leads Grid */}
+        {/* Leads Display */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Card key={i}>
-                <CardHeader>
-                  <Skeleton className="h-4 w-2/3" />
-                  <Skeleton className="h-3 w-1/2" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-20 w-full mb-2" />
-                  <Skeleton className="h-3 w-1/3" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          viewMode === 'cards' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Card key={i}>
+                  <CardHeader>
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </CardHeader>
+                  <CardContent>
+                    <Skeleton className="h-20 w-full mb-2" />
+                    <Skeleton className="h-3 w-1/3" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Lead</TableHead>
+                      <TableHead>Contact Info</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Value</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-[100px]">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )
         ) : filteredLeads.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredLeads.map((lead: Lead) => {
+          <>
+            {/* Cards View */}
+            {viewMode === 'cards' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredLeads.map((lead: Lead) => {
               const leadScore = getLeadScore(lead);
               return (
                 <Card key={lead.id} className="hover:shadow-lg transition-shadow">
@@ -619,8 +675,120 @@ export default function Leads() {
                   </CardContent>
                 </Card>
               );
-            })}
-          </div>
+                })}
+              </div>
+            )}
+
+            {/* List View */}
+            {viewMode === 'list' && (
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Lead</TableHead>
+                        <TableHead>Contact Info</TableHead>
+                        <TableHead>Source</TableHead>
+                        <TableHead>Value</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-[100px]">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredLeads.map((lead: Lead) => (
+                        <TableRow 
+                          key={lead.id} 
+                          className="hover:bg-muted/50 cursor-pointer"
+                          data-testid={`lead-row-${lead.id}`}
+                        >
+                          <TableCell>
+                            <div className="flex items-center space-x-3">
+                              <UserAvatar name={`${lead.firstName} ${lead.lastName}`} size="sm" />
+                              <div>
+                                <div className="font-medium text-swag-navy">
+                                  {lead.firstName} {lead.lastName}
+                                </div>
+                                {lead.company && (
+                                  <div className="text-sm text-muted-foreground">{lead.company}</div>
+                                )}
+                                {lead.title && (
+                                  <div className="text-xs text-muted-foreground">{lead.title}</div>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              {lead.email && (
+                                <div className="flex items-center gap-1 text-sm">
+                                  <Mail className="h-3 w-3 text-muted-foreground" />
+                                  <span className="truncate">{lead.email}</span>
+                                </div>
+                              )}
+                              {lead.phone && (
+                                <div className="flex items-center gap-1 text-sm">
+                                  <Phone className="h-3 w-3 text-muted-foreground" />
+                                  <span>{lead.phone}</span>
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="text-xs">
+                              {lead.source}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {lead.estimatedValue && (
+                              <div className="flex items-center gap-1 text-sm font-medium">
+                                <DollarSign className="h-3 w-3 text-muted-foreground" />
+                                ${lead.estimatedValue.toLocaleString()}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={STATUS_COLORS[lead.status as keyof typeof STATUS_COLORS]}>
+                              {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  data-testid={`lead-actions-${lead.id}`}
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem>
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => handleDeleteLead(lead.id)}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+          </>
         ) : (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">

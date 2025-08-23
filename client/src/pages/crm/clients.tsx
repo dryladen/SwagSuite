@@ -35,6 +35,14 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   Search, 
   Plus, 
@@ -60,8 +68,12 @@ import {
   Clock,
   AlertCircle,
   Eye,
-  MessageSquare
+  MessageSquare,
+  Grid,
+  List,
+  MoreHorizontal
 } from "lucide-react";
+import { CRMViewToggle } from "@/components/CRMViewToggle";
 
 interface Client {
   id: string;
@@ -154,6 +166,9 @@ export default function Clients() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [isClientDetailOpen, setIsClientDetailOpen] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -696,8 +711,8 @@ export default function Clients() {
         </div>
 
         {/* Search and Filters */}
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1">
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+          <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={16} />
             <Input
               placeholder="Search clients by name, email, or company..."
@@ -706,56 +721,95 @@ export default function Clients() {
               className="pl-10"
             />
           </div>
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              {CLIENT_STATUSES.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {CLIENT_TYPES.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {type}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Badge variant="outline" className="whitespace-nowrap">
-            {filteredClients.length} clients
-          </Badge>
+          
+          <div className="flex items-center gap-2">
+            <CRMViewToggle viewMode={viewMode} onViewModeChange={setViewMode} />
+            
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                {CLIENT_STATUSES.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                {CLIENT_TYPES.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Badge variant="outline" className="whitespace-nowrap">
+              {filteredClients.length} clients
+            </Badge>
+          </div>
         </div>
 
-        {/* Clients Grid */}
+        {/* Clients Display */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Card key={i}>
-                <CardHeader>
-                  <Skeleton className="h-4 w-2/3" />
-                  <Skeleton className="h-3 w-1/2" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-20 w-full mb-2" />
-                  <Skeleton className="h-3 w-1/3" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          viewMode === 'cards' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Card key={i}>
+                  <CardHeader>
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </CardHeader>
+                  <CardContent>
+                    <Skeleton className="h-20 w-full mb-2" />
+                    <Skeleton className="h-3 w-1/3" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Client</TableHead>
+                      <TableHead>Contact Info</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Credit Limit</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-[100px]">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )
         ) : filteredClients.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredClients.map((client: Client) => (
+          <>
+            {/* Cards View */}
+            {viewMode === 'cards' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredClients.map((client: Client) => (
               <Card key={client.id} className="hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <div className="flex items-start justify-between">
@@ -869,8 +923,120 @@ export default function Clients() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
+                ))}
+              </div>
+            )}
+
+            {/* List View */}
+            {viewMode === 'list' && (
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Client</TableHead>
+                        <TableHead>Contact Info</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Credit Limit</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-[100px]">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredClients.map((client: Client) => (
+                        <TableRow 
+                          key={client.id} 
+                          className="hover:bg-muted/50 cursor-pointer"
+                          data-testid={`client-row-${client.id}`}
+                        >
+                          <TableCell>
+                            <div className="flex items-center space-x-3">
+                              <UserAvatar name={`${client.firstName} ${client.lastName}`} size="sm" />
+                              <div>
+                                <div className="font-medium text-swag-navy">
+                                  {client.firstName} {client.lastName}
+                                </div>
+                                {client.company && (
+                                  <div className="text-sm text-muted-foreground">{client.company}</div>
+                                )}
+                                {client.title && (
+                                  <div className="text-xs text-muted-foreground">{client.title}</div>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              {client.email && (
+                                <div className="flex items-center gap-1 text-sm">
+                                  <Mail className="h-3 w-3 text-muted-foreground" />
+                                  <span className="truncate">{client.email}</span>
+                                </div>
+                              )}
+                              {client.phone && (
+                                <div className="flex items-center gap-1 text-sm">
+                                  <Phone className="h-3 w-3 text-muted-foreground" />
+                                  <span>{client.phone}</span>
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="text-xs">
+                              {client.clientType}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {client.creditLimit && (
+                              <div className="flex items-center gap-1 text-sm font-medium">
+                                <DollarSign className="h-3 w-3 text-muted-foreground" />
+                                ${client.creditLimit.toLocaleString()}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={STATUS_COLORS[client.status as keyof typeof STATUS_COLORS]}>
+                              {client.status.charAt(0).toUpperCase() + client.status.slice(1)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  data-testid={`client-actions-${client.id}`}
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem>
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => handleDeleteClient(client.id)}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+          </>
         ) : (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">

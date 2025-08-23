@@ -35,6 +35,15 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
+import { UserAvatar } from "@/components/UserAvatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   Search, 
   Plus, 
@@ -47,8 +56,15 @@ import {
   Edit,
   DollarSign,
   Calendar,
-  Package
+  Package,
+  Grid,
+  List,
+  MoreHorizontal,
+  Eye,
+  Clock,
+  MapPin
 } from "lucide-react";
+import { CRMViewToggle } from "@/components/CRMViewToggle";
 
 interface Vendor {
   id: string;
@@ -89,6 +105,9 @@ export default function Vendors() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [filterPreferred, setFilterPreferred] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
+  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [isVendorDetailOpen, setIsVendorDetailOpen] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -353,8 +372,8 @@ export default function Vendors() {
         </div>
 
         {/* Search and Filters */}
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1">
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+          <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={16} />
             <Input
               placeholder="Search vendors by name, email, or contact person..."
@@ -363,40 +382,101 @@ export default function Vendors() {
               className="pl-10"
             />
           </div>
-          <Select value={filterPreferred} onValueChange={setFilterPreferred}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Vendors</SelectItem>
-              <SelectItem value="preferred">Preferred</SelectItem>
-              <SelectItem value="regular">Regular</SelectItem>
-            </SelectContent>
-          </Select>
-          <Badge variant="outline" className="whitespace-nowrap">
-            {filteredVendors.length} vendors
-          </Badge>
+          
+          <div className="flex items-center gap-2">
+            {/* View Toggle */}
+            <div className="flex items-center border rounded-md">
+              <Button
+                variant={viewMode === 'cards' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('cards')}
+                className="rounded-r-none"
+                data-testid="view-cards"
+              >
+                <Grid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('list')}
+                className="rounded-l-none"
+                data-testid="view-list"
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <Separator orientation="vertical" className="h-8" />
+
+            <Select value={filterPreferred} onValueChange={setFilterPreferred}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Vendors</SelectItem>
+                <SelectItem value="preferred">Preferred</SelectItem>
+                <SelectItem value="regular">Regular</SelectItem>
+              </SelectContent>
+            </Select>
+            <Badge variant="outline" className="whitespace-nowrap">
+              {filteredVendors.length} vendors
+            </Badge>
+          </div>
         </div>
 
-        {/* Vendors Grid */}
+        {/* Vendors Display */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Card key={i}>
-                <CardHeader>
-                  <Skeleton className="h-4 w-2/3" />
-                  <Skeleton className="h-3 w-1/2" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-20 w-full mb-2" />
-                  <Skeleton className="h-3 w-1/3" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          viewMode === 'cards' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Card key={i}>
+                  <CardHeader>
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </CardHeader>
+                  <CardContent>
+                    <Skeleton className="h-20 w-full mb-2" />
+                    <Skeleton className="h-3 w-1/3" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Vendor</TableHead>
+                      <TableHead>Contact Info</TableHead>
+                      <TableHead>Terms</TableHead>
+                      <TableHead>YTD Spend</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-[100px]">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )
         ) : filteredVendors.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredVendors.map((vendor: Vendor) => (
+          <>
+            {/* Cards View */}
+            {viewMode === 'cards' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredVendors.map((vendor: Vendor) => (
               <Card key={vendor.id} className="hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <div className="flex items-start justify-between">
@@ -479,7 +559,141 @@ export default function Vendors() {
                 </CardContent>
               </Card>
             ))}
-          </div>
+              </div>
+            )}
+
+            {/* List View */}
+            {viewMode === 'list' && (
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Vendor</TableHead>
+                        <TableHead>Contact Info</TableHead>
+                        <TableHead>Terms</TableHead>
+                        <TableHead>YTD Spend</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-[100px]">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredVendors.map((vendor: Vendor) => (
+                        <TableRow 
+                          key={vendor.id} 
+                          className="hover:bg-muted/50 cursor-pointer"
+                          onClick={() => {
+                            setSelectedVendor(vendor);
+                            setIsVendorDetailOpen(true);
+                          }}
+                          data-testid={`vendor-row-${vendor.id}`}
+                        >
+                          <TableCell>
+                            <div className="flex items-center space-x-3">
+                              <UserAvatar name={vendor.name} size="sm" />
+                              <div>
+                                <div className="font-medium text-swag-navy flex items-center gap-2">
+                                  {vendor.name}
+                                  {vendor.isPreferred && (
+                                    <Star className="h-3 w-3 text-yellow-500 fill-current" />
+                                  )}
+                                </div>
+                                {vendor.contactPerson && (
+                                  <div className="text-sm text-muted-foreground">{vendor.contactPerson}</div>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              {vendor.email && (
+                                <div className="flex items-center gap-1 text-sm">
+                                  <Mail className="h-3 w-3 text-muted-foreground" />
+                                  <span className="truncate">{vendor.email}</span>
+                                </div>
+                              )}
+                              {vendor.phone && (
+                                <div className="flex items-center gap-1 text-sm">
+                                  <Phone className="h-3 w-3 text-muted-foreground" />
+                                  <span>{vendor.phone}</span>
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {vendor.paymentTerms && (
+                              <Badge variant="secondary" className="text-xs">
+                                {vendor.paymentTerms}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {vendor.ytdSpend && (
+                              <div className="flex items-center gap-1 text-sm font-medium">
+                                <DollarSign className="h-3 w-3 text-muted-foreground" />
+                                ${vendor.ytdSpend.toLocaleString()}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              {vendor.isPreferred && (
+                                <Badge className="bg-yellow-100 text-yellow-800 text-xs">Preferred</Badge>
+                              )}
+                              {vendor.apiIntegrationStatus === "active" && (
+                                <Badge className="bg-green-100 text-green-800 text-xs">API Connected</Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={(e) => e.stopPropagation()}
+                                  data-testid={`vendor-actions-${vendor.id}`}
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedVendor(vendor);
+                                  setIsVendorDetailOpen(true);
+                                }}>
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Add edit functionality
+                                }}>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteVendor(vendor.id);
+                                  }}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+          </>
         ) : (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
