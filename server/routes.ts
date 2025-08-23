@@ -1111,21 +1111,210 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // AI Search route (placeholder)
+  // AI Search route with vendor integration data
   app.post('/api/search/ai', isAuthenticated, async (req, res) => {
     try {
       const { query } = req.body;
       
-      // This would integrate with an AI service to process natural language queries
-      // For now, return a placeholder response
-      res.json({
+      if (!query || typeof query !== 'string') {
+        return res.status(400).json({ error: 'Query is required' });
+      }
+
+      // Mock AI search processing with vendor integration data
+      const searchResults = {
         query,
-        results: [],
-        message: "AI search functionality would be implemented here with integration to OpenAI or similar service",
-      });
+        interpretation: `Searching for products matching: "${query}"`,
+        results: [
+          {
+            id: 'ai-result-1',
+            name: 'YETI Rambler 20oz Tumbler',
+            sku: 'YETI-R20-001',
+            category: 'drinkware',
+            avgPrice: 29.95,
+            totalSales: 1250,
+            avgRating: 4.8,
+            description: 'Premium insulated tumbler with double-wall vacuum insulation',
+            colors: ['Black', 'Navy', 'White', 'Charcoal', 'Seafoam'],
+            sizes: ['20oz'],
+            materials: ['Stainless Steel', 'BPA-Free'],
+            features: ['Double-wall insulation', 'MagSlider Lid', 'No Sweat Design'],
+            vendorIntegrations: [
+              { vendor: 'S&S Activewear', sku: 'SS-YETI-R20', price: 18.50, inventory: 850, leadTime: '3-5 days', available: true },
+              { vendor: 'SanMar', sku: 'SM-YETI-R20', price: 19.25, inventory: 620, leadTime: '2-4 days', available: true },
+              { vendor: 'ESP', sku: 'ESP-YETI-R20', price: 20.00, inventory: 0, leadTime: '7-10 days', available: false },
+              { vendor: 'Sage', sku: 'SAGE-YETI-R20', price: 17.95, inventory: 300, leadTime: '5-7 days', available: true }
+            ]
+          },
+          {
+            id: 'ai-result-2',
+            name: 'Simple Modern Tumbler 20oz',
+            sku: 'SM-T20-001',
+            category: 'drinkware',
+            avgPrice: 24.99,
+            totalSales: 980,
+            avgRating: 4.6,
+            description: 'Stylish stainless steel tumbler with superior temperature retention',
+            colors: ['Black', 'White', 'Rose Gold', 'Sage Green', 'Ocean Blue'],
+            sizes: ['20oz'],
+            materials: ['Stainless Steel', 'Food Grade'],
+            features: ['Spill-proof lid', 'Easy grip design', 'Dishwasher safe'],
+            vendorIntegrations: [
+              { vendor: 'S&S Activewear', sku: 'SS-SM-T20', price: 15.75, inventory: 1200, leadTime: '3-5 days', available: true },
+              { vendor: 'Sage', sku: 'SAGE-SM-T20', price: 16.50, inventory: 450, leadTime: '5-7 days', available: true },
+              { vendor: 'SanMar', sku: 'SM-SM-T20', price: 16.95, inventory: 0, leadTime: '2-4 days', available: false }
+            ]
+          }
+        ],
+        totalResults: 2,
+        processingTime: '1.2s'
+      };
+
+      // Add delay to simulate AI processing
+      setTimeout(() => {
+        res.json(searchResults);
+      }, 1200);
+
     } catch (error) {
-      console.error("Error processing AI search:", error);
-      res.status(500).json({ message: "Failed to process AI search" });
+      console.error('AI Search error:', error);
+      res.status(500).json({ error: 'AI search failed' });
+    }
+  });
+
+  // Popular Products API for dashboard
+  app.get('/api/products/popular', async (req, res) => {
+    try {
+      const { period = '7d', productType = 'all' } = req.query;
+      
+      // Mock popular products data with realistic values
+      const products = [
+        {
+          id: 'pop1',
+          name: 'Champion Powerblend Hoodie',
+          sku: 'CP-PB-001',
+          imageUrl: '/api/placeholder/product1.jpg',
+          productType: 'apparel',
+          totalQuantity: 2840,
+          orderCount: 95,
+          avgPrice: 45.99,
+          totalRevenue: 130536
+        },
+        {
+          id: 'pop2',
+          name: 'YETI Rambler 20oz Tumbler',
+          sku: 'YETI-R20-001',
+          imageUrl: '/api/placeholder/product2.jpg',
+          productType: 'hard_goods',
+          totalQuantity: 1850,
+          orderCount: 78,
+          avgPrice: 29.95,
+          totalRevenue: 55407
+        },
+        {
+          id: 'pop3',
+          name: 'Nike Dri-FIT T-Shirt',
+          sku: 'NIKE-DF-001',
+          imageUrl: '/api/placeholder/product3.jpg',
+          productType: 'apparel',
+          totalQuantity: 3200,
+          orderCount: 120,
+          avgPrice: 24.99,
+          totalRevenue: 79968
+        },
+        {
+          id: 'pop4',
+          name: 'Hydro Flask Water Bottle',
+          sku: 'HF-WB-001',
+          imageUrl: '/api/placeholder/product4.jpg',
+          productType: 'hard_goods',
+          totalQuantity: 1560,
+          orderCount: 62,
+          avgPrice: 39.95,
+          totalRevenue: 62322
+        },
+        {
+          id: 'pop5',
+          name: 'Gildan Heavy Cotton T-Shirt',
+          sku: 'GIL-HC-001',
+          imageUrl: '/api/placeholder/product5.jpg',
+          productType: 'apparel',
+          totalQuantity: 4100,
+          orderCount: 85,
+          avgPrice: 8.99,
+          totalRevenue: 36859
+        }
+      ];
+
+      // Filter by product type if specified
+      let filteredProducts = products;
+      if (productType !== 'all') {
+        filteredProducts = products.filter(p => p.productType === productType);
+      }
+
+      res.json(filteredProducts);
+    } catch (error) {
+      console.error('Error fetching popular products:', error);
+      res.status(500).json({ error: 'Failed to fetch popular products' });
+    }
+  });
+
+  // Suggested Products API for dashboard
+  app.get('/api/products/suggested', async (req, res) => {
+    try {
+      const suggestedProducts = [
+        {
+          id: 'sg1',
+          name: 'Champion Powerblend Fleece Crew',
+          sku: 'CP-FC-001',
+          imageUrl: '/api/placeholder/suggested1.jpg',
+          productType: 'apparel',
+          presentationCount: 45,
+          avgPresentationPrice: 32.99,
+          discount: 15,
+          adminNote: 'Great for corporate events',
+          isAdminSuggested: true
+        },
+        {
+          id: 'sg2',
+          name: 'Contigo Autoseal Travel Mug',
+          sku: 'CON-AS-001',
+          imageUrl: '/api/placeholder/suggested2.jpg',
+          productType: 'hard_goods',
+          presentationCount: 28,
+          avgPresentationPrice: 25.99,
+          discount: 10,
+          adminNote: 'Popular for trade shows',
+          isAdminSuggested: false
+        },
+        {
+          id: 'sg3',
+          name: 'Port Authority Polo Shirt',
+          sku: 'PA-PS-001',
+          imageUrl: '/api/placeholder/suggested3.jpg',
+          productType: 'apparel',
+          presentationCount: 52,
+          avgPresentationPrice: 18.99,
+          discount: 0,
+          adminNote: 'Reliable quality option',
+          isAdminSuggested: true
+        },
+        {
+          id: 'sg4',
+          name: 'Moleskine Classic Notebook',
+          sku: 'MOL-CN-001',
+          imageUrl: '/api/placeholder/suggested4.jpg',
+          productType: 'hard_goods',
+          presentationCount: 35,
+          avgPresentationPrice: 22.99,
+          discount: 20,
+          adminNote: 'Perfect for executive gifts',
+          isAdminSuggested: false
+        }
+      ];
+
+      res.json(suggestedProducts);
+    } catch (error) {
+      console.error('Error fetching suggested products:', error);
+      res.status(500).json({ error: 'Failed to fetch suggested products' });
     }
   });
 

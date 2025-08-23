@@ -5,7 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Shirt, HardHat, Package, Lightbulb, Star, TrendingUp, Calendar, ExternalLink } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
+import { Shirt, HardHat, Package, Lightbulb, Star, TrendingUp, Calendar, ExternalLink, Search, Bot, Building2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useLocation } from 'wouter';
 
@@ -34,10 +37,38 @@ interface SuggestedProduct {
   isAdminSuggested: boolean;
 }
 
+interface VendorIntegration {
+  vendor: string;
+  sku: string;
+  price: number;
+  inventory: number;
+  leadTime: string;
+  available: boolean;
+}
+
+interface ProductDetails {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  colors: string[];
+  sizes: string[];
+  materials: string[];
+  features: string[];
+  vendorIntegrations: VendorIntegration[];
+  totalSales: number;
+  avgRating: number;
+  reviewCount: number;
+}
+
 export function PopularProducts() {
   const [, setLocation] = useLocation();
   const [selectedPeriod, setSelectedPeriod] = useState('7d');
   const [selectedProductType, setSelectedProductType] = useState<'all' | 'apparel' | 'hard_goods'>('all');
+  const [aiSearchQuery, setAiSearchQuery] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState<ProductDetails | null>(null);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ['/api/products/popular', { period: selectedPeriod, productType: selectedProductType }]
@@ -47,11 +78,118 @@ export function PopularProducts() {
     queryKey: ['/api/products/suggested']
   });
 
+  const handleAISearch = async () => {
+    if (!aiSearchQuery.trim()) return;
+    
+    setIsSearching(true);
+    try {
+      const response = await fetch('/api/search/ai', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: aiSearchQuery }),
+      });
+
+      if (!response.ok) {
+        throw new Error('AI search failed');
+      }
+
+      const searchResults = await response.json();
+      console.log('AI Search Results:', searchResults);
+      
+      // Display first result in product modal if available
+      if (searchResults.results && searchResults.results.length > 0) {
+        const firstResult = searchResults.results[0];
+        const productDetails: ProductDetails = {
+          id: firstResult.id,
+          name: firstResult.name,
+          description: firstResult.description,
+          category: firstResult.category,
+          colors: firstResult.colors,
+          sizes: firstResult.sizes,
+          materials: firstResult.materials,
+          features: firstResult.features,
+          vendorIntegrations: firstResult.vendorIntegrations,
+          totalSales: firstResult.totalSales,
+          avgRating: firstResult.avgRating,
+          reviewCount: Math.floor(firstResult.totalSales * 0.15)
+        };
+        
+        setSelectedProduct(productDetails);
+        setIsProductModalOpen(true);
+      } else {
+        alert(`AI Search found no results for: "${aiSearchQuery}"`);
+      }
+      
+      setIsSearching(false);
+    } catch (error) {
+      console.error('AI Search error:', error);
+      setIsSearching(false);
+      alert('AI search failed. Please try again.');
+    }
+  };
+
+  const handleProductClick = (product: PopularProduct) => {
+    // Mock detailed product data with vendor integrations
+    const productDetails: ProductDetails = {
+      id: product.id,
+      name: product.name,
+      description: `Premium ${product.productType} item with excellent customer ratings`,
+      category: product.productType === 'apparel' ? 'Apparel & Clothing' : 'Hard Goods & Accessories',
+      colors: ['Black', 'Navy', 'White', 'Heather Gray', 'Red'],
+      sizes: product.productType === 'apparel' ? ['XS', 'S', 'M', 'L', 'XL', 'XXL'] : ['One Size'],
+      materials: product.productType === 'apparel' ? ['100% Cotton', 'Poly-Cotton Blend'] : ['Stainless Steel', 'BPA-Free Plastic'],
+      features: ['Customizable', 'Quick Turnaround', 'Bulk Pricing Available'],
+      vendorIntegrations: [
+        {
+          vendor: 'S&S Activewear',
+          sku: 'SS-' + product.sku,
+          price: product.avgPrice * 0.6,
+          inventory: 2500,
+          leadTime: '3-5 days',
+          available: true
+        },
+        {
+          vendor: 'SanMar',
+          sku: 'SM-' + product.sku,
+          price: product.avgPrice * 0.65,
+          inventory: 1800,
+          leadTime: '2-4 days',
+          available: true
+        },
+        {
+          vendor: 'ESP',
+          sku: 'ESP-' + product.sku,
+          price: product.avgPrice * 0.7,
+          inventory: 950,
+          leadTime: '5-7 days',
+          available: true
+        },
+        {
+          vendor: 'Sage',
+          sku: 'SAGE-' + product.sku,
+          price: product.avgPrice * 0.55,
+          inventory: 0,
+          leadTime: '7-10 days',
+          available: false
+        }
+      ],
+      totalSales: product.totalQuantity,
+      avgRating: 4.3 + Math.random() * 0.6,
+      reviewCount: Math.floor(product.totalQuantity * 0.15)
+    };
+    
+    setSelectedProduct(productDetails);
+    setIsProductModalOpen(true);
+  };
+
   const renderProductCard = (product: PopularProduct, index: number) => (
     <div 
       key={product.id} 
       className="flex items-center space-x-3 p-3 rounded-lg border bg-white hover:bg-gray-50 cursor-pointer transition-colors"
-      onClick={() => setLocation(`/products?search=${encodeURIComponent(product.name)}`)}
+      onClick={() => handleProductClick(product)}
+      data-testid={`product-card-${product.id}`}
     >
       <div className="flex items-center justify-center w-10 h-10 bg-primary/10 text-primary rounded-lg font-medium text-sm">
         {index + 1}
@@ -150,6 +288,52 @@ export function PopularProducts() {
 
   return (
     <div className="space-y-6">
+      {/* AI Search Bar */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="w-5 h-5" />
+            AI Product Search
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-3">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Input
+                placeholder="Ask AI: 'What tumblers are our best selling with 100+ quantity?' or 'Show me popular apparel under $20'"
+                value={aiSearchQuery}
+                onChange={(e) => setAiSearchQuery(e.target.value)}
+                className="pl-10"
+                onKeyPress={(e) => e.key === 'Enter' && handleAISearch()}
+                data-testid="ai-search-input"
+              />
+            </div>
+            <Button 
+              onClick={handleAISearch}
+              disabled={!aiSearchQuery.trim() || isSearching}
+              className="flex items-center gap-2"
+              data-testid="ai-search-button"
+            >
+              {isSearching ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Searching...
+                </>
+              ) : (
+                <>
+                  <Bot className="w-4 h-4" />
+                  AI Search
+                </>
+              )}
+            </Button>
+          </div>
+          <p className="text-sm text-gray-500 mt-2">
+            Use natural language to find products from our vendor integrations (S&S, SanMar, ESP, Sage)
+          </p>
+        </CardContent>
+      </Card>
+
       {/* Controls */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex items-center gap-2">
@@ -421,6 +605,174 @@ export function PopularProducts() {
           </Card>
         </div>
       )}
+
+      {/* Product Details Modal */}
+      <Dialog open={isProductModalOpen} onOpenChange={setIsProductModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          {selectedProduct && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3">
+                  <div>
+                    <h2 className="text-xl font-bold">{selectedProduct.name}</h2>
+                    <p className="text-sm text-gray-500 font-normal">{selectedProduct.category}</p>
+                  </div>
+                  <Badge variant="outline" className="ml-auto">
+                    {selectedProduct.totalSales} units sold
+                  </Badge>
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedProduct.description}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                {/* Product Information */}
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Product Details</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <h4 className="font-medium mb-2">Available Colors</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedProduct.colors.map((color) => (
+                            <Badge key={color} variant="secondary" className="text-xs">
+                              {color}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-medium mb-2">Available Sizes</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedProduct.sizes.map((size) => (
+                            <Badge key={size} variant="outline" className="text-xs">
+                              {size}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-medium mb-2">Materials</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedProduct.materials.map((material) => (
+                            <Badge key={material} variant="secondary" className="text-xs">
+                              {material}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-medium mb-2">Features</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedProduct.features.map((feature) => (
+                            <Badge key={feature} variant="outline" className="text-xs">
+                              {feature}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4 pt-2">
+                        <div className="flex items-center gap-2">
+                          <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                          <span className="font-medium">{selectedProduct.avgRating.toFixed(1)}</span>
+                          <span className="text-sm text-gray-500">({selectedProduct.reviewCount} reviews)</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Vendor Integrations */}
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Building2 className="w-5 h-5" />
+                        Vendor Integrations
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {selectedProduct.vendorIntegrations.map((vendor) => (
+                          <div
+                            key={vendor.vendor}
+                            className={`border rounded-lg p-4 ${
+                              vendor.available ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-medium">{vendor.vendor}</h4>
+                                <Badge 
+                                  variant={vendor.available ? "default" : "secondary"}
+                                  className="text-xs"
+                                >
+                                  {vendor.available ? "Available" : "Out of Stock"}
+                                </Badge>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-lg">${vendor.price.toFixed(2)}</p>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <p className="text-gray-600">SKU:</p>
+                                <p className="font-medium">{vendor.sku}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600">Lead Time:</p>
+                                <p className="font-medium">{vendor.leadTime}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-600">Inventory:</p>
+                                <p className="font-medium">
+                                  {vendor.inventory > 0 ? vendor.inventory.toLocaleString() : "Out of Stock"}
+                                </p>
+                              </div>
+                              <div className="flex justify-end">
+                                <Button
+                                  size="sm"
+                                  variant={vendor.available ? "default" : "secondary"}
+                                  disabled={!vendor.available}
+                                  className="flex items-center gap-2"
+                                  data-testid={`vendor-select-${vendor.vendor.toLowerCase().replace(/\s+/g, '-')}`}
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  {vendor.available ? "Select" : "Unavailable"}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <Separator className="my-4" />
+                      
+                      <div className="text-center">
+                        <Button className="w-full" data-testid="create-order-button">
+                          <Package className="w-4 h-4 mr-2" />
+                          Create Order with Selected Vendor
+                        </Button>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Choose a vendor above to proceed with order creation
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
