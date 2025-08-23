@@ -673,6 +673,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch('/api/suppliers/:id', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertSupplierSchema.partial().parse(req.body);
+      const supplier = await storage.updateSupplier(req.params.id, validatedData);
+      res.json(supplier);
+    } catch (error) {
+      console.error("Error updating supplier:", error);
+      res.status(500).json({ message: "Failed to update supplier" });
+    }
+  });
+
+  app.delete('/api/suppliers/:id', isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteSupplier(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting supplier:", error);
+      res.status(500).json({ message: "Failed to delete supplier" });
+    }
+  });
+
   // Product routes
   app.get('/api/products', isAuthenticated, async (req, res) => {
     try {

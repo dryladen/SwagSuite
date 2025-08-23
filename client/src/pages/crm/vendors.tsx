@@ -71,6 +71,8 @@ import {
   Percent
 } from "lucide-react";
 import { CRMViewToggle } from "@/components/CRMViewToggle";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Vendor {
   id: string;
@@ -225,6 +227,48 @@ export default function Vendors() {
     }
   };
 
+  // Toggle preferred vendor status
+  const togglePreferredMutation = useMutation({
+    mutationFn: async ({ vendorId, isPreferred }: { vendorId: string; isPreferred: boolean }) => {
+      return apiRequest(`/api/suppliers/${vendorId}`, {
+        method: "PATCH",
+        body: { isPreferred }
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Vendor preference updated successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
+    },
+    onError: (error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: "Failed to update vendor preference. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleTogglePreferred = (vendor: Vendor) => {
+    togglePreferredMutation.mutate({
+      vendorId: vendor.id,
+      isPreferred: !vendor.isPreferred
+    });
+  };
+
   // Filter vendors based on search and tab selection
   const filteredVendors = vendors.filter((vendor: Vendor) => {
     const matchesSearch = !searchQuery || 
@@ -362,6 +406,142 @@ export default function Vendors() {
                       </FormItem>
                     )}
                   />
+
+                  {/* Preferred Vendor Settings */}
+                  <div className="space-y-4 p-4 border rounded-lg bg-yellow-50/50">
+                    <div className="flex items-center gap-2">
+                      <Star className="h-4 w-4 text-yellow-600" />
+                      <h3 className="font-medium text-sm">Preferred Vendor Settings</h3>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="isPreferred"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                            <div className="space-y-0.5">
+                              <FormLabel>Mark as Preferred</FormLabel>
+                              <p className="text-xs text-muted-foreground">
+                                Enable special tracking and benefits
+                              </p>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    {/* Preferred vendor benefits - show only when preferred is enabled */}
+                    {form.watch("isPreferred") && (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <FormField
+                            control={form.control}
+                            name="eqpPricing"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>EQP Pricing %</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type="number" 
+                                    placeholder="e.g., 15" 
+                                    {...field} 
+                                    onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="rebatePercentage"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Rebate %</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type="number" 
+                                    placeholder="e.g., 5" 
+                                    {...field}
+                                    onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <FormField
+                            control={form.control}
+                            name="freeSetups"
+                            render={({ field }) => (
+                              <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-sm">Free Setups</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="freeSpecSamples"
+                            render={({ field }) => (
+                              <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-sm">Free Spec Samples</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="freeSelfPromo"
+                            render={({ field }) => (
+                              <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-sm">Free Self Promo</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="reducedSpecSamples"
+                            render={({ field }) => (
+                              <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-sm">Reduced Spec Samples</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   <FormField
                     control={form.control}
@@ -520,6 +700,22 @@ export default function Vendors() {
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
+                          handleTogglePreferred(vendor);
+                        }}
+                        className={vendor.isPreferred 
+                          ? "text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50" 
+                          : "text-muted-foreground hover:text-yellow-600 hover:bg-yellow-50"
+                        }
+                        disabled={togglePreferredMutation.isPending}
+                        title={vendor.isPreferred ? "Remove from preferred" : "Add to preferred"}
+                      >
+                        <Star size={14} className={vendor.isPreferred ? "fill-current" : ""} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
                           handleDeleteVendor(vendor.id);
                         }}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
@@ -558,6 +754,62 @@ export default function Vendors() {
                     )}
                   </div>
 
+                  {/* Show benefits for preferred vendors */}
+                  {vendor.isPreferred && (
+                    <div className="bg-yellow-50 rounded-md p-3 space-y-2">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Star className="h-3 w-3 text-yellow-600 fill-current" />
+                        <span className="text-xs font-medium text-yellow-800">Preferred Benefits</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {vendor.eqpPricing && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <Percent className="h-3 w-3 text-green-600" />
+                            <span>{vendor.eqpPricing}% EQP</span>
+                          </div>
+                        )}
+                        {vendor.rebatePercentage && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <Gift className="h-3 w-3 text-blue-600" />
+                            <span>{vendor.rebatePercentage}% Rebate</span>
+                          </div>
+                        )}
+                        {vendor.freeSetups && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <Award className="h-3 w-3 text-purple-600" />
+                            <span>Free Setups</span>
+                          </div>
+                        )}
+                        {vendor.freeSpecSamples && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <Target className="h-3 w-3 text-indigo-600" />
+                            <span>Free Samples</span>
+                          </div>
+                        )}
+                      </div>
+                      {(vendor.ytdEqpSavings || vendor.ytdRebates) && (
+                        <div className="pt-2 border-t border-yellow-200 space-y-1">
+                          {vendor.ytdEqpSavings && (
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">YTD Savings:</span>
+                              <span className="font-medium text-green-600">
+                                ${vendor.ytdEqpSavings.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
+                          {vendor.ytdRebates && (
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">YTD Rebates:</span>
+                              <span className="font-medium text-blue-600">
+                                ${vendor.ytdRebates.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {vendor.paymentTerms && (
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{vendor.paymentTerms}</Badge>
@@ -575,6 +827,22 @@ export default function Vendors() {
                     <div className="flex items-center gap-2">
                       {vendor.apiIntegrationStatus === "active" && (
                         <Badge className="bg-green-100 text-green-800">API Connected</Badge>
+                      )}
+                      {/* Add to Preferred Button for non-preferred vendors */}
+                      {!vendor.isPreferred && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTogglePreferred(vendor);
+                          }}
+                          disabled={togglePreferredMutation.isPending}
+                          className="text-xs hover:bg-yellow-50 hover:border-yellow-300"
+                        >
+                          <Star className="h-3 w-3 mr-1" />
+                          Add to Preferred
+                        </Button>
                       )}
                     </div>
                     <Button variant="outline" size="sm">
