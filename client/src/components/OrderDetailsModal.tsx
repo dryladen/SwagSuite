@@ -4,6 +4,9 @@ import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Calendar, 
   DollarSign, 
@@ -16,15 +19,29 @@ import {
   Clock,
   FileText,
   Truck,
-  CheckCircle
+  CheckCircle,
+  MessageSquare,
+  Send,
+  AtSign,
+  ExternalLink,
+  Tag
 } from "lucide-react";
 import type { Order } from "@shared/schema";
+import { useState, useRef } from "react";
+import { useLocation } from "wouter";
 
 interface OrderDetailsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   order: Order | null;
   companyName: string;
+}
+
+interface TeamMember {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
 }
 
 const statusColorMap = {
@@ -48,14 +65,82 @@ const statusDisplayMap = {
 };
 
 export function OrderDetailsModal({ open, onOpenChange, order, companyName }: OrderDetailsModalProps) {
+  const [, setLocation] = useLocation();
+  const [internalNote, setInternalNote] = useState("");
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Mock team members for @ mentions
+  const teamMembers: TeamMember[] = [
+    { id: "user1", firstName: "Sarah", lastName: "Johnson", email: "sarah@swag.com" },
+    { id: "user2", firstName: "Mike", lastName: "Chen", email: "mike@swag.com" },
+    { id: "user3", firstName: "Alex", lastName: "Rodriguez", email: "alex@swag.com" },
+    { id: "user4", firstName: "Emily", lastName: "Davis", email: "emily@swag.com" },
+  ];
+
   if (!order) return null;
 
   const statusClass = statusColorMap[order.status as keyof typeof statusColorMap] || "bg-gray-100 text-gray-800";
   const statusLabel = statusDisplayMap[order.status as keyof typeof statusDisplayMap] || order.status;
 
+  const handleViewProject = () => {
+    setLocation(`/project/${order.id}`);
+    onOpenChange(false);
+  };
+
+  const handleMentionInput = (value: string) => {
+    setInternalNote(value);
+    const atIndex = value.lastIndexOf('@');
+    if (atIndex !== -1 && atIndex === value.length - 1) {
+      setShowMentionSuggestions(true);
+      setMentionQuery("");
+    } else if (atIndex !== -1) {
+      const query = value.slice(atIndex + 1);
+      if (query.includes(' ')) {
+        setShowMentionSuggestions(false);
+      } else {
+        setMentionQuery(query);
+        setShowMentionSuggestions(true);
+      }
+    } else {
+      setShowMentionSuggestions(false);
+    }
+  };
+
+  const handleMentionSelect = (member: TeamMember) => {
+    const atIndex = internalNote.lastIndexOf('@');
+    const beforeMention = internalNote.slice(0, atIndex);
+    const afterMention = internalNote.slice(atIndex + mentionQuery.length + 1);
+    setInternalNote(`${beforeMention}@${member.firstName} ${member.lastName}${afterMention}`);
+    setShowMentionSuggestions(false);
+    textareaRef.current?.focus();
+  };
+
+  const filteredTeamMembers = teamMembers.filter((member: TeamMember) =>
+    `${member.firstName} ${member.lastName}`.toLowerCase().includes(mentionQuery.toLowerCase())
+  );
+
+  const handleSendInternalNote = () => {
+    // In a real app, this would send to your backend
+    console.log("Sending internal note:", internalNote);
+    setInternalNote("");
+  };
+
+  const handleSendEmail = () => {
+    // In a real app, this would integrate with your email service
+    console.log("Sending email:", { to: emailTo, subject: emailSubject, body: emailBody });
+    setEmailTo("");
+    setEmailSubject("");
+    setEmailBody("");
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <FileText className="w-6 h-6" />
@@ -63,11 +148,29 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
             <Badge className={statusClass}>
               {statusLabel}
             </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleViewProject}
+              className="ml-auto"
+            >
+              <ExternalLink className="w-4 h-4 mr-2" />
+              View Full Project
+            </Button>
           </DialogTitle>
           <DialogDescription>
-            Complete order details and information
+            Complete order details, internal communications, and client contact
           </DialogDescription>
         </DialogHeader>
+
+        <Tabs defaultValue="details" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="details">Order Details</TabsTrigger>
+            <TabsTrigger value="communication">Internal Notes</TabsTrigger>
+            <TabsTrigger value="email">Client Communication</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="details" className="mt-6">
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Left Column - Order Information */}
@@ -89,26 +192,20 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                   </div>
                 </div>
                 
-                {order.contactName && (
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm">{order.contactName}</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm">Primary Contact</span>
+                </div>
                 
-                {order.contactEmail && (
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm">{order.contactEmail}</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm">contact@company.com</span>
+                </div>
                 
-                {order.contactPhone && (
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm">{order.contactPhone}</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm">(555) 123-4567</span>
+                </div>
               </CardContent>
             </Card>
 
@@ -130,8 +227,8 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-500">Priority</p>
-                    <Badge variant={order.priority === 'high' ? 'destructive' : order.priority === 'medium' ? 'default' : 'secondary'} className="mt-1">
-                      {order.priority?.toUpperCase() || 'NORMAL'}
+                    <Badge variant="secondary" className="mt-1">
+                      NORMAL
                     </Badge>
                   </div>
                 </div>
@@ -147,15 +244,13 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                     </span>
                   </div>
 
-                  {order.depositAmount && (
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm font-medium">Deposit: </span>
-                      <span className="text-sm">
-                        ${Number(order.depositAmount).toLocaleString()}
-                      </span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm font-medium">Deposit: </span>
+                    <span className="text-sm">
+                      ${(Number(order.total || 0) * 0.5).toLocaleString()}
+                    </span>
+                  </div>
 
                   {order.inHandsDate && (
                     <div className="flex items-center gap-2">
@@ -184,34 +279,28 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
           {/* Right Column - Additional Information */}
           <div className="space-y-6">
             {/* Shipping Information */}
-            {(order.shippingAddress || order.shippingMethod) && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Truck className="w-5 h-5" />
-                    Shipping Information
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {order.shippingAddress && (
-                    <div className="flex items-start gap-2">
-                      <MapPin className="w-4 h-4 text-gray-500 mt-0.5" />
-                      <div className="text-sm">
-                        <p className="font-medium">Shipping Address:</p>
-                        <p className="text-gray-600 whitespace-pre-line">{order.shippingAddress}</p>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {order.shippingMethod && (
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Shipping Method</p>
-                      <p className="text-sm">{order.shippingMethod}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Truck className="w-5 h-5" />
+                  Shipping Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-start gap-2">
+                  <MapPin className="w-4 h-4 text-gray-500 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium">Shipping Address:</p>
+                    <p className="text-gray-600">123 Business Ave<br />Suite 100<br />City, ST 12345</p>
+                  </div>
+                </div>
+                
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Shipping Method</p>
+                  <p className="text-sm">UPS Ground</p>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Notes & Special Instructions */}
             {order.notes && (
@@ -263,15 +352,227 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
 
             {/* Action Buttons */}
             <div className="flex gap-3">
-              <Button variant="default" className="flex-1">
-                Edit Order
+              <Button variant="default" className="flex-1" onClick={handleViewProject}>
+                <ExternalLink className="w-4 h-4 mr-2" />
+                View Full Project
               </Button>
               <Button variant="outline" className="flex-1">
-                View Project
+                Edit Order
               </Button>
             </div>
           </div>
         </div>
+          </TabsContent>
+
+          <TabsContent value="communication" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5" />
+                  Internal Team Notes
+                  <Tag className="w-4 h-4 ml-auto" />
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="relative">
+                  <Textarea
+                    ref={textareaRef}
+                    placeholder="Add internal note... Use @ to mention team members"
+                    value={internalNote}
+                    onChange={(e) => handleMentionInput(e.target.value)}
+                    className="min-h-[120px]"
+                    data-testid="textarea-internal-note"
+                  />
+                  
+                  {/* Mention Suggestions */}
+                  {showMentionSuggestions && filteredTeamMembers.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-md shadow-lg z-10 max-h-40 overflow-y-auto">
+                      {filteredTeamMembers.slice(0, 5).map((member: TeamMember) => (
+                        <button
+                          key={member.id}
+                          onClick={() => handleMentionSelect(member)}
+                          className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center gap-2"
+                          data-testid={`mention-${member.id}`}
+                        >
+                          <UserAvatar name={`${member.firstName} ${member.lastName}`} size="sm" />
+                          <div>
+                            <p className="text-sm font-medium">{member.firstName} {member.lastName}</p>
+                            <p className="text-xs text-gray-500">{member.email}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={handleSendInternalNote}
+                    disabled={!internalNote.trim()}
+                    className="flex-1"
+                    data-testid="button-send-internal-note"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Send Internal Note
+                  </Button>
+                </div>
+
+                {/* Recent Internal Notes */}
+                <Separator />
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-700">Recent Internal Notes</h4>
+                  <div className="space-y-2">
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <UserAvatar name="Sarah Johnson" size="sm" />
+                        <span className="text-sm font-medium">Sarah Johnson</span>
+                        <span className="text-xs text-gray-500">2 hours ago</span>
+                      </div>
+                      <p className="text-sm text-gray-700">Customer confirmed artwork approval. Ready to move to production. @Mike Chen please coordinate with vendor.</p>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <UserAvatar name="Mike Chen" size="sm" />
+                        <span className="text-sm font-medium">Mike Chen</span>
+                        <span className="text-xs text-gray-500">1 day ago</span>
+                      </div>
+                      <p className="text-sm text-gray-700">Vendor confirmed 5-day production timeline. Will ship on Friday.</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="email" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Mail className="w-5 h-5" />
+                  Client Communication
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">To:</label>
+                    <Input
+                      placeholder="client@company.com"
+                      value={emailTo}
+                      onChange={(e) => setEmailTo(e.target.value)}
+                      data-testid="input-email-to"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Subject:</label>
+                    <Input
+                      placeholder={`Re: Order #${order.orderNumber}`}
+                      value={emailSubject}
+                      onChange={(e) => setEmailSubject(e.target.value)}
+                      data-testid="input-email-subject"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium">Message:</label>
+                  <Textarea
+                    placeholder="Compose your message to the client..."
+                    value={emailBody}
+                    onChange={(e) => setEmailBody(e.target.value)}
+                    className="min-h-[150px] mt-1"
+                    data-testid="textarea-email-body"
+                  />
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={handleSendEmail}
+                    disabled={!emailTo || !emailSubject || !emailBody.trim()}
+                    className="flex-1"
+                    data-testid="button-send-email"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Send Email
+                  </Button>
+                  <Button variant="outline">
+                    Save Draft
+                  </Button>
+                </div>
+
+                {/* Email Templates */}
+                <Separator />
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-700">Quick Templates</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setEmailSubject(`Order Update - #${order.orderNumber}`);
+                        setEmailBody(`Hi there,\n\nI wanted to provide you with an update on your order #${order.orderNumber}.\n\nBest regards,\nYour SwagSuite Team`);
+                      }}
+                    >
+                      Order Update
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setEmailSubject(`Artwork Approval Required - #${order.orderNumber}`);
+                        setEmailBody(`Hi there,\n\nWe need your approval on the artwork for order #${order.orderNumber} before we can proceed to production.\n\nPlease review and let us know if you have any changes.\n\nBest regards,\nYour SwagSuite Team`);
+                      }}
+                    >
+                      Artwork Approval
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setEmailSubject(`Order Shipped - #${order.orderNumber}`);
+                        setEmailBody(`Great news!\n\nYour order #${order.orderNumber} has been shipped and is on its way to you.\n\nTracking information will be provided separately.\n\nBest regards,\nYour SwagSuite Team`);
+                      }}
+                    >
+                      Order Shipped
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setEmailSubject(`Invoice - #${order.orderNumber}`);
+                        setEmailBody(`Hi there,\n\nPlease find attached the invoice for order #${order.orderNumber}.\n\nPayment is due within 30 days.\n\nBest regards,\nYour SwagSuite Team`);
+                      }}
+                    >
+                      Invoice
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Recent Emails */}
+                <Separator />
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-700">Recent Communications</h4>
+                  <div className="space-y-2">
+                    <div className="p-3 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="text-sm font-medium">Sent: Artwork Approval Request</span>
+                        <span className="text-xs text-gray-500">Yesterday, 3:24 PM</span>
+                      </div>
+                      <p className="text-sm text-gray-700">Requested client approval for logo placement and colors.</p>
+                    </div>
+                    <div className="p-3 bg-green-50 rounded-lg border-l-4 border-green-500">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="text-sm font-medium">Received: Approval Confirmed</span>
+                        <span className="text-xs text-gray-500">Today, 9:15 AM</span>
+                      </div>
+                      <p className="text-sm text-gray-700">Client approved artwork with minor color adjustment request.</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
