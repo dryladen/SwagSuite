@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 
 import OrderModal from "@/components/OrderModal";
+import { OrderDetailsModal } from "@/components/OrderDetailsModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,6 +55,8 @@ export default function Orders() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [, setLocation] = useLocation();
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -276,7 +279,11 @@ export default function Orders() {
                 </TableHeader>
                 <TableBody>
                   {filteredOrders.map((order: Order) => (
-                    <TableRow key={order.id}>
+                    <TableRow 
+                      key={order.id} 
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => setSelectedOrder(order)}
+                    >
                       <TableCell className="font-medium">
                         {order.orderNumber}
                       </TableCell>
@@ -329,13 +336,24 @@ export default function Orders() {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          <Button variant="ghost" size="sm">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedOrder(order);
+                            }}
+                            data-testid={`button-view-${order.id}`}
+                          >
                             View
                           </Button>
                           <Button 
                             variant="default" 
                             size="sm"
-                            onClick={() => setLocation(`/project/${order.id}`)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLocation(`/project/${order.id}`);
+                            }}
                             data-testid={`button-project-${order.id}`}
                           >
                             Project
@@ -350,10 +368,17 @@ export default function Orders() {
           </CardContent>
         </Card>
 
-        {/* Order Modal */}
+        {/* Order Modals */}
         <OrderModal 
           open={isCreateModalOpen} 
           onOpenChange={setIsCreateModalOpen} 
+        />
+        
+        <OrderDetailsModal
+          open={!!selectedOrder}
+          onOpenChange={(open) => !open && setSelectedOrder(null)}
+          order={selectedOrder}
+          companyName={selectedOrder ? getCompanyName(selectedOrder.companyId!) : ""}
         />
     </div>
   );
