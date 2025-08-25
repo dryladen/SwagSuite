@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, FileText, AlertCircle, DollarSign, TrendingUp, BarChart3, PieChart } from "lucide-react";
+import { Plus, FileText, AlertCircle, DollarSign, TrendingUp, BarChart3, PieChart, Calendar, ArrowUp, ArrowDown } from "lucide-react";
 import { PieChart as RechartsPieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -16,28 +16,184 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertErrorSchema, type Error, type InsertError } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
+type DateFilter = 'ytd' | 'mtd' | 'custom' | 'all';
+
+interface DateRange {
+  startDate: Date;
+  endDate: Date;
+}
+
+// Comparison Indicator Component
+function ComparisonIndicator({ current, previous, isMonetary = false }: { current: number; previous: number; isMonetary?: boolean }) {
+  const difference = current - previous;
+  const percentChange = previous !== 0 ? ((difference / previous) * 100) : 0;
+  const isIncrease = difference > 0;
+  const isDecrease = difference < 0;
+
+  if (difference === 0) {
+    return <span className="text-gray-500 text-xs">No change</span>;
+  }
+
+  return (
+    <span className={`text-xs flex items-center ${isIncrease ? 'text-red-500' : 'text-green-500'}`}>
+      {isIncrease ? <ArrowUp className="h-3 w-3 mr-1" /> : <ArrowDown className="h-3 w-3 mr-1" />}
+      {isMonetary ? `$${Math.abs(difference).toFixed(2)}` : Math.abs(difference)} 
+      ({Math.abs(percentChange).toFixed(1)}%)
+    </span>
+  );
+}
+
 export default function ErrorsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedError, setSelectedError] = useState<Error | null>(null);
+  const [dateFilter, setDateFilter] = useState<DateFilter>('ytd');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Fetch errors
-  const { data: errors = [], isLoading: errorsLoading } = useQuery<Error[]>({
-    queryKey: ["/api/errors"],
+  // Calculate date ranges
+  const dateRanges = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const currentDate = now.getDate();
+
+    const getDateRange = (filter: DateFilter): { current: DateRange; previous: DateRange } => {
+      switch (filter) {
+        case 'ytd': {
+          const currentYtdStart = new Date(currentYear, 0, 1);
+          const currentYtdEnd = now;
+          const previousYtdStart = new Date(currentYear - 1, 0, 1);
+          const previousYtdEnd = new Date(currentYear - 1, currentMonth, currentDate);
+          return {
+            current: { startDate: currentYtdStart, endDate: currentYtdEnd },
+            previous: { startDate: previousYtdStart, endDate: previousYtdEnd }
+          };
+        }
+        case 'mtd': {
+          const currentMtdStart = new Date(currentYear, currentMonth, 1);
+          const currentMtdEnd = now;
+          const previousMtdStart = new Date(currentYear, currentMonth - 1, 1);
+          const previousMtdEnd = new Date(currentYear, currentMonth - 1, currentDate);
+          return {
+            current: { startDate: currentMtdStart, endDate: currentMtdEnd },
+            previous: { startDate: previousMtdStart, endDate: previousMtdEnd }
+          };
+        }
+        case 'custom': {
+          if (!customStartDate || !customEndDate) {
+            return {
+              current: { startDate: new Date(currentYear, 0, 1), endDate: now },
+              previous: { startDate: new Date(currentYear - 1, 0, 1), endDate: new Date(currentYear - 1, 11, 31) }
+            };
+          }
+          const customStart = new Date(customStartDate);
+          const customEnd = new Date(customEndDate);
+          const daysDiff = Math.ceil((customEnd.getTime() - customStart.getTime()) / (1000 * 60 * 60 * 24));
+          const previousStart = new Date(customStart.getTime() - (daysDiff * 24 * 60 * 60 * 1000));
+          const previousEnd = new Date(customStart.getTime() - (1 * 24 * 60 * 60 * 1000));
+          return {
+            current: { startDate: customStart, endDate: customEnd },
+            previous: { startDate: previousStart, endDate: previousEnd }
+          };
+        }
+        default:
+          return {
+            current: { startDate: new Date(2020, 0, 1), endDate: now },
+            previous: { startDate: new Date(2020, 0, 1), endDate: now }
+          };
+      }
+    };
+
+    return getDateRange(dateFilter);
+  }, [dateFilter, customStartDate, customEndDate]);
+
+  // Fetch current period errors
+  const { data: currentErrors = [], isLoading: currentErrorsLoading } = useQuery<Error[]>({
+    queryKey: ["/api/errors/by-date-range", dateRanges.current.startDate.toISOString(), dateRanges.current.endDate.toISOString()],
+    enabled: dateFilter !== 'all'
   });
 
-  // Fetch error statistics
-  const { data: statistics, isLoading: statsLoading } = useQuery<{
-    totalErrors: number;
-    resolvedErrors: number;
-    unresolvedErrors: number;
-    costToLsd: number;
-    errorsByType: { [key: string]: number };
-    errorsByResponsibleParty: { [key: string]: number };
-  }>({
-    queryKey: ["/api/errors/statistics"],
+  // Fetch previous period errors for comparison
+  const { data: previousErrors = [], isLoading: previousErrorsLoading } = useQuery<Error[]>({
+    queryKey: ["/api/errors/by-date-range", dateRanges.previous.startDate.toISOString(), dateRanges.previous.endDate.toISOString()],
+    enabled: dateFilter !== 'all'
   });
+
+  // Fetch all errors when no filter
+  const { data: allErrors = [], isLoading: allErrorsLoading } = useQuery<Error[]>({
+    queryKey: ["/api/errors"],
+    enabled: dateFilter === 'all'
+  });
+
+  // Use appropriate error set based on filter
+  const errors = dateFilter === 'all' ? allErrors : currentErrors;
+  const errorsLoading = dateFilter === 'all' ? allErrorsLoading : currentErrorsLoading;
+
+  // Calculate statistics for current and previous periods
+  const statistics = useMemo(() => {
+    if (dateFilter === 'all') {
+      const totalErrors = allErrors.length;
+      const resolvedErrors = allErrors.filter(e => e.isResolved).length;
+      const unresolvedErrors = totalErrors - resolvedErrors;
+      const costToLsd = allErrors.reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0);
+      
+      const errorsByType: { [key: string]: number } = {};
+      const errorsByResponsibleParty: { [key: string]: number } = {};
+      
+      allErrors.forEach(error => {
+        errorsByType[error.errorType] = (errorsByType[error.errorType] || 0) + 1;
+        errorsByResponsibleParty[error.responsibleParty] = (errorsByResponsibleParty[error.responsibleParty] || 0) + 1;
+      });
+      
+      return {
+        totalErrors,
+        resolvedErrors,
+        unresolvedErrors,
+        costToLsd,
+        errorsByType,
+        errorsByResponsibleParty
+      };
+    }
+
+    // Calculate current period stats
+    const currentTotalErrors = currentErrors.length;
+    const currentResolvedErrors = currentErrors.filter(e => e.isResolved).length;
+    const currentUnresolvedErrors = currentTotalErrors - currentResolvedErrors;
+    const currentCostToLsd = currentErrors.reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0);
+    
+    const currentErrorsByType: { [key: string]: number } = {};
+    const currentErrorsByResponsibleParty: { [key: string]: number } = {};
+    
+    currentErrors.forEach(error => {
+      currentErrorsByType[error.errorType] = (currentErrorsByType[error.errorType] || 0) + 1;
+      currentErrorsByResponsibleParty[error.responsibleParty] = (currentErrorsByResponsibleParty[error.responsibleParty] || 0) + 1;
+    });
+
+    // Calculate previous period stats
+    const previousTotalErrors = previousErrors.length;
+    const previousResolvedErrors = previousErrors.filter(e => e.isResolved).length;
+    const previousUnresolvedErrors = previousTotalErrors - previousResolvedErrors;
+    const previousCostToLsd = previousErrors.reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0);
+    
+    return {
+      totalErrors: currentTotalErrors,
+      resolvedErrors: currentResolvedErrors,
+      unresolvedErrors: currentUnresolvedErrors,
+      costToLsd: currentCostToLsd,
+      errorsByType: currentErrorsByType,
+      errorsByResponsibleParty: currentErrorsByResponsibleParty,
+      comparison: {
+        totalErrors: previousTotalErrors,
+        resolvedErrors: previousResolvedErrors,
+        unresolvedErrors: previousUnresolvedErrors,
+        costToLsd: previousCostToLsd
+      }
+    };
+  }, [currentErrors, previousErrors, allErrors, dateFilter]);
+
+  const statsLoading = dateFilter === 'all' ? allErrorsLoading : (currentErrorsLoading || previousErrorsLoading);
 
   // Create error mutation
   const createErrorMutation = useMutation({
@@ -46,7 +202,7 @@ export default function ErrorsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/errors"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/errors/statistics"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/errors/by-date-range"] });
       setIsCreateModalOpen(false);
       toast({
         title: "Error Created",
@@ -69,7 +225,7 @@ export default function ErrorsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/errors"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/errors/statistics"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/errors/by-date-range"] });
       setSelectedError(null);
       toast({
         title: "Error Updated",
@@ -92,7 +248,7 @@ export default function ErrorsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/errors"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/errors/statistics"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/errors/by-date-range"] });
       toast({
         title: "Error Resolved",
         description: "Error has been marked as resolved.",
@@ -124,28 +280,6 @@ export default function ErrorsPage() {
     } else {
       createErrorMutation.mutate(data);
     }
-  };
-
-  const getErrorTypeBadge = (type: string) => {
-    const colors = {
-      pricing: "bg-red-100 text-red-800",
-      in_hands_date: "bg-yellow-100 text-yellow-800",
-      shipping: "bg-blue-100 text-blue-800",
-      printing: "bg-purple-100 text-purple-800",
-      artwork_proofing: "bg-green-100 text-green-800",
-      oos: "bg-orange-100 text-orange-800",
-      other: "bg-gray-100 text-gray-800",
-    };
-    return colors[type as keyof typeof colors] || colors.other;
-  };
-
-  const getResponsiblePartyBadge = (party: string) => {
-    const colors = {
-      customer: "bg-blue-100 text-blue-800",
-      vendor: "bg-yellow-100 text-yellow-800",
-      lsd: "bg-red-100 text-red-800",
-    };
-    return colors[party as keyof typeof colors] || colors.lsd;
   };
 
   // Helper functions for charts
@@ -199,8 +333,37 @@ export default function ErrorsPage() {
     }));
   };
 
+  const getErrorTypeBadge = (type: string) => {
+    const colors = {
+      pricing: "bg-red-100 text-red-800",
+      in_hands_date: "bg-yellow-100 text-yellow-800",
+      shipping: "bg-blue-100 text-blue-800",
+      printing: "bg-purple-100 text-purple-800",
+      artwork_proofing: "bg-green-100 text-green-800",
+      oos: "bg-orange-100 text-orange-800",
+      other: "bg-gray-100 text-gray-800",
+    };
+    return colors[type as keyof typeof colors] || colors.other;
+  };
+
+  const getResponsiblePartyBadge = (party: string) => {
+    const colors = {
+      customer: "bg-blue-100 text-blue-800",
+      vendor: "bg-yellow-100 text-yellow-800",
+      lsd: "bg-red-100 text-red-800",
+    };
+    return colors[party as keyof typeof colors] || colors.lsd;
+  };
+
   if (errorsLoading || statsLoading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading error data...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -210,26 +373,81 @@ export default function ErrorsPage() {
           <h1 className="text-3xl font-bold">Error Tracking</h1>
           <p className="text-gray-600">Manage and track errors across your orders and projects</p>
         </div>
-        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Report Error
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{selectedError ? "Edit Error" : "Report New Error"}</DialogTitle>
-            </DialogHeader>
-            <ErrorForm
-              form={form}
-              onSubmit={onSubmit}
-              isLoading={createErrorMutation.isPending || updateErrorMutation.isPending}
-              selectedError={selectedError}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="flex space-x-4">
+          <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Report Error
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{selectedError ? "Edit Error" : "Report New Error"}</DialogTitle>
+              </DialogHeader>
+              <ErrorForm
+                form={form}
+                onSubmit={onSubmit}
+                isLoading={createErrorMutation.isPending || updateErrorMutation.isPending}
+                selectedError={selectedError}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
+
+      {/* Date Filter Controls */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Calendar className="mr-2 h-5 w-5" />
+            Date Range & Comparison
+          </CardTitle>
+          <CardDescription>Filter errors by date period and compare with previous periods</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-4">
+            <Select value={dateFilter} onValueChange={(value: DateFilter) => setDateFilter(value)}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Select date range" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ytd">Year to Date (YTD)</SelectItem>
+                <SelectItem value="mtd">Month to Date (MTD)</SelectItem>
+                <SelectItem value="custom">Custom Range</SelectItem>
+                <SelectItem value="all">All Time</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {dateFilter === 'custom' && (
+              <div className="flex items-center space-x-2">
+                <Input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="w-[150px]"
+                  placeholder="Start date"
+                />
+                <span className="text-sm text-gray-500">to</span>
+                <Input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="w-[150px]"
+                  placeholder="End date"
+                />
+              </div>
+            )}
+            
+            {dateFilter !== 'all' && (
+              <div className="text-sm text-gray-600">
+                <div>Current: {dateRanges.current.startDate.toLocaleDateString()} - {dateRanges.current.endDate.toLocaleDateString()}</div>
+                <div>Comparison: {dateRanges.previous.startDate.toLocaleDateString()} - {dateRanges.previous.endDate.toLocaleDateString()}</div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Statistics Cards */}
       {statistics && (
@@ -241,6 +459,12 @@ export default function ErrorsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{statistics.totalErrors}</div>
+              {dateFilter !== 'all' && statistics.comparison && (
+                <p className="text-xs text-muted-foreground flex items-center">
+                  <ComparisonIndicator current={statistics.totalErrors} previous={statistics.comparison.totalErrors} />
+                  <span className="ml-1">vs previous period ({statistics.comparison.totalErrors})</span>
+                </p>
+              )}
             </CardContent>
           </Card>
           
@@ -251,12 +475,20 @@ export default function ErrorsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{statistics.resolvedErrors}</div>
-              <p className="text-xs text-muted-foreground">
-                {statistics.totalErrors > 0 
-                  ? `${Math.round((statistics.resolvedErrors / statistics.totalErrors) * 100)}% resolution rate`
-                  : "No errors yet"
-                }
-              </p>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <div>
+                  {statistics.totalErrors > 0 
+                    ? `${Math.round((statistics.resolvedErrors / statistics.totalErrors) * 100)}% resolution rate`
+                    : "No errors yet"
+                  }
+                </div>
+                {dateFilter !== 'all' && statistics.comparison && (
+                  <div className="flex items-center">
+                    <ComparisonIndicator current={statistics.resolvedErrors} previous={statistics.comparison.resolvedErrors} />
+                    <span className="ml-1">vs previous ({statistics.comparison.resolvedErrors})</span>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -267,6 +499,12 @@ export default function ErrorsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{statistics.unresolvedErrors}</div>
+              {dateFilter !== 'all' && statistics.comparison && (
+                <p className="text-xs text-muted-foreground flex items-center">
+                  <ComparisonIndicator current={statistics.unresolvedErrors} previous={statistics.comparison.unresolvedErrors} />
+                  <span className="ml-1">vs previous ({statistics.comparison.unresolvedErrors})</span>
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -277,6 +515,12 @@ export default function ErrorsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">${statistics.costToLsd.toFixed(2)}</div>
+              {dateFilter !== 'all' && statistics.comparison && (
+                <p className="text-xs text-muted-foreground flex items-center">
+                  <ComparisonIndicator current={statistics.costToLsd} previous={statistics.comparison.costToLsd} isMonetary />
+                  <span className="ml-1">vs previous (${statistics.comparison.costToLsd.toFixed(2)})</span>
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
