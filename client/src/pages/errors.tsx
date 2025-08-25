@@ -4,7 +4,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, FileText, AlertCircle, DollarSign, TrendingUp } from "lucide-react";
+import { Plus, FileText, AlertCircle, DollarSign, TrendingUp, BarChart3, PieChart } from "lucide-react";
+import { PieChart as RechartsPieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -147,6 +148,57 @@ export default function ErrorsPage() {
     return colors[party as keyof typeof colors] || colors.lsd;
   };
 
+  // Helper functions for charts
+  const formatErrorType = (type: string) => {
+    const types: { [key: string]: string } = {
+      pricing: 'Pricing',
+      in_hands_date: 'In-hands Date',
+      shipping: 'Shipping',
+      printing: 'Printing',
+      artwork_proofing: 'Artwork/Proofing',
+      oos: 'Out of Stock',
+      other: 'Other'
+    };
+    return types[type] || type;
+  };
+
+  const formatResponsibleParty = (party: string) => {
+    const parties: { [key: string]: string } = {
+      customer: 'Customer',
+      vendor: 'Vendor',
+      lsd: 'LSD'
+    };
+    return parties[party] || party;
+  };
+
+  const getErrorTypeColor = (type: string) => {
+    const colors: { [key: string]: string } = {
+      pricing: '#ef4444',
+      in_hands_date: '#f59e0b',
+      shipping: '#3b82f6',
+      printing: '#8b5cf6',
+      artwork_proofing: '#10b981',
+      oos: '#f97316',
+      other: '#6b7280'
+    };
+    return colors[type] || '#6b7280';
+  };
+
+  const getCostByErrorType = (errors: Error[]) => {
+    const costsByType: { [key: string]: number } = {};
+    
+    errors.forEach(error => {
+      const cost = parseFloat(error.costToLsd || '0');
+      const type = formatErrorType(error.errorType);
+      costsByType[type] = (costsByType[type] || 0) + cost;
+    });
+    
+    return Object.entries(costsByType).map(([errorType, cost]) => ({
+      errorType,
+      cost: Number(cost.toFixed(2))
+    }));
+  };
+
   if (errorsLoading || statsLoading) {
     return <div>Loading...</div>;
   }
@@ -228,6 +280,102 @@ export default function ErrorsPage() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Charts Section */}
+      {statistics && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Error Types Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <PieChart className="mr-2 h-5 w-5" />
+                Error Types Distribution
+              </CardTitle>
+              <CardDescription>Breakdown of errors by type</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsPieChart>
+                    <Tooltip formatter={(value, name) => [value, formatErrorType(name as string)]} />
+                    <Pie
+                      data={Object.entries(statistics.errorsByType).map(([key, value]) => ({
+                        name: key,
+                        value,
+                        label: formatErrorType(key)
+                      }))}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ label, percent }: { label: string; percent: number }) => `${label} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {Object.entries(statistics.errorsByType).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={getErrorTypeColor(entry[0])} />
+                      ))}
+                    </Pie>
+                  </RechartsPieChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Responsible Party Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <BarChart3 className="mr-2 h-5 w-5" />
+                Responsibility Analysis
+              </CardTitle>
+              <CardDescription>Who is responsible for errors</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={Object.entries(statistics.errorsByResponsibleParty).map(([key, value]) => ({
+                    name: formatResponsibleParty(key),
+                    errors: value
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="errors" fill="#8884d8" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Cost Analysis */}
+      {statistics && errors.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <DollarSign className="mr-2 h-5 w-5" />
+              Cost Analysis by Error Type
+            </CardTitle>
+            <CardDescription>Financial impact of different error types</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={getCostByErrorType(errors)}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="errorType" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => [`$${value}`, 'Cost to LSD']} />
+                  <Bar dataKey="cost" fill="#ef4444" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Errors List */}
