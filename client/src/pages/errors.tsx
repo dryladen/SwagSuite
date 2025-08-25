@@ -1,11 +1,11 @@
-import { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, FileText, AlertCircle, DollarSign, TrendingUp, BarChart3, PieChart, Calendar, ArrowUp, ArrowDown } from "lucide-react";
-import { PieChart as RechartsPieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
+import { Plus, FileText, AlertCircle, DollarSign, TrendingUp, BarChart3, PieChart } from "lucide-react";
+import { PieChart as RechartsPieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -16,184 +16,120 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertErrorSchema, type Error, type InsertError } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
-type DateFilter = 'ytd' | 'mtd' | 'custom' | 'all';
-
-interface DateRange {
-  startDate: Date;
-  endDate: Date;
-}
-
-// Comparison Indicator Component
-function ComparisonIndicator({ current, previous, isMonetary = false }: { current: number; previous: number; isMonetary?: boolean }) {
-  const difference = current - previous;
-  const percentChange = previous !== 0 ? ((difference / previous) * 100) : 0;
-  const isIncrease = difference > 0;
-  const isDecrease = difference < 0;
-
-  if (difference === 0) {
-    return <span className="text-gray-500 text-xs">No change</span>;
+// Sample data for charts and analytics
+const sampleErrors: Error[] = [
+  {
+    id: "1",
+    orderNumber: "ORD-2024-001",
+    errorType: "printing",
+    description: "Incorrect ink color used on t-shirts",
+    responsibleParty: "lsd",
+    costToLsd: "150.00",
+    isResolved: true,
+    orderRep: "Sarah Johnson",
+    productionRep: "Mike Chen",
+    createdAt: "2024-03-15T10:30:00Z",
+    updatedAt: "2024-03-16T09:15:00Z"
+  },
+  {
+    id: "2", 
+    orderNumber: "ORD-2024-002",
+    errorType: "shipping",
+    description: "Vendor delayed shipment by 3 days",
+    responsibleParty: "vendor",
+    costToLsd: "75.50",
+    isResolved: false,
+    orderRep: "Emily Davis",
+    productionRep: "David Wilson",
+    createdAt: "2024-03-18T14:20:00Z",
+    updatedAt: "2024-03-18T14:20:00Z"
+  },
+  {
+    id: "3",
+    orderNumber: "ORD-2024-003", 
+    errorType: "other",
+    description: "Customer ordered 100 but received 75 units",
+    responsibleParty: "customer",
+    costToLsd: "0.00",
+    isResolved: true,
+    orderRep: "Alex Rodriguez",
+    productionRep: "Lisa Thompson",
+    createdAt: "2024-03-20T11:45:00Z",
+    updatedAt: "2024-03-21T16:30:00Z"
+  },
+  {
+    id: "4",
+    orderNumber: "ORD-2024-004",
+    errorType: "pricing",
+    description: "Defective materials used in production",
+    responsibleParty: "vendor",
+    costToLsd: "340.25",
+    isResolved: false,
+    orderRep: "James Wilson",
+    productionRep: "Sarah Johnson",
+    createdAt: "2024-03-22T09:00:00Z",
+    updatedAt: "2024-03-22T09:00:00Z"
+  },
+  {
+    id: "5",
+    orderNumber: "ORD-2024-005",
+    errorType: "artwork_proofing",
+    description: "Logo placement incorrect on merchandise",
+    responsibleParty: "lsd",
+    costToLsd: "125.00",
+    isResolved: true,
+    orderRep: "Mike Chen",
+    productionRep: "Emily Davis",
+    createdAt: "2024-03-25T13:15:00Z",
+    updatedAt: "2024-03-26T10:45:00Z"
   }
-
-  return (
-    <span className={`text-xs flex items-center ${isIncrease ? 'text-red-500' : 'text-green-500'}`}>
-      {isIncrease ? <ArrowUp className="h-3 w-3 mr-1" /> : <ArrowDown className="h-3 w-3 mr-1" />}
-      {isMonetary ? `$${Math.abs(difference).toFixed(2)}` : Math.abs(difference)} 
-      ({Math.abs(percentChange).toFixed(1)}%)
-    </span>
-  );
-}
+];
 
 export default function ErrorsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedError, setSelectedError] = useState<Error | null>(null);
-  const [dateFilter, setDateFilter] = useState<DateFilter>('ytd');
-  const [customStartDate, setCustomStartDate] = useState<string>('');
-  const [customEndDate, setCustomEndDate] = useState<string>('');
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Calculate date ranges
-  const dateRanges = useMemo(() => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    const currentDate = now.getDate();
+  // Use sample data
+  const errors = sampleErrors;
+  const isLoading = false;
 
-    const getDateRange = (filter: DateFilter): { current: DateRange; previous: DateRange } => {
-      switch (filter) {
-        case 'ytd': {
-          const currentYtdStart = new Date(currentYear, 0, 1);
-          const currentYtdEnd = now;
-          const previousYtdStart = new Date(currentYear - 1, 0, 1);
-          const previousYtdEnd = new Date(currentYear - 1, currentMonth, currentDate);
-          return {
-            current: { startDate: currentYtdStart, endDate: currentYtdEnd },
-            previous: { startDate: previousYtdStart, endDate: previousYtdEnd }
-          };
-        }
-        case 'mtd': {
-          const currentMtdStart = new Date(currentYear, currentMonth, 1);
-          const currentMtdEnd = now;
-          const previousMtdStart = new Date(currentYear, currentMonth - 1, 1);
-          const previousMtdEnd = new Date(currentYear, currentMonth - 1, currentDate);
-          return {
-            current: { startDate: currentMtdStart, endDate: currentMtdEnd },
-            previous: { startDate: previousMtdStart, endDate: previousMtdEnd }
-          };
-        }
-        case 'custom': {
-          if (!customStartDate || !customEndDate) {
-            return {
-              current: { startDate: new Date(currentYear, 0, 1), endDate: now },
-              previous: { startDate: new Date(currentYear - 1, 0, 1), endDate: new Date(currentYear - 1, 11, 31) }
-            };
-          }
-          const customStart = new Date(customStartDate);
-          const customEnd = new Date(customEndDate);
-          const daysDiff = Math.ceil((customEnd.getTime() - customStart.getTime()) / (1000 * 60 * 60 * 24));
-          const previousStart = new Date(customStart.getTime() - (daysDiff * 24 * 60 * 60 * 1000));
-          const previousEnd = new Date(customStart.getTime() - (1 * 24 * 60 * 60 * 1000));
-          return {
-            current: { startDate: customStart, endDate: customEnd },
-            previous: { startDate: previousStart, endDate: previousEnd }
-          };
-        }
-        default:
-          return {
-            current: { startDate: new Date(2020, 0, 1), endDate: now },
-            previous: { startDate: new Date(2020, 0, 1), endDate: now }
-          };
-      }
-    };
+  // Calculate statistics from sample data
+  const totalErrors = errors.length;
+  const resolvedErrors = errors.filter(e => e.isResolved).length;
+  const unresolvedErrors = totalErrors - resolvedErrors;
+  const totalCost = errors.reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0);
 
-    return getDateRange(dateFilter);
-  }, [dateFilter, customStartDate, customEndDate]);
+  // Chart data
+  const errorsByType = errors.reduce((acc, error) => {
+    acc[error.errorType] = (acc[error.errorType] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
 
-  // Fetch current period errors
-  const { data: currentErrors = [], isLoading: currentErrorsLoading } = useQuery<Error[]>({
-    queryKey: ["/api/errors/by-date-range", dateRanges.current.startDate.toISOString(), dateRanges.current.endDate.toISOString()],
-    enabled: dateFilter !== 'all'
-  });
+  const errorsByParty = errors.reduce((acc, error) => {
+    acc[error.responsibleParty] = (acc[error.responsibleParty] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
 
-  // Fetch previous period errors for comparison
-  const { data: previousErrors = [], isLoading: previousErrorsLoading } = useQuery<Error[]>({
-    queryKey: ["/api/errors/by-date-range", dateRanges.previous.startDate.toISOString(), dateRanges.previous.endDate.toISOString()],
-    enabled: dateFilter !== 'all'
-  });
+  const typeChartData = Object.entries(errorsByType).map(([name, value]) => ({ 
+    name: formatErrorType(name), 
+    value 
+  }));
+  
+  const partyChartData = Object.entries(errorsByParty).map(([name, value]) => ({ 
+    name: name.charAt(0).toUpperCase() + name.slice(1), 
+    value 
+  }));
 
-  // Fetch all errors when no filter
-  const { data: allErrors = [], isLoading: allErrorsLoading } = useQuery<Error[]>({
-    queryKey: ["/api/errors"],
-    enabled: dateFilter === 'all'
-  });
+  const costData = Object.entries(errorsByParty).map(([party, count]) => ({
+    party: party.charAt(0).toUpperCase() + party.slice(1),
+    cost: errors
+      .filter(e => e.responsibleParty === party)
+      .reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0)
+  }));
 
-  // Use appropriate error set based on filter
-  const errors = dateFilter === 'all' ? allErrors : currentErrors;
-  const errorsLoading = dateFilter === 'all' ? allErrorsLoading : currentErrorsLoading;
-
-  // Calculate statistics for current and previous periods
-  const statistics = useMemo(() => {
-    if (dateFilter === 'all') {
-      const totalErrors = allErrors.length;
-      const resolvedErrors = allErrors.filter(e => e.isResolved).length;
-      const unresolvedErrors = totalErrors - resolvedErrors;
-      const costToLsd = allErrors.reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0);
-      
-      const errorsByType: { [key: string]: number } = {};
-      const errorsByResponsibleParty: { [key: string]: number } = {};
-      
-      allErrors.forEach(error => {
-        errorsByType[error.errorType] = (errorsByType[error.errorType] || 0) + 1;
-        errorsByResponsibleParty[error.responsibleParty] = (errorsByResponsibleParty[error.responsibleParty] || 0) + 1;
-      });
-      
-      return {
-        totalErrors,
-        resolvedErrors,
-        unresolvedErrors,
-        costToLsd,
-        errorsByType,
-        errorsByResponsibleParty
-      };
-    }
-
-    // Calculate current period stats
-    const currentTotalErrors = currentErrors.length;
-    const currentResolvedErrors = currentErrors.filter(e => e.isResolved).length;
-    const currentUnresolvedErrors = currentTotalErrors - currentResolvedErrors;
-    const currentCostToLsd = currentErrors.reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0);
-    
-    const currentErrorsByType: { [key: string]: number } = {};
-    const currentErrorsByResponsibleParty: { [key: string]: number } = {};
-    
-    currentErrors.forEach(error => {
-      currentErrorsByType[error.errorType] = (currentErrorsByType[error.errorType] || 0) + 1;
-      currentErrorsByResponsibleParty[error.responsibleParty] = (currentErrorsByResponsibleParty[error.responsibleParty] || 0) + 1;
-    });
-
-    // Calculate previous period stats
-    const previousTotalErrors = previousErrors.length;
-    const previousResolvedErrors = previousErrors.filter(e => e.isResolved).length;
-    const previousUnresolvedErrors = previousTotalErrors - previousResolvedErrors;
-    const previousCostToLsd = previousErrors.reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0);
-    
-    return {
-      totalErrors: currentTotalErrors,
-      resolvedErrors: currentResolvedErrors,
-      unresolvedErrors: currentUnresolvedErrors,
-      costToLsd: currentCostToLsd,
-      errorsByType: currentErrorsByType,
-      errorsByResponsibleParty: currentErrorsByResponsibleParty,
-      comparison: {
-        totalErrors: previousTotalErrors,
-        resolvedErrors: previousResolvedErrors,
-        unresolvedErrors: previousUnresolvedErrors,
-        costToLsd: previousCostToLsd
-      }
-    };
-  }, [currentErrors, previousErrors, allErrors, dateFilter]);
-
-  const statsLoading = dateFilter === 'all' ? allErrorsLoading : (currentErrorsLoading || previousErrorsLoading);
+  const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c'];
 
   // Create error mutation
   const createErrorMutation = useMutation({
@@ -202,7 +138,6 @@ export default function ErrorsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/errors"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/errors/by-date-range"] });
       setIsCreateModalOpen(false);
       toast({
         title: "Error Created",
@@ -225,7 +160,6 @@ export default function ErrorsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/errors"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/errors/by-date-range"] });
       setSelectedError(null);
       toast({
         title: "Error Updated",
@@ -248,7 +182,6 @@ export default function ErrorsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/errors"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/errors/by-date-range"] });
       toast({
         title: "Error Resolved",
         description: "Error has been marked as resolved.",
@@ -282,30 +215,29 @@ export default function ErrorsPage() {
     }
   };
 
-  // Helper functions for charts
-  const formatErrorType = (type: string) => {
+  function formatErrorType(type: string) {
     const types: { [key: string]: string } = {
-      pricing: 'Pricing',
-      in_hands_date: 'In-hands Date',
-      shipping: 'Shipping',
-      printing: 'Printing',
+      pricing: 'Pricing Error',
+      in_hands_date: 'In-Hands Date Issue',
+      shipping: 'Shipping Error',
+      printing: 'Printing Error',
       artwork_proofing: 'Artwork/Proofing',
       oos: 'Out of Stock',
       other: 'Other'
     };
     return types[type] || type;
-  };
+  }
 
-  const formatResponsibleParty = (party: string) => {
+  function formatResponsibleParty(party: string) {
     const parties: { [key: string]: string } = {
       customer: 'Customer',
       vendor: 'Vendor',
       lsd: 'LSD'
     };
     return parties[party] || party;
-  };
+  }
 
-  const getErrorTypeColor = (type: string) => {
+  function getErrorTypeColor(type: string) {
     const colors: { [key: string]: string } = {
       pricing: '#ef4444',
       in_hands_date: '#f59e0b',
@@ -316,24 +248,9 @@ export default function ErrorsPage() {
       other: '#6b7280'
     };
     return colors[type] || '#6b7280';
-  };
+  }
 
-  const getCostByErrorType = (errors: Error[]) => {
-    const costsByType: { [key: string]: number } = {};
-    
-    errors.forEach(error => {
-      const cost = parseFloat(error.costToLsd || '0');
-      const type = formatErrorType(error.errorType);
-      costsByType[type] = (costsByType[type] || 0) + cost;
-    });
-    
-    return Object.entries(costsByType).map(([errorType, cost]) => ({
-      errorType,
-      cost: Number(cost.toFixed(2))
-    }));
-  };
-
-  const getErrorTypeBadge = (type: string) => {
+  function getErrorTypeBadge(type: string) {
     const colors = {
       pricing: "bg-red-100 text-red-800",
       in_hands_date: "bg-yellow-100 text-yellow-800",
@@ -344,18 +261,18 @@ export default function ErrorsPage() {
       other: "bg-gray-100 text-gray-800",
     };
     return colors[type as keyof typeof colors] || colors.other;
-  };
+  }
 
-  const getResponsiblePartyBadge = (party: string) => {
+  function getResponsiblePartyBadge(party: string) {
     const colors = {
       customer: "bg-blue-100 text-blue-800",
       vendor: "bg-yellow-100 text-yellow-800",
       lsd: "bg-red-100 text-red-800",
     };
     return colors[party as keyof typeof colors] || colors.lsd;
-  };
+  }
 
-  if (errorsLoading || statsLoading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -396,314 +313,198 @@ export default function ErrorsPage() {
         </div>
       </div>
 
-      {/* Date Filter Controls */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <Calendar className="mr-2 h-5 w-5" />
-            Date Range & Comparison
-          </CardTitle>
-          <CardDescription>Filter errors by date period and compare with previous periods</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-center gap-4">
-            <Select value={dateFilter} onValueChange={(value: DateFilter) => setDateFilter(value)}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Select date range" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ytd">Year to Date (YTD)</SelectItem>
-                <SelectItem value="mtd">Month to Date (MTD)</SelectItem>
-                <SelectItem value="custom">Custom Range</SelectItem>
-                <SelectItem value="all">All Time</SelectItem>
-              </SelectContent>
-            </Select>
-            
-            {dateFilter === 'custom' && (
-              <div className="flex items-center space-x-2">
-                <Input
-                  type="date"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="w-[150px]"
-                  placeholder="Start date"
-                />
-                <span className="text-sm text-gray-500">to</span>
-                <Input
-                  type="date"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="w-[150px]"
-                  placeholder="End date"
-                />
-              </div>
-            )}
-            
-            {dateFilter !== 'all' && (
-              <div className="text-sm text-gray-600">
-                <div>Current: {dateRanges.current.startDate.toLocaleDateString()} - {dateRanges.current.endDate.toLocaleDateString()}</div>
-                <div>Comparison: {dateRanges.previous.startDate.toLocaleDateString()} - {dateRanges.previous.endDate.toLocaleDateString()}</div>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Statistics Cards */}
-      {statistics && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Errors</CardTitle>
-              <AlertCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.totalErrors}</div>
-              {dateFilter !== 'all' && statistics.comparison && (
-                <p className="text-xs text-muted-foreground flex items-center">
-                  <ComparisonIndicator current={statistics.totalErrors} previous={statistics.comparison.totalErrors} />
-                  <span className="ml-1">vs previous period ({statistics.comparison.totalErrors})</span>
-                </p>
-              )}
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Resolved</CardTitle>
-              <TrendingUp className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.resolvedErrors}</div>
-              <div className="text-xs text-muted-foreground space-y-1">
-                <div>
-                  {statistics.totalErrors > 0 
-                    ? `${Math.round((statistics.resolvedErrors / statistics.totalErrors) * 100)}% resolution rate`
-                    : "No errors yet"
-                  }
-                </div>
-                {dateFilter !== 'all' && statistics.comparison && (
-                  <div className="flex items-center">
-                    <ComparisonIndicator current={statistics.resolvedErrors} previous={statistics.comparison.resolvedErrors} />
-                    <span className="ml-1">vs previous ({statistics.comparison.resolvedErrors})</span>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Errors</CardTitle>
+            <AlertCircle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalErrors}</div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Open Issues</CardTitle>
-              <AlertCircle className="h-4 w-4 text-red-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{statistics.unresolvedErrors}</div>
-              {dateFilter !== 'all' && statistics.comparison && (
-                <p className="text-xs text-muted-foreground flex items-center">
-                  <ComparisonIndicator current={statistics.unresolvedErrors} previous={statistics.comparison.unresolvedErrors} />
-                  <span className="ml-1">vs previous ({statistics.comparison.unresolvedErrors})</span>
-                </p>
-              )}
-            </CardContent>
-          </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Resolved</CardTitle>
+            <TrendingUp className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{resolvedErrors}</div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Cost to LSD</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">${statistics.costToLsd.toFixed(2)}</div>
-              {dateFilter !== 'all' && statistics.comparison && (
-                <p className="text-xs text-muted-foreground flex items-center">
-                  <ComparisonIndicator current={statistics.costToLsd} previous={statistics.comparison.costToLsd} isMonetary />
-                  <span className="ml-1">vs previous (${statistics.comparison.costToLsd.toFixed(2)})</span>
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Open Issues</CardTitle>
+            <FileText className="h-4 w-4 text-yellow-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">{unresolvedErrors}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
+            <DollarSign className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">${totalCost.toFixed(2)}</div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Charts Section */}
-      {statistics && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Error Types Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <PieChart className="mr-2 h-5 w-5" />
-                Error Types Distribution
-              </CardTitle>
-              <CardDescription>Breakdown of errors by type</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RechartsPieChart>
-                    <Tooltip formatter={(value, name) => [value, formatErrorType(name as string)]} />
-                    <Pie
-                      data={Object.entries(statistics.errorsByType).map(([key, value]) => ({
-                        name: key,
-                        value,
-                        label: formatErrorType(key)
-                      }))}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ label, percent }: { label: string; percent: number }) => `${label} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {Object.entries(statistics.errorsByType).map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={getErrorTypeColor(entry[0])} />
-                      ))}
-                    </Pie>
-                  </RechartsPieChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Responsible Party Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <BarChart3 className="mr-2 h-5 w-5" />
-                Responsibility Analysis
-              </CardTitle>
-              <CardDescription>Who is responsible for errors</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={Object.entries(statistics.errorsByResponsibleParty).map(([key, value]) => ({
-                    name: formatResponsibleParty(key),
-                    errors: value
-                  }))}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="errors" fill="#8884d8" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Cost Analysis */}
-      {statistics && errors.length > 0 && (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Errors by Type Chart */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center">
-              <DollarSign className="mr-2 h-5 w-5" />
-              Cost Analysis by Error Type
+              <PieChart className="mr-2 h-5 w-5" />
+              Errors by Type
             </CardTitle>
-            <CardDescription>Financial impact of different error types</CardDescription>
+            <CardDescription>Distribution of error types across all incidents</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={getCostByErrorType(errors)}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="errorType" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [`$${value}`, 'Cost to LSD']} />
-                  <Bar dataKey="cost" fill="#ef4444" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <RechartsPieChart>
+                <Pie
+                  data={typeChartData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {typeChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </RechartsPieChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
-      )}
+
+        {/* Errors by Responsible Party Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <BarChart3 className="mr-2 h-5 w-5" />
+              Errors by Responsible Party
+            </CardTitle>
+            <CardDescription>Who is responsible for reported errors</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={partyChartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="value" fill="#8884d8" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Cost by Responsible Party Chart */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <DollarSign className="mr-2 h-5 w-5" />
+              Cost Impact by Responsible Party
+            </CardTitle>
+            <CardDescription>Financial impact of errors by responsible party</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={costData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="party" />
+                <YAxis />
+                <Tooltip formatter={(value: number) => [`$${value.toFixed(2)}`, 'Cost']} />
+                <Bar dataKey="cost" fill="#ef4444" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Errors List */}
       <Card>
         <CardHeader>
           <CardTitle>Recent Errors</CardTitle>
-          <CardDescription>Track and manage all reported errors</CardDescription>
+          <CardDescription>Latest error reports and their current status</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {errors.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <FileText className="mx-auto h-12 w-12 mb-4" />
-                <p>No errors reported yet</p>
-              </div>
-            ) : (
-              errors.map((error: Error) => (
-                <div 
-                  key={error.id} 
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 cursor-pointer"
-                  onClick={() => {
-                    setSelectedError(error);
-                    form.reset({
-                      ...error,
-                      date: error.date,
-                    });
-                    setIsCreateModalOpen(true);
-                  }}
-                  data-testid={`error-row-${error.id}`}
-                >
-                  <div className="flex-1 space-y-2">
+            {errors.map((error) => (
+              <div key={error.id} className="border rounded-lg p-4">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-2">
                     <div className="flex items-center space-x-2">
                       <Badge className={getErrorTypeBadge(error.errorType)}>
-                        {error.errorType.replace('_', ' ')}
+                        {formatErrorType(error.errorType)}
                       </Badge>
                       <Badge className={getResponsiblePartyBadge(error.responsibleParty)}>
-                        {error.responsibleParty}
+                        {formatResponsibleParty(error.responsibleParty)}
                       </Badge>
-                      {error.isResolved ? (
-                        <Badge className="bg-green-100 text-green-800">Resolved</Badge>
-                      ) : (
-                        <Badge className="bg-red-100 text-red-800">Open</Badge>
-                      )}
+                      <Badge 
+                        variant={error.isResolved ? "default" : "destructive"}
+                        className={error.isResolved ? "bg-green-100 text-green-800" : ""}
+                      >
+                        {error.isResolved ? "Resolved" : "Open"}
+                      </Badge>
                     </div>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <span className="font-medium">Client:</span> {error.clientName}
-                      </div>
-                      <div>
-                        <span className="font-medium">Project:</span> {error.projectNumber || "N/A"}
-                      </div>
-                      <div>
-                        <span className="font-medium">Date:</span> {new Date(error.date).toLocaleDateString()}
-                      </div>
-                      <div>
-                        <span className="font-medium">Cost:</span> ${parseFloat(error.costToLsd || '0').toFixed(2)}
-                      </div>
+                    <div>
+                      <h3 className="font-semibold">Order: {error.orderNumber}</h3>
+                      <p className="text-gray-600">{error.description}</p>
+                      <p className="text-sm text-gray-500">
+                        Cost: ${parseFloat(error.costToLsd || '0').toFixed(2)} | 
+                        Rep: {error.orderRep} | 
+                        Production: {error.productionRep}
+                      </p>
                     </div>
-                    
-                    {error.additionalNotes && (
-                      <p className="text-sm text-gray-600 line-clamp-2">{error.additionalNotes}</p>
-                    )}
                   </div>
-                  
                   <div className="flex space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedError(error);
+                        form.reset({
+                          orderNumber: error.orderNumber,
+                          errorType: error.errorType as any,
+                          description: error.description,
+                          responsibleParty: error.responsibleParty as any,
+                          costToLsd: error.costToLsd,
+                          orderRep: error.orderRep,
+                          productionRep: error.productionRep,
+                          isResolved: error.isResolved,
+                        });
+                        setIsCreateModalOpen(true);
+                      }}
+                    >
+                      Edit
+                    </Button>
                     {!error.isResolved && (
                       <Button
                         size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          resolveErrorMutation.mutate(error.id);
-                        }}
+                        onClick={() => resolveErrorMutation.mutate(error.id)}
                         disabled={resolveErrorMutation.isPending}
-                        data-testid={`resolve-error-${error.id}`}
                       >
                         Resolve
                       </Button>
                     )}
                   </div>
                 </div>
-              ))
-            )}
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -720,49 +521,27 @@ function ErrorForm({
 }: { 
   form: any; 
   onSubmit: (data: InsertError) => void; 
-  isLoading: boolean;
-  selectedError: Error | null;
+  isLoading: boolean; 
+  selectedError: Error | null; 
 }) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
-            name="date"
+            name="orderNumber"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Date</FormLabel>
+                <FormLabel>Order Number</FormLabel>
                 <FormControl>
-                  <Input 
-                    type="date" 
-                    {...field} 
-                    value={field.value ? (typeof field.value === 'string' ? field.value.split('T')[0] : new Date(field.value).toISOString().split('T')[0]) : ''} 
-                    onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
-                    data-testid="input-error-date"
-                  />
+                  <Input {...field} placeholder="ORD-2024-001" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="projectNumber"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Project Number</FormLabel>
-                <FormControl>
-                  <Input {...field} data-testid="input-project-number" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
           <FormField
             control={form.control}
             name="errorType"
@@ -771,15 +550,15 @@ function ErrorForm({
                 <FormLabel>Error Type</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
-                    <SelectTrigger data-testid="select-error-type">
+                    <SelectTrigger>
                       <SelectValue placeholder="Select error type" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="pricing">Pricing</SelectItem>
-                    <SelectItem value="in_hands_date">In-hands Date</SelectItem>
-                    <SelectItem value="shipping">Shipping</SelectItem>
-                    <SelectItem value="printing">Printing</SelectItem>
+                    <SelectItem value="pricing">Pricing Error</SelectItem>
+                    <SelectItem value="in_hands_date">In-Hands Date Issue</SelectItem>
+                    <SelectItem value="shipping">Shipping Error</SelectItem>
+                    <SelectItem value="printing">Printing Error</SelectItem>
                     <SelectItem value="artwork_proofing">Artwork/Proofing</SelectItem>
                     <SelectItem value="oos">Out of Stock</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
@@ -789,7 +568,23 @@ function ErrorForm({
               </FormItem>
             )}
           />
+        </div>
 
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Description</FormLabel>
+              <FormControl>
+                <Textarea {...field} placeholder="Describe the error in detail" rows={3} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
             name="responsibleParty"
@@ -798,78 +593,21 @@ function ErrorForm({
                 <FormLabel>Responsible Party</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
-                    <SelectTrigger data-testid="select-responsible-party">
+                    <SelectTrigger>
                       <SelectValue placeholder="Select responsible party" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="customer">Customer</SelectItem>
-                    <SelectItem value="vendor">Vendor</SelectItem>
                     <SelectItem value="lsd">LSD</SelectItem>
+                    <SelectItem value="vendor">Vendor</SelectItem>
+                    <SelectItem value="customer">Customer</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
               </FormItem>
             )}
           />
-        </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="clientName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Client Name</FormLabel>
-                <FormControl>
-                  <Input {...field} data-testid="input-client-name" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="vendorName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Vendor Name</FormLabel>
-                <FormControl>
-                  <Input {...field} data-testid="input-vendor-name" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <FormField
-          control={form.control}
-          name="resolution"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Resolution</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger data-testid="select-resolution">
-                    <SelectValue placeholder="Select resolution" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="refund">Refund</SelectItem>
-                  <SelectItem value="credit_for_future_order">Credit for Future Order</SelectItem>
-                  <SelectItem value="reprint">Reprint</SelectItem>
-                  <SelectItem value="courier_shipping">Courier/Shipping</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="grid grid-cols-3 gap-4">
           <FormField
             control={form.control}
             name="costToLsd"
@@ -877,12 +615,23 @@ function ErrorForm({
               <FormItem>
                 <FormLabel>Cost to LSD</FormLabel>
                 <FormControl>
-                  <Input 
-                    type="number" 
-                    step="0.01" 
-                    {...field} 
-                    data-testid="input-cost-to-lsd"
-                  />
+                  <Input {...field} type="number" min="0" step="0.01" placeholder="0.00" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="orderRep"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Order Rep</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="Sales representative name" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -896,21 +645,7 @@ function ErrorForm({
               <FormItem>
                 <FormLabel>Production Rep</FormLabel>
                 <FormControl>
-                  <Input {...field} data-testid="input-production-rep" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="orderRep"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Order Rep</FormLabel>
-                <FormControl>
-                  <Input {...field} data-testid="input-order-rep" />
+                  <Input {...field} placeholder="Production representative name" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -918,40 +653,8 @@ function ErrorForm({
           />
         </div>
 
-        <FormField
-          control={form.control}
-          name="clientRep"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Client Rep</FormLabel>
-              <FormControl>
-                <Input {...field} data-testid="input-client-rep" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="additionalNotes"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Additional Notes</FormLabel>
-              <FormControl>
-                <Textarea 
-                  className="min-h-[100px]" 
-                  {...field} 
-                  data-testid="textarea-additional-notes"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="flex justify-end space-x-2">
-          <Button type="submit" disabled={isLoading} data-testid="button-save-error">
+        <div className="flex justify-end space-x-2 pt-4">
+          <Button type="submit" disabled={isLoading}>
             {isLoading ? "Saving..." : selectedError ? "Update Error" : "Create Error"}
           </Button>
         </div>
