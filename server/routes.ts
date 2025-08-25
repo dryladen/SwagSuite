@@ -1639,6 +1639,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Team Performance Dashboard Routes
   app.get('/api/dashboard/team-performance', isAuthenticated, async (req, res) => {
     try {
+      // Get error statistics for team performance
+      const errors = await storage.getErrors();
+      const totalErrors = errors.length;
+      const resolvedErrors = errors.filter(e => e.isResolved).length;
+      const unresolvedErrors = totalErrors - resolvedErrors;
+      const totalErrorCost = errors.reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0);
+      const errorResolutionRate = totalErrors > 0 ? Math.round((resolvedErrors / totalErrors) * 100) : 0;
+      
+      // Calculate error metrics by responsible party for team insights
+      const lsdErrors = errors.filter(e => e.responsibleParty === 'lsd');
+      const vendorErrors = errors.filter(e => e.responsibleParty === 'vendor');
+      const customerErrors = errors.filter(e => e.responsibleParty === 'customer');
+
       const teamPerformanceData = {
         teamStats: {
           totalRevenue: 2850000,
@@ -1650,7 +1663,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           customerSatisfaction: 4.7,
           activeDeals: 127,
           newClients: 23,
-          repeatClients: 89
+          repeatClients: 89,
+          // Error tracking metrics
+          totalErrors,
+          resolvedErrors,
+          unresolvedErrors,
+          errorResolutionRate,
+          totalErrorCost,
+          lsdErrors: lsdErrors.length,
+          vendorErrors: vendorErrors.length,
+          customerErrors: customerErrors.length
         },
         salesTeam: [
           {
@@ -1669,6 +1691,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             lastActivity: "2024-01-15T14:30:00Z",
             status: "active",
             trend: "up",
+            // Error tracking metrics for Sarah Johnson
+            errorsReported: errors.filter(e => e.orderRep === 'Sarah Johnson' || e.productionRep === 'Sarah Johnson').length,
+            errorsResolved: errors.filter(e => (e.orderRep === 'Sarah Johnson' || e.productionRep === 'Sarah Johnson') && e.isResolved).length,
+            errorCost: errors.filter(e => e.orderRep === 'Sarah Johnson' || e.productionRep === 'Sarah Johnson').reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0),
             monthlyProgress: [
               { month: "Jan", revenue: 52000, target: 45000 },
               { month: "Feb", revenue: 48000, target: 45000 },
@@ -1694,6 +1720,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             lastActivity: "2024-01-15T16:45:00Z",
             status: "active",
             trend: "up",
+            // Error tracking metrics for Mike Chen
+            errorsReported: errors.filter(e => e.orderRep === 'Mike Chen' || e.productionRep === 'Mike Chen').length,
+            errorsResolved: errors.filter(e => (e.orderRep === 'Mike Chen' || e.productionRep === 'Mike Chen') && e.isResolved).length,
+            errorCost: errors.filter(e => e.orderRep === 'Mike Chen' || e.productionRep === 'Mike Chen').reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0),
             monthlyProgress: [
               { month: "Jan", revenue: 41000, target: 37500 },
               { month: "Feb", revenue: 43000, target: 37500 },
@@ -1705,7 +1735,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           },
           {
             id: 3,
-            name: "Emma Rodriguez",
+            name: "Emily Davis",
             role: "Sales Rep",
             avatar: "/avatars/emma.jpg",
             revenue: 367000,
@@ -1719,6 +1749,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             lastActivity: "2024-01-15T11:20:00Z",
             status: "active",
             trend: "up",
+            // Error tracking metrics for Emily Davis
+            errorsReported: errors.filter(e => e.orderRep === 'Emily Davis' || e.productionRep === 'Emily Davis').length,
+            errorsResolved: errors.filter(e => (e.orderRep === 'Emily Davis' || e.productionRep === 'Emily Davis') && e.isResolved).length,
+            errorCost: errors.filter(e => e.orderRep === 'Emily Davis' || e.productionRep === 'Emily Davis').reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0),
             monthlyProgress: [
               { month: "Jan", revenue: 35000, target: 32000 },
               { month: "Feb", revenue: 37000, target: 32000 },
@@ -1744,6 +1778,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             lastActivity: "2024-01-15T13:15:00Z",
             status: "active",
             trend: "steady",
+            // Error tracking metrics for David Park
+            errorsReported: errors.filter(e => e.orderRep === 'David Park' || e.productionRep === 'David Park').length,
+            errorsResolved: errors.filter(e => (e.orderRep === 'David Park' || e.productionRep === 'David Park') && e.isResolved).length,
+            errorCost: errors.filter(e => e.orderRep === 'David Park' || e.productionRep === 'David Park').reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0),
             monthlyProgress: [
               { month: "Jan", revenue: 28000, target: 27000 },
               { month: "Feb", revenue: 29000, target: 27000 },
@@ -1769,6 +1807,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             lastActivity: "2024-01-15T15:30:00Z",
             status: "active",
             trend: "up",
+            // Error tracking metrics for Lisa Thompson
+            errorsReported: errors.filter(e => e.orderRep === 'Lisa Thompson' || e.productionRep === 'Lisa Thompson').length,
+            errorsResolved: errors.filter(e => (e.orderRep === 'Lisa Thompson' || e.productionRep === 'Lisa Thompson') && e.isResolved).length,
+            errorCost: errors.filter(e => e.orderRep === 'Lisa Thompson' || e.productionRep === 'Lisa Thompson').reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0),
             monthlyProgress: [
               { month: "Jan", revenue: 48000, target: 46000 },
               { month: "Feb", revenue: 52000, target: 46000 },
@@ -1794,6 +1836,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             lastActivity: "2024-01-14T17:20:00Z",
             status: "needs_attention",
             trend: "down",
+            // Error tracking metrics for James Wilson
+            errorsReported: errors.filter(e => e.orderRep === 'James Wilson' || e.productionRep === 'James Wilson').length,
+            errorsResolved: errors.filter(e => (e.orderRep === 'James Wilson' || e.productionRep === 'James Wilson') && e.isResolved).length,
+            errorCost: errors.filter(e => e.orderRep === 'James Wilson' || e.productionRep === 'James Wilson').reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0),
             monthlyProgress: [
               { month: "Jan", revenue: 25000, target: 24000 },
               { month: "Feb", revenue: 23000, target: 24000 },
@@ -1858,6 +1904,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
             trend: "up",
             change: "+18.5%",
             period: "Current"
+          },
+          {
+            metric: "Error Resolution Rate",
+            value: `${errorResolutionRate}%`,
+            target: "95%",
+            achievement: errorResolutionRate / 95 * 100,
+            trend: errorResolutionRate >= 90 ? "up" : "down",
+            change: "+8.2%",
+            period: "This Month"
+          },
+          {
+            metric: "Total Error Cost",
+            value: `$${totalErrorCost.toFixed(0)}`,
+            target: "$500",
+            achievement: totalErrorCost <= 500 ? 100 : (500 / totalErrorCost * 100),
+            trend: totalErrorCost <= 1000 ? "up" : "down",
+            change: "-12.5%",
+            period: "This Month"
+          },
+          {
+            metric: "Open Error Issues",
+            value: `${unresolvedErrors}`,
+            target: "5",
+            achievement: unresolvedErrors <= 5 ? 100 : (5 / unresolvedErrors * 100),
+            trend: unresolvedErrors <= 10 ? "up" : "down",
+            change: "-3",
+            period: "This Month"
           }
         ],
         activityMetrics: {

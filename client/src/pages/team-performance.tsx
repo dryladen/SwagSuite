@@ -20,7 +20,10 @@ import {
   Activity,
   BarChart3,
   Eye,
-  Minus
+  Minus,
+  AlertTriangle,
+  CheckCircle,
+  XCircle
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 
@@ -79,7 +82,7 @@ export default function TeamPerformance() {
       </div>
 
       {/* Team Overview KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -161,14 +164,45 @@ export default function TeamPerformance() {
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Error Resolution Rate</p>
+                <p className="text-2xl font-bold text-gray-900">{teamData?.teamStats?.errorResolutionRate || 0}%</p>
+                <div className="flex items-center mt-1">
+                  {(teamData?.teamStats?.errorResolutionRate || 0) >= 90 ? (
+                    <>
+                      <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
+                      <span className="text-xs text-green-600">+8.2% this month</span>
+                    </>
+                  ) : (
+                    <>
+                      <TrendingDown className="h-3 w-3 text-red-500 mr-1" />
+                      <span className="text-xs text-red-600">-2.1% this month</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <CheckCircle className="h-8 w-8 text-green-500" />
+            </div>
+            <div className="mt-2">
+              <p className="text-xs text-gray-500">
+                {teamData?.teamStats?.resolvedErrors || 0} of {teamData?.teamStats?.totalErrors || 0} resolved
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs defaultValue="team-overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="team-overview">Team Overview</TabsTrigger>
           <TabsTrigger value="individual-performance">Individual Performance</TabsTrigger>
           <TabsTrigger value="kpi-metrics">KPI Metrics</TabsTrigger>
           <TabsTrigger value="product-performance">Product Performance</TabsTrigger>
+          <TabsTrigger value="error-tracking">Error Tracking</TabsTrigger>
         </TabsList>
 
         <TabsContent value="team-overview" className="space-y-6">
@@ -315,6 +349,20 @@ export default function TeamPerformance() {
                       <p className="text-gray-600">New Clients</p>
                       <p className="font-medium">{member.newClients}</p>
                     </div>
+                    <div>
+                      <p className="text-gray-600 flex items-center">
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        Errors Reported
+                      </p>
+                      <p className="font-medium">{member.errorsReported || 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600 flex items-center">
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Error Cost
+                      </p>
+                      <p className="font-medium text-red-600">${(member.errorCost || 0).toFixed(0)}</p>
+                    </div>
                   </div>
 
                   <div>
@@ -414,6 +462,179 @@ export default function TeamPerformance() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="error-tracking" className="space-y-6">
+          {/* Error Tracking Analytics */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <AlertTriangle className="mr-2 h-5 w-5 text-red-500" />
+                  Error Overview
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Total Errors</span>
+                  <span className="font-medium text-red-600">{teamData?.teamStats?.totalErrors || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Resolved</span>
+                  <span className="font-medium text-green-600">{teamData?.teamStats?.resolvedErrors || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Open Issues</span>
+                  <span className="font-medium text-orange-600">{teamData?.teamStats?.unresolvedErrors || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Resolution Rate</span>
+                  <span className="font-medium">{teamData?.teamStats?.errorResolutionRate || 0}%</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <DollarSign className="mr-2 h-5 w-5 text-red-500" />
+                  Error Cost Impact
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Total Cost</span>
+                  <span className="font-medium text-red-600">${(teamData?.teamStats?.totalErrorCost || 0).toFixed(0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Avg Cost/Error</span>
+                  <span className="font-medium">
+                    ${teamData?.teamStats?.totalErrors > 0 ? 
+                      ((teamData?.teamStats?.totalErrorCost || 0) / teamData?.teamStats?.totalErrors).toFixed(0) : 
+                      '0'
+                    }
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">% of Revenue</span>
+                  <span className="font-medium">
+                    {teamData?.teamStats?.totalRevenue > 0 ? 
+                      (((teamData?.teamStats?.totalErrorCost || 0) / teamData?.teamStats?.totalRevenue) * 100).toFixed(2) : 
+                      '0'
+                    }%
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Users className="mr-2 h-5 w-5 text-blue-500" />
+                  Error Distribution
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">LSD Errors</span>
+                  <span className="font-medium">{teamData?.teamStats?.lsdErrors || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Vendor Errors</span>
+                  <span className="font-medium">{teamData?.teamStats?.vendorErrors || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Customer Errors</span>
+                  <span className="font-medium">{teamData?.teamStats?.customerErrors || 0}</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Error Resolution Progress */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Error Resolution Progress</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Overall Resolution Rate</span>
+                    <span>{teamData?.teamStats?.errorResolutionRate || 0}%</span>
+                  </div>
+                  <Progress value={teamData?.teamStats?.errorResolutionRate || 0} className="h-3" />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                  <div className="text-center p-4 bg-green-50 rounded-lg">
+                    <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                    <p className="text-lg font-bold text-green-700">{teamData?.teamStats?.resolvedErrors || 0}</p>
+                    <p className="text-sm text-green-600">Resolved</p>
+                  </div>
+                  <div className="text-center p-4 bg-orange-50 rounded-lg">
+                    <Clock className="h-8 w-8 text-orange-500 mx-auto mb-2" />
+                    <p className="text-lg font-bold text-orange-700">{teamData?.teamStats?.unresolvedErrors || 0}</p>
+                    <p className="text-sm text-orange-600">In Progress</p>
+                  </div>
+                  <div className="text-center p-4 bg-red-50 rounded-lg">
+                    <XCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+                    <p className="text-lg font-bold text-red-700">${(teamData?.teamStats?.totalErrorCost || 0).toFixed(0)}</p>
+                    <p className="text-sm text-red-600">Total Cost</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Team Error Performance */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Team Error Performance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {teamData?.salesTeam?.map((member: any) => (
+                  <div key={member.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-medium text-blue-800">
+                          {member.name.split(' ').map((n: string) => n[0]).join('')}
+                        </span>
+                      </div>
+                      <div>
+                        <h4 className="font-medium">{member.name}</h4>
+                        <p className="text-sm text-gray-600">{member.role}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-6 text-sm">
+                      <div className="text-center">
+                        <p className="font-medium">{member.errorsReported || 0}</p>
+                        <p className="text-gray-600">Reported</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="font-medium text-green-600">{member.errorsResolved || 0}</p>
+                        <p className="text-gray-600">Resolved</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="font-medium text-red-600">${(member.errorCost || 0).toFixed(0)}</p>
+                        <p className="text-gray-600">Cost</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="font-medium">
+                          {member.errorsReported > 0 ? 
+                            Math.round((member.errorsResolved || 0) / member.errorsReported * 100) : 
+                            0
+                          }%
+                        </p>
+                        <p className="text-gray-600">Rate</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
