@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import lsdLogoPath from "@assets/Circle only_1756152840165.png";
 
 interface Position {
@@ -84,6 +85,9 @@ export function PacmanGame({ isOpen, onClose }: PacmanGameProps) {
   const [dotsEaten, setDotsEaten] = useState(0);
   const [powerMode, setPowerMode] = useState(false);
   const [powerModeTimer, setPowerModeTimer] = useState(0);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [playerName, setPlayerName] = useState('');
+  const [leaderboard, setLeaderboard] = useState<Array<{name: string, score: number}>>([]);
   
   const totalDots = maze.flat().filter(cell => cell === 2 || cell === 3).length;
 
@@ -112,6 +116,8 @@ export function PacmanGame({ isOpen, onClose }: PacmanGameProps) {
       setDotsEaten(0);
       setPowerMode(false);
       setPowerModeTimer(0);
+      setShowLeaderboard(false);
+      setPlayerName('');
     }
   }, [isOpen]);
 
@@ -147,21 +153,30 @@ export function PacmanGame({ isOpen, onClose }: PacmanGameProps) {
     }
   }, [pacman, enemies, lives, gameState, powerMode]);
 
-  // Check for level completion
+  // Check for level completion (only when all dots are cleared)
   useEffect(() => {
-    if (dotsEaten >= totalDots && gameState === 'playing') {
-      if (level === 1) {
-        setLevel(2);
-        setMaze(MAZE_LEVEL_2);
-        setPacman({ x: 1, y: 1 });
-        setDotsEaten(0);
-        setGameState('levelComplete');
-        setTimeout(() => setGameState('playing'), 2000);
-      } else {
-        setGameState('allComplete');
+    if (gameState === 'playing') {
+      const remainingDots = maze.flat().filter(cell => cell === 2 || cell === 3).length;
+      
+      if (remainingDots === 0) {
+        if (level === 1) {
+          setLevel(2);
+          setMaze(MAZE_LEVEL_2);
+          setDotsEaten(0);
+          setPacman({ x: 1, y: 1 });
+          setGameState('levelComplete');
+          
+          setTimeout(() => {
+            setGameState('playing');
+          }, 2000);
+        } else {
+          // Completed both levels - show leaderboard
+          setGameState('allComplete');
+          loadLeaderboard();
+        }
       }
     }
-  }, [dotsEaten, totalDots, level, gameState]);
+  }, [maze, gameState, level]);
 
   // Move enemies
   useEffect(() => {
@@ -294,6 +309,28 @@ export function PacmanGame({ isOpen, onClose }: PacmanGameProps) {
     return () => clearInterval(interval);
   }, [powerMode, gameState]);
 
+  // Leaderboard functions
+  const loadLeaderboard = () => {
+    const saved = localStorage.getItem('swagman-leaderboard');
+    if (saved) {
+      setLeaderboard(JSON.parse(saved));
+    }
+    setShowLeaderboard(true);
+  };
+
+  const saveScore = () => {
+    if (!playerName.trim()) return;
+    
+    const newEntry = { name: playerName.trim(), score };
+    const updated = [...leaderboard, newEntry]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10); // Keep top 10
+    
+    setLeaderboard(updated);
+    localStorage.setItem('swagman-leaderboard', JSON.stringify(updated));
+    setPlayerName('');
+  };
+
   useEffect(() => {
     if (isOpen) {
       window.addEventListener('keydown', handleKeyPress);
@@ -305,7 +342,7 @@ export function PacmanGame({ isOpen, onClose }: PacmanGameProps) {
     if (gameState === 'gameOver') {
       return "Game Over! Time to get back to work! 👔";
     }
-    if (gameState === 'allComplete') {
+    if (gameState === 'allComplete' && !showLeaderboard) {
       return "Congratulations! You completed both levels! Now back to work! 💼";
     }
     if (gameState === 'levelComplete') {
@@ -423,7 +460,7 @@ export function PacmanGame({ isOpen, onClose }: PacmanGameProps) {
             ))}
           </div>
 
-          {gameState !== 'playing' && (
+          {gameState !== 'playing' && !showLeaderboard && (
             <div className="space-y-2">
               <p className="text-lg font-semibold">{getGameMessage()}</p>
               <Button onClick={onClose} data-testid="back-to-work-button">
@@ -432,11 +469,74 @@ export function PacmanGame({ isOpen, onClose }: PacmanGameProps) {
             </div>
           )}
 
+          {showLeaderboard && (
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold text-center">🏆 Hall of Fame 🏆</h3>
+              <p className="text-center text-sm">You completed both levels with a score of <span className="font-bold text-yellow-500">{score}</span>!</p>
+              
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    placeholder="Enter your name"
+                    value={playerName}
+                    onChange={(e) => setPlayerName(e.target.value)}
+                    maxLength={20}
+                    data-testid="player-name-input"
+                    onKeyPress={(e) => e.key === 'Enter' && saveScore()}
+                  />
+                  <Button 
+                    onClick={saveScore} 
+                    disabled={!playerName.trim()}
+                    data-testid="save-score-button"
+                  >
+                    Save
+                  </Button>
+                </div>
+
+                <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 max-h-40 overflow-y-auto">
+                  <h4 className="font-semibold mb-2 text-center">Top Scores</h4>
+                  {leaderboard.length > 0 ? (
+                    <div className="space-y-1">
+                      {leaderboard.map((entry, index) => (
+                        <div 
+                          key={index} 
+                          className="flex justify-between items-center text-sm py-1"
+                          data-testid={`leaderboard-entry-${index}`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className="w-6 text-center font-bold">
+                              {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`}
+                            </span>
+                            <span className="truncate max-w-32">{entry.name}</span>
+                          </span>
+                          <span className="font-mono text-yellow-600 dark:text-yellow-400">
+                            {entry.score}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-center text-gray-500 text-sm">No scores yet! Be the first!</p>
+                  )}
+                </div>
+
+                <Button 
+                  onClick={onClose} 
+                  className="w-full"
+                  data-testid="close-leaderboard-button"
+                >
+                  Back to Work! 💼
+                </Button>
+              </div>
+            </div>
+          )}
+
           {gameState === 'playing' && (
             <div className="text-xs text-gray-500 space-y-1">
               <p>Use arrow keys or WASD to move</p>
               <p>Avoid the t-shirts! Collect all dots to advance!</p>
-              <p>Dots left: {totalDots - dotsEaten}</p>
+              <p>Dots left: {maze.flat().filter(cell => cell === 2 || cell === 3).length}</p>
             </div>
           )}
         </div>
