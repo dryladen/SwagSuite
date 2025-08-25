@@ -364,6 +364,7 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   }),
   items: many(orderItems),
   artworkFiles: many(artworkFiles),
+  errors: many(errors),
 }));
 
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
@@ -556,6 +557,77 @@ export const newsTracking = pgTable("news_tracking", {
   alertsSent: boolean("alerts_sent").default(false),
   publishedAt: timestamp("published_at"),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Error types and resolution enums
+export const errorTypeEnum = pgEnum("error_type", [
+  "pricing",
+  "in_hands_date",
+  "shipping",
+  "printing",
+  "artwork_proofing",
+  "oos", // out of stock
+  "other"
+]);
+
+export const responsiblePartyEnum = pgEnum("responsible_party", [
+  "customer",
+  "vendor",
+  "lsd" // Liquid Screen Design
+]);
+
+export const resolutionTypeEnum = pgEnum("resolution_type", [
+  "refund",
+  "credit_for_future_order",
+  "reprint",
+  "courier_shipping",
+  "other"
+]);
+
+// Errors tracking table
+export const errors = pgTable("errors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").references(() => orders.id),
+  date: timestamp("date").notNull().defaultNow(),
+  projectNumber: varchar("project_number"), // Could be different from order number
+  errorType: errorTypeEnum("error_type").notNull(),
+  clientName: varchar("client_name").notNull(),
+  vendorName: varchar("vendor_name"),
+  responsibleParty: responsiblePartyEnum("responsible_party").notNull(),
+  resolution: resolutionTypeEnum("resolution").notNull(),
+  costToLsd: decimal("cost_to_lsd", { precision: 12, scale: 2 }).default("0"),
+  productionRep: varchar("production_rep"),
+  orderRep: varchar("order_rep"),
+  clientRep: varchar("client_rep"),
+  additionalNotes: text("additional_notes"),
+  isResolved: boolean("is_resolved").default(false),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: varchar("resolved_by").references(() => users.id),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const errorsRelations = relations(errors, ({ one }) => ({
+  order: one(orders, {
+    fields: [errors.orderId],
+    references: [orders.id],
+  }),
+  createdByUser: one(users, {
+    fields: [errors.createdBy],
+    references: [users.id],
+  }),
+  resolvedByUser: one(users, {
+    fields: [errors.resolvedBy],
+    references: [users.id],
+  }),
+}));
+
+export const insertErrorSchema = createInsertSchema(errors).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  resolvedAt: true,
 });
 
 // KPI Tracking
@@ -1129,6 +1201,8 @@ export type ArtworkFile = typeof artworkFiles.$inferSelect;
 export type InsertArtworkFile = z.infer<typeof insertArtworkFileSchema>;
 export type Activity = typeof activities.$inferSelect;
 export type InsertActivity = z.infer<typeof insertActivitySchema>;
+export type Error = typeof errors.$inferSelect;
+export type InsertError = z.infer<typeof insertErrorSchema>;
 
 export type DataUpload = typeof dataUploads.$inferSelect;
 export type InsertWeeklyReportConfig = typeof weeklyReportConfig.$inferInsert;

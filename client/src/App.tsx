@@ -25,6 +25,7 @@ import ArtworkPage from "@/pages/artwork";
 import MockupBuilderPage from "@/pages/mockup-builder";
 import AIPresentationBuilder from "@/pages/ai-presentation-builder";
 import SsActivewearPage from "@/pages/ss-activewear";
+import ErrorsPage from "@/pages/errors";
 import NotFound from "@/pages/not-found";
 import { SlackSidebar } from "@/components/SlackSidebar";
 import { useState } from 'react';
@@ -87,6 +88,8 @@ function Router() {
             <Route path="/sequence-builder" component={SequenceBuilder} />
             <Route path="/team-performance" component={TeamPerformance} />
             <Route path="/project/:orderId" component={ProjectPage} />
+            <Route path="/ss-activewear" component={SsActivewearPage} />
+            <Route path="/errors" component={ErrorsPage} />
             <Route path="/settings" component={Settings} />
             <Route component={NotFound} />
           </Switch>

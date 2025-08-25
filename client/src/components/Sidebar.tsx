@@ -14,7 +14,8 @@ import {
   Wand2,
   Presentation,
   Package,
-  Zap
+  Zap,
+  AlertCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,7 @@ const navigation = [
   { name: "CRM", href: "/crm", icon: Users },
   { name: "Orders", href: "/orders", icon: ShoppingCart },
   { name: "Production Report", href: "/production-report", icon: Factory },
+  { name: "Errors", href: "/errors", icon: AlertCircle },
   { name: "Products", href: "/products", icon: Box },
   { name: "Suppliers", href: "/suppliers", icon: Truck },
   { name: "Artwork", href: "/artwork", icon: Palette },

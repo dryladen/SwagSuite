@@ -26,6 +26,7 @@ import {
   sequenceStepExecutions,
   sequenceTemplates,
   sequenceAnalytics,
+  errors,
   type User,
   type UpsertUser,
   type Company,
@@ -80,6 +81,8 @@ import {
   type InsertSequenceTemplate,
   type SequenceAnalytics,
   type InsertSequenceAnalytics,
+  type Error,
+  type InsertError,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, like, and, gte, lte, sql, or, ilike } from "drizzle-orm";
@@ -242,6 +245,25 @@ export interface IStorage {
   // Sequence Analytics operations
   getSequenceAnalytics(sequenceId: string): Promise<SequenceAnalytics[]>;
   createSequenceAnalytics(analytics: InsertSequenceAnalytics): Promise<SequenceAnalytics>;
+
+  // Error tracking operations
+  getErrors(): Promise<Error[]>;
+  getError(id: string): Promise<Error | undefined>;
+  createError(error: InsertError): Promise<Error>;
+  updateError(id: string, error: Partial<InsertError>): Promise<Error>;
+  deleteError(id: string): Promise<void>;
+  getErrorsByOrder(orderId: string): Promise<Error[]>;
+  getErrorsByType(errorType: string): Promise<Error[]>;
+  getErrorsByDateRange(startDate: Date, endDate: Date): Promise<Error[]>;
+  resolveError(id: string, resolvedBy: string): Promise<Error>;
+  getErrorStatistics(): Promise<{
+    totalErrors: number;
+    resolvedErrors: number;
+    unresolvedErrors: number;
+    costToLsd: number;
+    errorsByType: { [key: string]: number };
+    errorsByResponsibleParty: { [key: string]: number };
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1815,6 +1837,105 @@ export class DatabaseStorage implements IStorage {
       .values(analytics)
       .returning();
     return newAnalytics;
+  }
+
+  // Error tracking operations
+  async getErrors(): Promise<Error[]> {
+    return await db.select().from(errors).orderBy(desc(errors.date));
+  }
+
+  async getError(id: string): Promise<Error | undefined> {
+    const [error] = await db.select().from(errors).where(eq(errors.id, id));
+    return error;
+  }
+
+  async createError(error: InsertError): Promise<Error> {
+    const [newError] = await db.insert(errors)
+      .values({
+        ...error,
+        date: error.date || new Date(),
+      })
+      .returning();
+    return newError;
+  }
+
+  async updateError(id: string, error: Partial<InsertError>): Promise<Error> {
+    const [updatedError] = await db.update(errors)
+      .set({ ...error, updatedAt: new Date() })
+      .where(eq(errors.id, id))
+      .returning();
+    return updatedError;
+  }
+
+  async deleteError(id: string): Promise<void> {
+    await db.delete(errors).where(eq(errors.id, id));
+  }
+
+  async getErrorsByOrder(orderId: string): Promise<Error[]> {
+    return await db.select().from(errors)
+      .where(eq(errors.orderId, orderId))
+      .orderBy(desc(errors.date));
+  }
+
+  async getErrorsByType(errorType: string): Promise<Error[]> {
+    return await db.select().from(errors)
+      .where(eq(errors.errorType, errorType))
+      .orderBy(desc(errors.date));
+  }
+
+  async getErrorsByDateRange(startDate: Date, endDate: Date): Promise<Error[]> {
+    return await db.select().from(errors)
+      .where(and(
+        gte(errors.date, startDate),
+        lte(errors.date, endDate)
+      ))
+      .orderBy(desc(errors.date));
+  }
+
+  async resolveError(id: string, resolvedBy: string): Promise<Error> {
+    const [resolvedError] = await db.update(errors)
+      .set({
+        isResolved: true,
+        resolvedAt: new Date(),
+        resolvedBy: resolvedBy,
+        updatedAt: new Date(),
+      })
+      .where(eq(errors.id, id))
+      .returning();
+    return resolvedError;
+  }
+
+  async getErrorStatistics(): Promise<{
+    totalErrors: number;
+    resolvedErrors: number;
+    unresolvedErrors: number;
+    costToLsd: number;
+    errorsByType: { [key: string]: number };
+    errorsByResponsibleParty: { [key: string]: number };
+  }> {
+    const allErrors = await this.getErrors();
+    
+    const totalErrors = allErrors.length;
+    const resolvedErrors = allErrors.filter(e => e.isResolved).length;
+    const unresolvedErrors = totalErrors - resolvedErrors;
+    const costToLsd = allErrors.reduce((sum, e) => sum + parseFloat(e.costToLsd || '0'), 0);
+    
+    const errorsByType: { [key: string]: number } = {};
+    const errorsByResponsibleParty: { [key: string]: number } = {};
+    
+    allErrors.forEach(error => {
+      errorsByType[error.errorType] = (errorsByType[error.errorType] || 0) + 1;
+      errorsByResponsibleParty[error.responsibleParty] = (errorsByResponsibleParty[error.responsibleParty] || 0) + 1;
+    });
+    
+    return {
+      totalErrors,
+      resolvedErrors,
+      unresolvedErrors,
+      costToLsd,
+      errorsByType,
+      errorsByResponsibleParty,
+    };
   }
 }
 

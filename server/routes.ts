@@ -20,7 +20,8 @@ import {
   insertSequenceSchema,
   insertSequenceStepSchema,
   insertSequenceEnrollmentSchema,
-  insertSequenceAnalyticsSchema
+  insertSequenceAnalyticsSchema,
+  insertErrorSchema
 } from "@shared/schema";
 import Anthropic from '@anthropic-ai/sdk';
 import { sendSlackMessage } from "../shared/slack";
@@ -4583,6 +4584,159 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching team members:", error);
       res.status(500).json({ error: "Failed to fetch team members" });
+    }
+  });
+
+  // Error tracking routes
+  app.get('/api/errors', isAuthenticated, async (req, res) => {
+    try {
+      const errors = await storage.getErrors();
+      res.json(errors);
+    } catch (error) {
+      console.error("Error fetching errors:", error);
+      res.status(500).json({ message: "Failed to fetch errors" });
+    }
+  });
+
+  app.get('/api/errors/statistics', isAuthenticated, async (req, res) => {
+    try {
+      const statistics = await storage.getErrorStatistics();
+      res.json(statistics);
+    } catch (error) {
+      console.error("Error fetching error statistics:", error);
+      res.status(500).json({ message: "Failed to fetch error statistics" });
+    }
+  });
+
+  app.get('/api/errors/by-order/:orderId', isAuthenticated, async (req, res) => {
+    try {
+      const errors = await storage.getErrorsByOrder(req.params.orderId);
+      res.json(errors);
+    } catch (error) {
+      console.error("Error fetching errors by order:", error);
+      res.status(500).json({ message: "Failed to fetch errors by order" });
+    }
+  });
+
+  app.get('/api/errors/by-type/:errorType', isAuthenticated, async (req, res) => {
+    try {
+      const errors = await storage.getErrorsByType(req.params.errorType);
+      res.json(errors);
+    } catch (error) {
+      console.error("Error fetching errors by type:", error);
+      res.status(500).json({ message: "Failed to fetch errors by type" });
+    }
+  });
+
+  app.get('/api/errors/by-date-range', isAuthenticated, async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: "Start date and end date are required" });
+      }
+      const errors = await storage.getErrorsByDateRange(new Date(startDate as string), new Date(endDate as string));
+      res.json(errors);
+    } catch (error) {
+      console.error("Error fetching errors by date range:", error);
+      res.status(500).json({ message: "Failed to fetch errors by date range" });
+    }
+  });
+
+  app.get('/api/errors/:id', isAuthenticated, async (req, res) => {
+    try {
+      const error = await storage.getError(req.params.id);
+      if (!error) {
+        return res.status(404).json({ message: "Error not found" });
+      }
+      res.json(error);
+    } catch (error) {
+      console.error("Error fetching error:", error);
+      res.status(500).json({ message: "Failed to fetch error" });
+    }
+  });
+
+  app.post('/api/errors', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertErrorSchema.parse({
+        ...req.body,
+        createdBy: (req.user as any)?.claims?.sub,
+      });
+      const newError = await storage.createError(validatedData);
+      
+      // Log activity
+      await storage.createActivity({
+        userId: (req.user as any)?.claims?.sub,
+        entityType: 'error',
+        entityId: newError.id,
+        action: 'created',
+        description: `Created error: ${newError.errorType} for client ${newError.clientName}`,
+      });
+      
+      res.status(201).json(newError);
+    } catch (error) {
+      console.error("Error creating error:", error);
+      res.status(500).json({ message: "Failed to create error" });
+    }
+  });
+
+  app.put('/api/errors/:id', isAuthenticated, async (req, res) => {
+    try {
+      const validatedData = insertErrorSchema.partial().parse(req.body);
+      const updatedError = await storage.updateError(req.params.id, validatedData);
+      
+      // Log activity
+      await storage.createActivity({
+        userId: (req.user as any)?.claims?.sub,
+        entityType: 'error',
+        entityId: updatedError.id,
+        action: 'updated',
+        description: `Updated error: ${updatedError.errorType}`,
+      });
+      
+      res.json(updatedError);
+    } catch (error) {
+      console.error("Error updating error:", error);
+      res.status(500).json({ message: "Failed to update error" });
+    }
+  });
+
+  app.post('/api/errors/:id/resolve', isAuthenticated, async (req, res) => {
+    try {
+      const resolvedError = await storage.resolveError(req.params.id, (req.user as any)?.claims?.sub);
+      
+      // Log activity
+      await storage.createActivity({
+        userId: (req.user as any)?.claims?.sub,
+        entityType: 'error',
+        entityId: resolvedError.id,
+        action: 'resolved',
+        description: `Resolved error: ${resolvedError.errorType}`,
+      });
+      
+      res.json(resolvedError);
+    } catch (error) {
+      console.error("Error resolving error:", error);
+      res.status(500).json({ message: "Failed to resolve error" });
+    }
+  });
+
+  app.delete('/api/errors/:id', isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteError(req.params.id);
+      
+      // Log activity
+      await storage.createActivity({
+        userId: (req.user as any)?.claims?.sub,
+        entityType: 'error',
+        entityId: req.params.id,
+        action: 'deleted',
+        description: `Deleted error`,
+      });
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting error:", error);
+      res.status(500).json({ message: "Failed to delete error" });
     }
   });
 
