@@ -4813,6 +4813,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Newsletter API routes
+  app.get("/api/newsletter/subscribers", isAuthenticated, async (req, res) => {
+    try {
+      const subscribers = await storage.getNewsletterSubscribers();
+      res.json(subscribers);
+    } catch (error) {
+      console.error("Error fetching newsletter subscribers:", error);
+      res.status(500).json({ message: "Failed to fetch newsletter subscribers" });
+    }
+  });
+
+  app.post("/api/newsletter/subscribers", isAuthenticated, async (req, res) => {
+    try {
+      const subscriber = await storage.createNewsletterSubscriber(req.body);
+      res.json(subscriber);
+    } catch (error) {
+      console.error("Error creating newsletter subscriber:", error);
+      res.status(500).json({ message: "Failed to create newsletter subscriber" });
+    }
+  });
+
+  app.get("/api/newsletter/campaigns", isAuthenticated, async (req, res) => {
+    try {
+      const campaigns = await storage.getNewsletterCampaigns();
+      res.json(campaigns);
+    } catch (error) {
+      console.error("Error fetching newsletter campaigns:", error);
+      res.status(500).json({ message: "Failed to fetch newsletter campaigns" });
+    }
+  });
+
+  app.post("/api/newsletter/campaigns", isAuthenticated, async (req, res) => {
+    try {
+      const campaign = await storage.createNewsletterCampaign(req.body);
+      res.json(campaign);
+    } catch (error) {
+      console.error("Error creating newsletter campaign:", error);
+      res.status(500).json({ message: "Failed to create newsletter campaign" });
+    }
+  });
+
+  app.get("/api/newsletter/templates", isAuthenticated, async (req, res) => {
+    try {
+      const templates = await storage.getNewsletterTemplates();
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching newsletter templates:", error);
+      res.status(500).json({ message: "Failed to fetch newsletter templates" });
+    }
+  });
+
+  app.post("/api/newsletter/templates", isAuthenticated, async (req, res) => {
+    try {
+      const template = await storage.createNewsletterTemplate(req.body);
+      res.json(template);
+    } catch (error) {
+      console.error("Error creating newsletter template:", error);
+      res.status(500).json({ message: "Failed to create newsletter template" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

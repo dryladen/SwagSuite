@@ -19,6 +19,7 @@ import Reports from "@/pages/reports";
 import KnowledgeBase from "@/pages/knowledge-base";
 import Settings from "@/pages/settings";
 import SequenceBuilder from "@/pages/sequence-builder";
+import Newsletter from "@/pages/newsletter";
 import TeamPerformance from "@/pages/team-performance";
 import ProjectPage from "@/pages/project";
 import ArtworkPage from "@/pages/artwork";
@@ -86,6 +87,7 @@ function Router() {
             <Route path="/reports" component={Reports} />
             <Route path="/knowledge-base" component={KnowledgeBase} />
             <Route path="/sequence-builder" component={SequenceBuilder} />
+            <Route path="/newsletter" component={Newsletter} />
             <Route path="/team-performance" component={TeamPerformance} />
             <Route path="/project/:orderId" component={ProjectPage} />
             <Route path="/ss-activewear" component={SsActivewearPage} />
