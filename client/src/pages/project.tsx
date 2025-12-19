@@ -135,7 +135,7 @@ export default function ProjectPage() {
 
   const handleCommentSubmit = () => {
     if (!newComment.trim()) return;
-    
+
     const mentionedUserIds = selectedMentions.map(member => member.id);
     addActivityMutation.mutate({
       content: newComment,
@@ -150,7 +150,7 @@ export default function ProjectPage() {
     // Check for @ mentions
     const lastAtIndex = value.lastIndexOf("@");
     const lastSpaceIndex = value.lastIndexOf(" ");
-    
+
     if (lastAtIndex > lastSpaceIndex && lastAtIndex !== -1) {
       const query = value.substring(lastAtIndex + 1);
       setMentionQuery(query);
@@ -164,7 +164,7 @@ export default function ProjectPage() {
     const lastAtIndex = newComment.lastIndexOf("@");
     const beforeMention = newComment.substring(0, lastAtIndex);
     const afterMention = `@${member.firstName} ${member.lastName} `;
-    
+
     setNewComment(beforeMention + afterMention);
     setSelectedMentions([...selectedMentions, member]);
     setShowMentionSuggestions(false);
@@ -220,8 +220,8 @@ export default function ProjectPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="sm"
             onClick={() => setLocation('/orders')}
             data-testid="button-back-orders"
@@ -256,7 +256,7 @@ export default function ProjectPage() {
             <CardContent className="space-y-4">
               <div>
                 <p className="text-sm text-gray-500">Order Value</p>
-                <p className="font-semibold">${order.orderValue.toLocaleString()}</p>
+                <p className="font-semibold">${order.orderValue}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Assigned To</p>
@@ -330,7 +330,7 @@ export default function ProjectPage() {
                         className="min-h-[100px] resize-none"
                         data-testid="textarea-new-comment"
                       />
-                      
+
                       {/* Mention Suggestions */}
                       {showMentionSuggestions && filteredTeamMembers.length > 0 && (
                         <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-md shadow-lg z-10 max-h-40 overflow-y-auto">
@@ -348,7 +348,7 @@ export default function ProjectPage() {
                         </div>
                       )}
                     </div>
-                    
+
                     <div className="flex justify-between items-center">
                       <div className="flex flex-wrap gap-2">
                         {selectedMentions.map((mention, index) => (
@@ -357,7 +357,7 @@ export default function ProjectPage() {
                           </Badge>
                         ))}
                       </div>
-                      <Button 
+                      <Button
                         onClick={handleCommentSubmit}
                         disabled={!newComment.trim() || addActivityMutation.isPending}
                         size="sm"
@@ -377,7 +377,7 @@ export default function ProjectPage() {
                   <Activity className="w-5 h-5" />
                   Project Timeline
                 </h3>
-                
+
                 {activitiesLoading ? (
                   <div className="space-y-3">
                     {[1, 2, 3].map((i) => (
@@ -396,7 +396,7 @@ export default function ProjectPage() {
                     {(activities as ProjectActivity[]).map((activity: ProjectActivity) => {
                       const IconComponent = ActivityTypeIcons[activity.activityType];
                       const colorClass = ActivityTypeColors[activity.activityType];
-                      
+
                       return (
                         <Card key={activity.id} className="relative" data-testid={`activity-${activity.id}`}>
                           <CardContent className="p-4">
@@ -404,11 +404,11 @@ export default function ProjectPage() {
                               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${colorClass} flex-shrink-0`}>
                                 <IconComponent className="w-4 h-4" />
                               </div>
-                              
+
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-start justify-between">
                                   <div className="flex items-center gap-2 mb-1">
-                                    <UserAvatar 
+                                    <UserAvatar
                                       name={`${activity.user.firstName} ${activity.user.lastName}`}
                                       size="sm"
                                     />
@@ -424,11 +424,11 @@ export default function ProjectPage() {
                                     {format(new Date(activity.createdAt), 'MMM dd, h:mm a')}
                                   </span>
                                 </div>
-                                
+
                                 <p className="text-sm text-gray-700 mt-1">
                                   {formatActivityContent(activity)}
                                 </p>
-                                
+
                                 {activity.mentionedUsers && activity.mentionedUsers.length > 0 && (
                                   <div className="flex items-center gap-1 mt-2">
                                     <AtSign className="w-3 h-3 text-gray-400" />

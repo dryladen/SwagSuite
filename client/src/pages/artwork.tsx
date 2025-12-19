@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { Plus, MoreHorizontal, Search, Filter, Calendar, User, Building, Package, Paperclip, MessageSquare, CheckSquare, Upload, Image, X } from "lucide-react";
@@ -10,15 +10,15 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/UserAvatar";
-import { 
-  Form, 
-  FormControl, 
-  FormField, 
-  FormItem, 
-  FormLabel, 
-  FormMessage 
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage
 } from "@/components/ui/form";
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -69,8 +69,8 @@ export default function ArtworkPage() {
   const [editingCard, setEditingCard] = useState<any>(null);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [editUploadedFiles, setEditUploadedFiles] = useState<File[]>([]);
-  const [filePreviews, setFilePreviews] = useState<{[key: string]: string}>({});
-  const [editFilePreviews, setEditFilePreviews] = useState<{[key: string]: string}>({});
+  const [filePreviews, setFilePreviews] = useState<{ [key: string]: string }>({});
+  const [editFilePreviews, setEditFilePreviews] = useState<{ [key: string]: string }>({});
   const [existingAttachments, setExistingAttachments] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
@@ -150,15 +150,15 @@ export default function ArtworkPage() {
     mutationFn: async (cardData: CreateCardFormData) => {
       console.log("Creating card with data:", cardData);
       console.log("Selected column ID:", selectedColumnId);
-      
+
       const requestData = {
         ...cardData,
         columnId: selectedColumnId,
         position: (cards as any[]).filter((card: any) => card.columnId === selectedColumnId).length + 1,
       };
-      
+
       console.log("Full request data:", requestData);
-      
+
       return apiRequest("POST", "/api/artwork/cards", requestData);
     },
     onSuccess: (data) => {
@@ -205,7 +205,7 @@ export default function ArtworkPage() {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     const allowedTypes = ['.ai', '.eps', '.jpeg', '.jpg', '.png', '.pdf'];
-    
+
     const validFiles = files.filter(file => {
       const extension = '.' + file.name.split('.').pop()?.toLowerCase();
       return allowedTypes.includes(extension);
@@ -241,7 +241,7 @@ export default function ArtworkPage() {
   const handleEditFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     const allowedTypes = ['.ai', '.eps', '.jpeg', '.jpg', '.png', '.pdf'];
-    
+
     const validFiles = files.filter(file => {
       const extension = '.' + file.name.split('.').pop()?.toLowerCase();
       return allowedTypes.includes(extension);
@@ -285,12 +285,12 @@ export default function ArtworkPage() {
   const onCreateCard = (data: CreateCardFormData) => {
     console.log("Form submitted with data:", data);
     console.log("Selected column:", selectedColumnId);
-    
+
     if (!selectedColumnId) {
       console.error("No column selected!");
       return;
     }
-    
+
     // Include uploaded files in the card data as an array (will be stored as jsonb)
     const attachmentsData = uploadedFiles.map(file => ({
       id: Math.random().toString(36).substr(2, 9),
@@ -299,7 +299,7 @@ export default function ArtworkPage() {
       fileType: file.type,
       fileSize: file.size,
     }));
-    
+
     const cardData = {
       ...data,
       attachments: attachmentsData,
@@ -307,10 +307,10 @@ export default function ArtworkPage() {
       checklist: [],
       comments: [],
     };
-    
+
     console.log("Submitting card data:", cardData);
     createCardMutation.mutate(cardData);
-    
+
     // Reset file upload state
     setUploadedFiles([]);
     setFilePreviews({});
@@ -330,9 +330,9 @@ export default function ArtworkPage() {
         fileType: file.type,
         fileSize: file.size
       }));
-      
+
       const allAttachments = [...existingAttachments, ...newAttachments];
-      
+
       updateCardMutation.mutate({
         cardId: editingCard.id,
         data: {
@@ -354,13 +354,13 @@ export default function ArtworkPage() {
       priority: card.priority || "medium",
       dueDate: card.dueDate ? new Date(card.dueDate).toISOString().split('T')[0] : "",
     });
-    
+
     // Handle existing attachments
     const attachments = safeJsonParse(card.attachments, []);
     setExistingAttachments(attachments);
     setEditUploadedFiles([]);
     setEditFilePreviews({});
-    
+
     setShowEditCardDialog(true);
   };
 
@@ -390,9 +390,11 @@ export default function ArtworkPage() {
   };
 
   // Initialize columns if empty
-  if ((columns as any[]).length === 0 && !columnsLoading) {
-    initializeColumnsMutation.mutate();
-  }
+  useEffect(() => {
+    if ((columns as any[]).length === 0 && !columnsLoading) {
+      initializeColumnsMutation.mutate();
+    }
+  }, [(columns as any[]).length, columnsLoading]);
 
   if (columnsLoading || cardsLoading) {
     return (
@@ -421,87 +423,87 @@ export default function ArtworkPage() {
 
   return (
     <div className="p-6 bg-gradient-to-br from-blue-50 via-white to-purple-50 min-h-full">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Artwork Management</h1>
-            <p className="text-gray-600 mt-1">Kanban-style workflow for artwork projects</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                placeholder="Search artwork cards..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 w-80"
-              />
-            </div>
-            <Button variant="outline" size="sm">
-              <Filter className="h-4 w-4 mr-2" />
-              Filter
-            </Button>
-            <Dialog open={showNewColumnDialog} onOpenChange={setShowNewColumnDialog}>
-              <DialogTrigger asChild>
-                <Button size="sm">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Column
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create New Column</DialogTitle>
-                  <DialogDescription>
-                    Add a new column to your artwork board
-                  </DialogDescription>
-                </DialogHeader>
-                <Form {...columnForm}>
-                  <form onSubmit={columnForm.handleSubmit(onCreateColumn)} className="space-y-4">
-                    <FormField
-                      control={columnForm.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Column Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Enter column name" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={columnForm.control}
-                      name="color"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Color</FormLabel>
-                          <FormControl>
-                            <Input type="color" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="flex justify-end gap-2">
-                      <Button type="button" variant="outline" onClick={() => setShowNewColumnDialog(false)}>
-                        Cancel
-                      </Button>
-                      <Button type="submit" disabled={createColumnMutation.isPending}>
-                        Create Column
-                      </Button>
-                    </div>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
-          </div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Artwork Management</h1>
+          <p className="text-gray-600 mt-1">Kanban-style workflow for artwork projects</p>
         </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Input
+              placeholder="Search artwork cards..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 w-80"
+            />
+          </div>
+          <Button variant="outline" size="sm">
+            <Filter className="h-4 w-4 mr-2" />
+            Filter
+          </Button>
+          <Dialog open={showNewColumnDialog} onOpenChange={setShowNewColumnDialog}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Column
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New Column</DialogTitle>
+                <DialogDescription>
+                  Add a new column to your artwork board
+                </DialogDescription>
+              </DialogHeader>
+              <Form {...columnForm}>
+                <form onSubmit={columnForm.handleSubmit(onCreateColumn)} className="space-y-4">
+                  <FormField
+                    control={columnForm.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Column Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Enter column name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={columnForm.control}
+                    name="color"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Color</FormLabel>
+                        <FormControl>
+                          <Input type="color" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => setShowNewColumnDialog(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={createColumnMutation.isPending}>
+                      Create Column
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
 
-        {/* Kanban Board */}
-        <DragDropContext onDragEnd={onDragEnd}>
-          <div className="flex gap-6 overflow-x-auto pb-6">
-            {(columns as any[]).map((column: any) => (
+      {/* Kanban Board */}
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div className="flex gap-6 overflow-x-auto pb-6">
+          {(columns as any[]).map((column: any) => (
             <div key={column.id} className="flex-shrink-0 w-80">
               {/* Column Header */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
@@ -534,129 +536,129 @@ export default function ArtworkPage() {
               {/* Cards Container */}
               <Droppable droppableId={column.id}>
                 {(provided) => (
-                  <div 
+                  <div
                     {...provided.droppableProps}
                     ref={provided.innerRef}
                     className="space-y-3 min-h-[400px] bg-gray-50/50 rounded-lg p-3 border-2 border-dashed border-gray-200"
                   >
                     {(cards as any[])
-                      .filter((card: any) => 
+                      .filter((card: any) =>
                         card.columnId === column.id &&
                         card.title?.toLowerCase().includes(searchQuery.toLowerCase())
                       )
                       .map((card: any, index: number) => (
                         <Draggable key={card.id} draggableId={card.id} index={index}>
                           {(provided) => (
-                            <Card 
+                            <Card
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
                               className="cursor-pointer hover:shadow-lg transition-all duration-200 bg-white border border-gray-200 hover:border-gray-300"
                               onClick={() => handleCardClick(card)}
                             >
-                      {/* Card Image Preview */}
-                      {card.attachments && (() => {
-                        const attachments = safeJsonParse(card.attachments, []);
-                        const imageAttachment = attachments.find((att: any) => att.fileType?.startsWith('image/'));
-                        if (imageAttachment) {
-                          return (
-                            <div className="relative h-32 w-full overflow-hidden rounded-t-lg">
-                              <img 
-                                src={imageAttachment.fileUrl} 
-                                alt={card.title}
-                                className="w-full h-full object-cover"
-                              />
-                              <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
-                                <Image className="w-3 h-3 inline mr-1" />
-                                {attachments.length}
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
-                      
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between">
-                          <CardTitle className="text-sm font-medium text-gray-900 leading-tight">
-                            {card.title}
-                          </CardTitle>
-                          {card.priority && (
-                            <div className={`w-2 h-2 rounded-full ${getPriorityColor(card.priority)} flex-shrink-0 mt-1`}></div>
-                          )}
-                        </div>
-                      </CardHeader>
-                      <CardContent className="pt-0 space-y-3">
-                        {card.description && (
-                          <p className="text-xs text-gray-600 line-clamp-2">{card.description}</p>
-                        )}
-                        
-                        {/* Tags Row */}
-                        <div className="flex flex-wrap gap-1">
-                          {card.companyName && (
-                            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-200">
-                              <Building className="w-3 h-3 mr-1" />
-                              {card.companyName}
-                            </Badge>
-                          )}
-                          {card.orderNumber && (
-                            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-green-50 text-green-700 border-green-200">
-                              <Package className="w-3 h-3 mr-1" />
-                              #{card.orderNumber}
-                            </Badge>
-                          )}
-                        </div>
+                              {/* Card Image Preview */}
+                              {card.attachments && (() => {
+                                const attachments = safeJsonParse(card.attachments, []);
+                                const imageAttachment = attachments.find((att: any) => att.fileType?.startsWith('image/'));
+                                if (imageAttachment) {
+                                  return (
+                                    <div className="relative h-32 w-full overflow-hidden rounded-t-lg">
+                                      <img
+                                        src={imageAttachment.fileUrl}
+                                        alt={card.title}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+                                        <Image className="w-3 h-3 inline mr-1" />
+                                        {attachments.length}
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
 
-                        {/* Card Footer */}
-                        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                          <div className="flex items-center gap-2">
-                            {card.dueDate && (
-                              <div className="flex items-center text-xs text-gray-500">
-                                <Calendar className="w-3 h-3 mr-1" />
-                                {new Date(card.dueDate).toLocaleDateString()}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {card.attachments && (() => {
-                              const attachments = safeJsonParse(card.attachments, []);
-                              return attachments.length > 0 ? (
-                                <div className="flex items-center text-xs text-gray-500">
-                                  <Paperclip className="w-3 h-3" />
-                                  <span className="ml-1">{attachments.length}</span>
+                              <CardHeader className="pb-2">
+                                <div className="flex items-start justify-between">
+                                  <CardTitle className="text-sm font-medium text-gray-900 leading-tight">
+                                    {card.title}
+                                  </CardTitle>
+                                  {card.priority && (
+                                    <div className={`w-2 h-2 rounded-full ${getPriorityColor(card.priority)} flex-shrink-0 mt-1`}></div>
+                                  )}
                                 </div>
-                              ) : null;
-                            })()}
-                            {card.comments && safeJsonParse(card.comments, []).length > 0 && (
-                              <div className="flex items-center text-xs text-gray-500">
-                                <MessageSquare className="w-3 h-3" />
-                                <span className="ml-1">{safeJsonParse(card.comments, []).length}</span>
-                              </div>
-                            )}
-                            {card.checklist && safeJsonParse(card.checklist, []).length > 0 && (
-                              <div className="flex items-center text-xs text-gray-500">
-                                <CheckSquare className="w-3 h-3" />
-                                <span className="ml-1">{safeJsonParse(card.checklist, []).length}</span>
-                              </div>
-                            )}
-                            {card.assignedUserName && (
-                              <UserAvatar 
-                                name={card.assignedUserName}
-                                size="sm"
-                              />
-                            )}
-                          </div>
-                        </div>
+                              </CardHeader>
+                              <CardContent className="pt-0 space-y-3">
+                                {card.description && (
+                                  <p className="text-xs text-gray-600 line-clamp-2">{card.description}</p>
+                                )}
+
+                                {/* Tags Row */}
+                                <div className="flex flex-wrap gap-1">
+                                  {card.companyName && (
+                                    <Badge variant="outline" className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-200">
+                                      <Building className="w-3 h-3 mr-1" />
+                                      {card.companyName}
+                                    </Badge>
+                                  )}
+                                  {card.orderNumber && (
+                                    <Badge variant="outline" className="text-xs px-2 py-0.5 bg-green-50 text-green-700 border-green-200">
+                                      <Package className="w-3 h-3 mr-1" />
+                                      #{card.orderNumber}
+                                    </Badge>
+                                  )}
+                                </div>
+
+                                {/* Card Footer */}
+                                <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                                  <div className="flex items-center gap-2">
+                                    {card.dueDate && (
+                                      <div className="flex items-center text-xs text-gray-500">
+                                        <Calendar className="w-3 h-3 mr-1" />
+                                        {new Date(card.dueDate).toLocaleDateString()}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    {card.attachments && (() => {
+                                      const attachments = safeJsonParse(card.attachments, []);
+                                      return attachments.length > 0 ? (
+                                        <div className="flex items-center text-xs text-gray-500">
+                                          <Paperclip className="w-3 h-3" />
+                                          <span className="ml-1">{attachments.length}</span>
+                                        </div>
+                                      ) : null;
+                                    })()}
+                                    {card.comments && safeJsonParse(card.comments, []).length > 0 && (
+                                      <div className="flex items-center text-xs text-gray-500">
+                                        <MessageSquare className="w-3 h-3" />
+                                        <span className="ml-1">{safeJsonParse(card.comments, []).length}</span>
+                                      </div>
+                                    )}
+                                    {card.checklist && safeJsonParse(card.checklist, []).length > 0 && (
+                                      <div className="flex items-center text-xs text-gray-500">
+                                        <CheckSquare className="w-3 h-3" />
+                                        <span className="ml-1">{safeJsonParse(card.checklist, []).length}</span>
+                                      </div>
+                                    )}
+                                    {card.assignedUserName && (
+                                      <UserAvatar
+                                        name={card.assignedUserName}
+                                        size="sm"
+                                      />
+                                    )}
+                                  </div>
+                                </div>
                               </CardContent>
                             </Card>
                           )}
                         </Draggable>
                       ))}
                     {provided.placeholder}
-                
+
                     {/* Add Card Button */}
-                    <Button 
-                      variant="ghost" 
+                    <Button
+                      variant="ghost"
                       className="w-full h-12 border-2 border-dashed border-gray-300 hover:border-gray-400 hover:bg-white/50 transition-colors"
                       onClick={() => handleCreateCard(column.id)}
                     >
@@ -668,26 +670,239 @@ export default function ArtworkPage() {
               </Droppable>
             </div>
           ))}
-          </div>
-        </DragDropContext>
+        </div>
+      </DragDropContext>
 
-        {/* Create Card Dialog */}
-        <Dialog open={showNewCardDialog} onOpenChange={setShowNewCardDialog}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Create New Artwork Card</DialogTitle>
-              <DialogDescription>
-                Add a new artwork task to your board
-              </DialogDescription>
-            </DialogHeader>
-            <Form {...cardForm}>
-              <form onSubmit={cardForm.handleSubmit(onCreateCard)} className="space-y-4">
+      {/* Create Card Dialog */}
+      <Dialog open={showNewCardDialog} onOpenChange={setShowNewCardDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create New Artwork Card</DialogTitle>
+            <DialogDescription>
+              Add a new artwork task to your board
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...cardForm}>
+            <form onSubmit={cardForm.handleSubmit(onCreateCard)} className="space-y-4">
+              <FormField
+                control={cardForm.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Title</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter card title" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={cardForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Enter card description" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={cardForm.control}
+                name="companyId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Company</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select company" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {(companies as any[]).map((company: any) => (
+                          <SelectItem key={company.id} value={company.id}>
+                            {company.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={cardForm.control}
+                name="orderId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Order</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select order" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {(orders as any[]).map((order: any) => (
+                          <SelectItem key={order.id} value={order.id}>
+                            #{order.orderNumber}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={cardForm.control}
+                name="priority"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Priority</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select priority" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="urgent">Urgent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={cardForm.control}
+                name="dueDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Due Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* File Upload Section */}
+              <div className="space-y-3">
+                <FormLabel>Artwork Files</FormLabel>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept=".ai,.eps,.jpeg,.jpg,.png,.pdf"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+
+                  {uploadedFiles.length === 0 ? (
+                    <div className="text-center">
+                      <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                      <p className="text-sm text-gray-600 mb-2">
+                        Upload artwork files (.ai, .eps, .jpeg, .png, .pdf)
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        Choose Files
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium">{uploadedFiles.length} file(s) selected</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          Add More
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                        {uploadedFiles.map(file => (
+                          <div key={file.name} className="relative bg-gray-50 rounded p-2 text-xs">
+                            {filePreviews[file.name] ? (
+                              <div className="flex items-center gap-2">
+                                <img
+                                  src={filePreviews[file.name]}
+                                  alt={file.name}
+                                  className="w-8 h-8 object-cover rounded"
+                                />
+                                <span className="truncate">{file.name}</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center">
+                                  <Paperclip className="w-4 h-4 text-gray-500" />
+                                </div>
+                                <span className="truncate">{file.name}</span>
+                              </div>
+                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-red-500 hover:bg-red-600 text-white"
+                              onClick={() => removeFile(file.name)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setShowNewCardDialog(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={createCardMutation.isPending}>
+                  Create Card
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Card Dialog */}
+      <Dialog open={showEditCardDialog} onOpenChange={setShowEditCardDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Card</DialogTitle>
+            <DialogDescription>
+              Update the artwork card details.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...editCardForm}>
+            <form onSubmit={editCardForm.handleSubmit(onEditCard)} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
                 <FormField
-                  control={cardForm.control}
+                  control={editCardForm.control}
                   name="title"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Title</FormLabel>
+                      <FormLabel>Card Title</FormLabel>
                       <FormControl>
                         <Input placeholder="Enter card title" {...field} />
                       </FormControl>
@@ -696,25 +911,52 @@ export default function ArtworkPage() {
                   )}
                 />
                 <FormField
-                  control={cardForm.control}
-                  name="description"
+                  control={editCardForm.control}
+                  name="priority"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Description</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="Enter card description" {...field} />
-                      </FormControl>
+                      <FormLabel>Priority</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select priority" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="low">Low</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                          <SelectItem value="urgent">Urgent</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+              </div>
+
+              <FormField
+                control={editCardForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Enter card description" rows={3} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-2 gap-4">
                 <FormField
-                  control={cardForm.control}
+                  control={editCardForm.control}
                   name="companyId"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Company</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select company" />
@@ -733,12 +975,12 @@ export default function ArtworkPage() {
                   )}
                 />
                 <FormField
-                  control={cardForm.control}
+                  control={editCardForm.control}
                   name="orderId"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Order</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select order" />
@@ -756,288 +998,121 @@ export default function ArtworkPage() {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={cardForm.control}
-                  name="priority"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Priority</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select priority" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="low">Low</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
-                          <SelectItem value="urgent">Urgent</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={cardForm.control}
-                  name="dueDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Due Date</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                {/* File Upload Section */}
-                <div className="space-y-3">
-                  <FormLabel>Artwork Files</FormLabel>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      multiple
-                      accept=".ai,.eps,.jpeg,.jpg,.png,.pdf"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                    
-                    {uploadedFiles.length === 0 ? (
-                      <div className="text-center">
-                        <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                        <p className="text-sm text-gray-600 mb-2">
-                          Upload artwork files (.ai, .eps, .jpeg, .png, .pdf)
-                        </p>
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={() => fileInputRef.current?.click()}
-                        >
-                          Choose Files
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium">{uploadedFiles.length} file(s) selected</span>
-                          <Button 
-                            type="button" 
-                            variant="outline" 
+              </div>
+
+              <FormField
+                control={editCardForm.control}
+                name="dueDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Due Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* File Management Section */}
+              <div className="space-y-3">
+                <FormLabel>Artwork Files</FormLabel>
+
+                {/* Existing Attachments */}
+                {existingAttachments.length > 0 && (
+                  <div>
+                    <p className="text-sm text-gray-600 mb-2">Current Files:</p>
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                      {existingAttachments.map(attachment => (
+                        <div key={attachment.id} className="relative bg-gray-50 rounded p-2 text-xs">
+                          {attachment.fileType?.startsWith('image/') && attachment.fileUrl ? (
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={attachment.fileUrl}
+                                alt={attachment.fileName}
+                                className="w-8 h-8 object-cover rounded"
+                              />
+                              <span className="truncate">{attachment.fileName}</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center">
+                                <Paperclip className="w-4 h-4 text-gray-500" />
+                              </div>
+                              <span className="truncate">{attachment.fileName}</span>
+                            </div>
+                          )}
+                          <Button
+                            type="button"
+                            variant="ghost"
                             size="sm"
-                            onClick={() => fileInputRef.current?.click()}
+                            className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-red-500 hover:bg-red-600 text-white"
+                            onClick={() => removeExistingAttachment(attachment.id)}
                           >
-                            Add More
+                            <X className="h-3 w-3" />
                           </Button>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
-                          {uploadedFiles.map(file => (
-                            <div key={file.name} className="relative bg-gray-50 rounded p-2 text-xs">
-                              {filePreviews[file.name] ? (
-                                <div className="flex items-center gap-2">
-                                  <img 
-                                    src={filePreviews[file.name]} 
-                                    alt={file.name}
-                                    className="w-8 h-8 object-cover rounded"
-                                  />
-                                  <span className="truncate">{file.name}</span>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2">
-                                  <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center">
-                                    <Paperclip className="w-4 h-4 text-gray-500" />
-                                  </div>
-                                  <span className="truncate">{file.name}</span>
-                                </div>
-                              )}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-red-500 hover:bg-red-600 text-white"
-                                onClick={() => removeFile(file.name)}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                      ))}
+                    </div>
                   </div>
-                </div>
-                
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setShowNewCardDialog(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={createCardMutation.isPending}>
-                    Create Card
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+                )}
 
-        {/* Edit Card Dialog */}
-        <Dialog open={showEditCardDialog} onOpenChange={setShowEditCardDialog}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Edit Card</DialogTitle>
-              <DialogDescription>
-                Update the artwork card details.
-              </DialogDescription>
-            </DialogHeader>
-            <Form {...editCardForm}>
-              <form onSubmit={editCardForm.handleSubmit(onEditCard)} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={editCardForm.control}
-                    name="title"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Card Title</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter card title" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                {/* File Upload Section */}
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                  <input
+                    ref={editFileInputRef}
+                    type="file"
+                    multiple
+                    accept=".ai,.eps,.jpeg,.jpg,.png,.pdf"
+                    onChange={handleEditFileUpload}
+                    className="hidden"
                   />
-                  <FormField
-                    control={editCardForm.control}
-                    name="priority"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Priority</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select priority" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="low">Low</SelectItem>
-                            <SelectItem value="medium">Medium</SelectItem>
-                            <SelectItem value="high">High</SelectItem>
-                            <SelectItem value="urgent">Urgent</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                
-                <FormField
-                  control={editCardForm.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="Enter card description" rows={3} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
 
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={editCardForm.control}
-                    name="companyId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Company</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select company" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {(companies as any[]).map((company: any) => (
-                              <SelectItem key={company.id} value={company.id}>
-                                {company.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={editCardForm.control}
-                    name="orderId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Order</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select order" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {(orders as any[]).map((order: any) => (
-                              <SelectItem key={order.id} value={order.id}>
-                                #{order.orderNumber}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={editCardForm.control}
-                  name="dueDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Due Date</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* File Management Section */}
-                <div className="space-y-3">
-                  <FormLabel>Artwork Files</FormLabel>
-                  
-                  {/* Existing Attachments */}
-                  {existingAttachments.length > 0 && (
-                    <div>
-                      <p className="text-sm text-gray-600 mb-2">Current Files:</p>
-                      <div className="grid grid-cols-2 gap-2 mb-3">
-                        {existingAttachments.map(attachment => (
-                          <div key={attachment.id} className="relative bg-gray-50 rounded p-2 text-xs">
-                            {attachment.fileType?.startsWith('image/') && attachment.fileUrl ? (
+                  {editUploadedFiles.length === 0 ? (
+                    <div className="text-center">
+                      <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                      <p className="text-sm text-gray-600 mb-2">
+                        Add more artwork files (.ai, .eps, .jpeg, .png, .pdf)
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => editFileInputRef.current?.click()}
+                      >
+                        Choose Files
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium">{editUploadedFiles.length} new file(s) selected</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => editFileInputRef.current?.click()}
+                        >
+                          Add More
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                        {editUploadedFiles.map(file => (
+                          <div key={file.name} className="relative bg-gray-50 rounded p-2 text-xs">
+                            {editFilePreviews[file.name] ? (
                               <div className="flex items-center gap-2">
-                                <img 
-                                  src={attachment.fileUrl} 
-                                  alt={attachment.fileName}
+                                <img
+                                  src={editFilePreviews[file.name]}
+                                  alt={file.name}
                                   className="w-8 h-8 object-cover rounded"
                                 />
-                                <span className="truncate">{attachment.fileName}</span>
+                                <span className="truncate">{file.name}</span>
                               </div>
                             ) : (
                               <div className="flex items-center gap-2">
                                 <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center">
                                   <Paperclip className="w-4 h-4 text-gray-500" />
                                 </div>
-                                <span className="truncate">{attachment.fileName}</span>
+                                <span className="truncate">{file.name}</span>
                               </div>
                             )}
                             <Button
@@ -1045,7 +1120,7 @@ export default function ArtworkPage() {
                               variant="ghost"
                               size="sm"
                               className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-red-500 hover:bg-red-600 text-white"
-                              onClick={() => removeExistingAttachment(attachment.id)}
+                              onClick={() => removeEditFile(file.name)}
                             >
                               <X className="h-3 w-3" />
                             </Button>
@@ -1054,94 +1129,21 @@ export default function ArtworkPage() {
                       </div>
                     </div>
                   )}
-
-                  {/* File Upload Section */}
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                    <input
-                      ref={editFileInputRef}
-                      type="file"
-                      multiple
-                      accept=".ai,.eps,.jpeg,.jpg,.png,.pdf"
-                      onChange={handleEditFileUpload}
-                      className="hidden"
-                    />
-                    
-                    {editUploadedFiles.length === 0 ? (
-                      <div className="text-center">
-                        <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                        <p className="text-sm text-gray-600 mb-2">
-                          Add more artwork files (.ai, .eps, .jpeg, .png, .pdf)
-                        </p>
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={() => editFileInputRef.current?.click()}
-                        >
-                          Choose Files
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium">{editUploadedFiles.length} new file(s) selected</span>
-                          <Button 
-                            type="button" 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => editFileInputRef.current?.click()}
-                          >
-                            Add More
-                          </Button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
-                          {editUploadedFiles.map(file => (
-                            <div key={file.name} className="relative bg-gray-50 rounded p-2 text-xs">
-                              {editFilePreviews[file.name] ? (
-                                <div className="flex items-center gap-2">
-                                  <img 
-                                    src={editFilePreviews[file.name]} 
-                                    alt={file.name}
-                                    className="w-8 h-8 object-cover rounded"
-                                  />
-                                  <span className="truncate">{file.name}</span>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2">
-                                  <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center">
-                                    <Paperclip className="w-4 h-4 text-gray-500" />
-                                  </div>
-                                  <span className="truncate">{file.name}</span>
-                                </div>
-                              )}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="absolute -top-1 -right-1 h-5 w-5 p-0 bg-red-500 hover:bg-red-600 text-white"
-                                onClick={() => removeEditFile(file.name)}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
                 </div>
+              </div>
 
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setShowEditCardDialog(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={updateCardMutation.isPending}>
-                    {updateCardMutation.isPending ? "Updating..." : "Update Card"}
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setShowEditCardDialog(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={updateCardMutation.isPending}>
+                  {updateCardMutation.isPending ? "Updating..." : "Update Card"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

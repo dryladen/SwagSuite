@@ -449,7 +449,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           title: company.name,
           description: `${company.industry || 'Unknown industry'} - ${company.website || 'No website'}`,
           metadata: {
-            status: company.status
+            // Company status is not defined in schema, omitting
           },
           url: `/crm`
         });
@@ -568,7 +568,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(company);
     } catch (error) {
       console.error("Error creating company:", error);
-      res.status(500).json({ message: "Failed to create company" });
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to create company" });
     }
   });
 
@@ -964,10 +964,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/orders', isAuthenticated, async (req, res) => {
     try {
-      const validatedData = insertOrderSchema.parse({
+      const dataToValidate = {
         ...req.body,
         assignedUserId: (req.user as any)?.claims?.sub,
-      });
+      };
+
+      // Manually convert date strings to Date objects for validation
+      // This is necessary because the JSON payload sends dates as strings,
+      // but the server-side Zod schema expects Date objects
+      if (dataToValidate.inHandsDate) {
+        dataToValidate.inHandsDate = new Date(dataToValidate.inHandsDate);
+      }
+      if (dataToValidate.eventDate) {
+        dataToValidate.eventDate = new Date(dataToValidate.eventDate);
+      }
+      if (dataToValidate.supplierInHandsDate) {
+        dataToValidate.supplierInHandsDate = new Date(dataToValidate.supplierInHandsDate);
+      }
+
+      const validatedData = insertOrderSchema.parse(dataToValidate);
       
       const order = await storage.createOrder(validatedData);
       
