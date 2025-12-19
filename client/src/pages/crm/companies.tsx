@@ -4,17 +4,17 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useLocation } from "wouter";
-import { 
-  Building, 
-  Plus, 
-  Search, 
-  Filter, 
-  MoreHorizontal, 
-  Edit, 
-  Trash2, 
-  Mail, 
-  Phone, 
-  Globe, 
+import {
+  Building,
+  Plus,
+  Search,
+  Filter,
+  MoreHorizontal,
+  Edit,
+  Trash2,
+  Mail,
+  Phone,
+  Globe,
   MapPin,
   Calendar,
   DollarSign,
@@ -27,7 +27,8 @@ import {
   Instagram,
   Grid,
   List,
-  Clock
+  Clock,
+  Star
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -191,7 +192,19 @@ export default function Companies() {
 
   const createCompanyMutation = useMutation({
     mutationFn: async (data: CompanyFormData) => {
-      return apiRequest("/api/companies", "POST", data);
+      // Transform form data to match API schema
+      const { linkedinUrl, twitterUrl, facebookUrl, instagramUrl, otherSocialUrl, ...rest } = data;
+      const formattedData = {
+        ...rest,
+        socialMediaLinks: {
+          linkedin: linkedinUrl || "",
+          twitter: twitterUrl || "",
+          facebook: facebookUrl || "",
+          instagram: instagramUrl || "",
+          other: otherSocialUrl || ""
+        }
+      };
+      return apiRequest("/api/companies", "POST", formattedData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
@@ -203,9 +216,10 @@ export default function Companies() {
       });
     },
     onError: (error) => {
+      console.error("Create company error:", error);
       toast({
         title: "Error",
-        description: "Failed to create company. Please try again.",
+        description: `Failed to create company: ${error.message || "Unknown error"}`,
         variant: "destructive",
       });
     },
@@ -213,7 +227,20 @@ export default function Companies() {
 
   const updateCompanyMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<CompanyFormData> }) => {
-      return apiRequest(`/api/companies/${id}`, "PATCH", data);
+      const { linkedinUrl, twitterUrl, facebookUrl, instagramUrl, otherSocialUrl, ...rest } = data;
+      const formattedData = {
+        ...rest,
+        ...(linkedinUrl !== undefined || twitterUrl !== undefined || facebookUrl !== undefined || instagramUrl !== undefined || otherSocialUrl !== undefined ? {
+          socialMediaLinks: {
+            linkedin: linkedinUrl || "",
+            twitter: twitterUrl || "",
+            facebook: facebookUrl || "",
+            instagram: instagramUrl || "",
+            other: otherSocialUrl || ""
+          }
+        } : {})
+      };
+      return apiRequest(`/api/companies/${id}`, "PATCH", formattedData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
@@ -272,7 +299,7 @@ export default function Companies() {
 
   const handleEditCompany = (company: Company) => {
     setSelectedCompany(company);
-    
+
     // Populate form with existing data
     form.reset({
       name: company.name,
@@ -292,7 +319,7 @@ export default function Companies() {
       instagramUrl: company.socialMediaLinks?.instagram || "",
       otherSocialUrl: company.socialMediaLinks?.other || "",
     });
-    
+
     setIsEditModalOpen(true);
   };
 
@@ -301,10 +328,10 @@ export default function Companies() {
     const matchesSearch = company.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       company.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       company.industry?.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesIndustry = filterIndustry === "all" || company.industry === filterIndustry;
     const matchesEngagement = filterEngagement === "all" || company.engagementLevel === filterEngagement;
-    
+
     return matchesSearch && matchesIndustry && matchesEngagement;
   });
 
@@ -329,6 +356,302 @@ export default function Companies() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-swag-navy">Companies</h1>
+          <p className="text-muted-foreground">
+            Manage your customer relationships and company records
+          </p>
+        </div>
+        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-swag-primary hover:bg-swag-primary/90">
+              <Plus className="mr-2" size={16} />
+              Add Company
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New Company</DialogTitle>
+              <DialogDescription>
+                Create a new company record in your CRM system.
+              </DialogDescription>
+            </DialogHeader>
+
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleCreateCompany)} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Company Name *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="ACME Corporation" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="industry"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Industry</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select industry" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {INDUSTRY_OPTIONS.map((industry) => (
+                              <SelectItem key={industry} value={industry}>
+                                {industry}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="contact@company.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone</FormLabel>
+                        <FormControl>
+                          <Input placeholder="(555) 123-4567" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="website"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Website</FormLabel>
+                        <FormControl>
+                          <Input placeholder="https://company.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="country"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Country</FormLabel>
+                        <FormControl>
+                          <Input placeholder="US" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Address</FormLabel>
+                      <FormControl>
+                        <Input placeholder="123 Business Ave" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="city"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>City</FormLabel>
+                        <FormControl>
+                          <Input placeholder="New York" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="state"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>State</FormLabel>
+                        <FormControl>
+                          <Input placeholder="NY" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="zipCode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>ZIP Code</FormLabel>
+                        <FormControl>
+                          <Input placeholder="10001" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Social Media Links */}
+                <div className="space-y-3">
+                  <h4 className="font-medium">Social Media Links</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="linkedinUrl"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>LinkedIn</FormLabel>
+                          <FormControl>
+                            <Input placeholder="https://linkedin.com/company/..." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="twitterUrl"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Twitter</FormLabel>
+                          <FormControl>
+                            <Input placeholder="https://twitter.com/..." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="facebookUrl"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Facebook</FormLabel>
+                          <FormControl>
+                            <Input placeholder="https://facebook.com/..." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="instagramUrl"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Instagram</FormLabel>
+                          <FormControl>
+                            <Input placeholder="https://instagram.com/..." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="otherSocialUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Other Social Media</FormLabel>
+                        <FormControl>
+                          <Input placeholder="https://..." {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="notes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Notes</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Additional notes about the company..."
+                          className="min-h-[100px]"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsCreateModalOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={createCompanyMutation.isPending}
+                    className="bg-swag-primary hover:bg-swag-primary/90"
+                  >
+                    {createCompanyMutation.isPending ? "Creating..." : "Create Company"}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
       {/* Header with search and filters */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div className="flex-1 max-w-sm">
@@ -342,7 +665,7 @@ export default function Companies() {
             />
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {/* View Toggle */}
           <div className="flex items-center border rounded-md">
@@ -394,292 +717,7 @@ export default function Companies() {
             </SelectContent>
           </Select>
 
-          <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-swag-orange hover:bg-swag-orange/90">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Company
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Add New Company</DialogTitle>
-                <DialogDescription>
-                  Create a new company record in your CRM system.
-                </DialogDescription>
-              </DialogHeader>
-              
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(handleCreateCompany)} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Company Name *</FormLabel>
-                          <FormControl>
-                            <Input placeholder="ACME Corporation" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
 
-                    <FormField
-                      control={form.control}
-                      name="industry"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Industry</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select industry" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {INDUSTRY_OPTIONS.map((industry) => (
-                                <SelectItem key={industry} value={industry}>
-                                  {industry}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Email</FormLabel>
-                          <FormControl>
-                            <Input type="email" placeholder="contact@company.com" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="phone"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Phone</FormLabel>
-                          <FormControl>
-                            <Input placeholder="(555) 123-4567" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="website"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Website</FormLabel>
-                          <FormControl>
-                            <Input placeholder="https://company.com" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="country"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Country</FormLabel>
-                          <FormControl>
-                            <Input placeholder="US" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name="address"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Address</FormLabel>
-                        <FormControl>
-                          <Input placeholder="123 Business Ave" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="city"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>City</FormLabel>
-                          <FormControl>
-                            <Input placeholder="New York" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="state"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>State</FormLabel>
-                          <FormControl>
-                            <Input placeholder="NY" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="zipCode"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>ZIP Code</FormLabel>
-                          <FormControl>
-                            <Input placeholder="10001" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  {/* Social Media Links */}
-                  <div className="space-y-3">
-                    <h4 className="font-medium">Social Media Links</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="linkedinUrl"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>LinkedIn</FormLabel>
-                            <FormControl>
-                              <Input placeholder="https://linkedin.com/company/..." {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="twitterUrl"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Twitter</FormLabel>
-                            <FormControl>
-                              <Input placeholder="https://twitter.com/..." {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="facebookUrl"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Facebook</FormLabel>
-                            <FormControl>
-                              <Input placeholder="https://facebook.com/..." {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="instagramUrl"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Instagram</FormLabel>
-                            <FormControl>
-                              <Input placeholder="https://instagram.com/..." {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <FormField
-                      control={form.control}
-                      name="otherSocialUrl"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Other Social Media</FormLabel>
-                          <FormControl>
-                            <Input placeholder="https://..." {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name="notes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Notes</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Additional notes about the company..."
-                            className="min-h-[100px]"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsCreateModalOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button 
-                      type="submit" 
-                      disabled={createCompanyMutation.isPending}
-                      className="bg-swag-orange hover:bg-swag-orange/90"
-                    >
-                      {createCompanyMutation.isPending ? "Creating..." : "Create Company"}
-                    </Button>
-                  </div>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
 
@@ -739,147 +777,147 @@ export default function Companies() {
             {viewMode === 'cards' && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredCompanies.map((company: Company) => (
-              <Card key={company.id} className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setLocation(`/crm/companies/${company.id}`)}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center space-x-3 flex-1">
-                      <UserAvatar 
-                        name={company.name}
-                        size="md"
-                      />
-                      <div>
-                        <CardTitle className="text-lg text-swag-navy line-clamp-1">
-                          {company.name}
-                        </CardTitle>
-                        {company.industry && (
-                          <p className="text-sm text-muted-foreground">{company.industry}</p>
+                  <Card key={company.id} className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setLocation(`/crm/companies/${company.id}`)}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center space-x-3 flex-1">
+                          <UserAvatar
+                            name={company.name}
+                            size="md"
+                          />
+                          <div>
+                            <CardTitle className="text-lg text-swag-navy line-clamp-1">
+                              {company.name}
+                            </CardTitle>
+                            {company.industry && (
+                              <p className="text-sm text-muted-foreground">{company.industry}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {company.engagementLevel && (
+                            <Badge className={ENGAGEMENT_COLORS[company.engagementLevel as keyof typeof ENGAGEMENT_COLORS] || ENGAGEMENT_COLORS.undefined}>
+                              {company.engagementLevel.charAt(0).toUpperCase() + company.engagementLevel.slice(1)}
+                            </Badge>
+                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={(e) => {
+                                e.stopPropagation();
+                                setLocation(`/crm/companies/${company.id}`);
+                              }}>
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditCompany(company);
+                              }}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteCompany(company.id);
+                                }}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="space-y-2">
+                        {company.email && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Mail className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-muted-foreground truncate">{company.email}</span>
+                          </div>
                         )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {company.engagementLevel && (
-                        <Badge className={ENGAGEMENT_COLORS[company.engagementLevel as keyof typeof ENGAGEMENT_COLORS] || ENGAGEMENT_COLORS.undefined}>
-                          {company.engagementLevel.charAt(0).toUpperCase() + company.engagementLevel.slice(1)}
-                        </Badge>
-                      )}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={(e) => {
-                            e.stopPropagation();
-                            setLocation(`/crm/companies/${company.id}`);
-                          }}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditCompany(company);
-                          }}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteCompany(company.id);
-                            }}
-                            className="text-red-600"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    {company.email && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Mail className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-muted-foreground truncate">{company.email}</span>
-                      </div>
-                    )}
-                    {company.phone && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Phone className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-muted-foreground">{company.phone}</span>
-                      </div>
-                    )}
-                    {company.website && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Globe className="h-4 w-4 text-muted-foreground" />
-                        <a 
-                          href={company.website} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-swag-orange hover:underline truncate"
-                        >
-                          {company.website.replace(/^https?:\/\//, '')}
-                        </a>
-                      </div>
-                    )}
-                    {(company.city || company.state) && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <MapPin className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-muted-foreground">
-                          {[company.city, company.state].filter(Boolean).join(', ')}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Social Media Links */}
-                  {company.socialMediaLinks && Object.values(company.socialMediaLinks).some(link => link) && (
-                    <div className="flex items-center gap-2 pt-2 border-t">
-                      <span className="text-xs text-muted-foreground">Social:</span>
-                      <div className="flex gap-1">
-                        {Object.entries(company.socialMediaLinks).map(([platform, url]) => (
-                          url && (
+                        {company.phone && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Phone className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-muted-foreground">{company.phone}</span>
+                          </div>
+                        )}
+                        {company.website && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Globe className="h-4 w-4 text-muted-foreground" />
                             <a
-                              key={platform}
-                              href={url}
+                              href={company.website}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-muted-foreground hover:text-swag-orange transition-colors"
+                              className="text-swag-orange hover:underline truncate"
                             >
-                              {getSocialMediaIcon(platform)}
+                              {company.website.replace(/^https?:\/\//, '')}
                             </a>
-                          )
-                        ))}
+                          </div>
+                        )}
+                        {(company.city || company.state) && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <MapPin className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-muted-foreground">
+                              {[company.city, company.state].filter(Boolean).join(', ')}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
 
-                  {/* Company Stats */}
-                  <div className="flex items-center justify-between text-sm pt-2 border-t">
-                    <div className="flex items-center gap-1">
-                      <DollarSign className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-muted-foreground">YTD:</span>
-                      <span className="font-medium">{formatCurrency(company.ytdSpend)}</span>
-                    </div>
-                    {company.customerScore && (
-                      <div className="flex items-center gap-1">
-                        <span className="text-muted-foreground">Score:</span>
-                        <span className="font-medium">{company.customerScore}</span>
+                      {/* Social Media Links */}
+                      {company.socialMediaLinks && Object.values(company.socialMediaLinks).some(link => link) && (
+                        <div className="flex items-center gap-2 pt-2 border-t">
+                          <span className="text-xs text-muted-foreground">Social:</span>
+                          <div className="flex gap-1">
+                            {Object.entries(company.socialMediaLinks).map(([platform, url]) => (
+                              url && (
+                                <a
+                                  key={platform}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-muted-foreground hover:text-swag-orange transition-colors"
+                                >
+                                  {getSocialMediaIcon(platform)}
+                                </a>
+                              )
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Company Stats */}
+                      <div className="flex items-center justify-between text-sm pt-2 border-t">
+                        <div className="flex items-center gap-1">
+                          <DollarSign className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-muted-foreground">YTD:</span>
+                          <span className="font-medium">{formatCurrency(company.ytdSpend)}</span>
+                        </div>
+                        {company.customerScore && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-muted-foreground">Score:</span>
+                            <span className="font-medium">{company.customerScore}</span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  {company.notes && (
-                    <div className="text-sm text-muted-foreground line-clamp-2 pt-2 border-t">
-                      {company.notes}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+                      {company.notes && (
+                        <div className="text-sm text-muted-foreground line-clamp-2 pt-2 border-t">
+                          {company.notes}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             )}
 
@@ -901,8 +939,8 @@ export default function Companies() {
                     </TableHeader>
                     <TableBody>
                       {filteredCompanies.map((company: Company) => (
-                        <TableRow 
-                          key={company.id} 
+                        <TableRow
+                          key={company.id}
                           className="hover:bg-muted/50 cursor-pointer"
                           onClick={() => {
                             setSelectedCompany(company);
@@ -962,7 +1000,7 @@ export default function Companies() {
                           </TableCell>
                           <TableCell>
                             {company.engagementLevel && (
-                              <Badge 
+                              <Badge
                                 className={ENGAGEMENT_COLORS[company.engagementLevel as keyof typeof ENGAGEMENT_COLORS] || ENGAGEMENT_COLORS.undefined}
                               >
                                 {company.engagementLevel.charAt(0).toUpperCase() + company.engagementLevel.slice(1)}
@@ -972,9 +1010,9 @@ export default function Companies() {
                           <TableCell>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                                   onClick={(e) => e.stopPropagation()}
                                   data-testid={`company-actions-${company.id}`}
                                 >
@@ -996,7 +1034,7 @@ export default function Companies() {
                                   <Edit className="h-4 w-4 mr-2" />
                                   Edit
                                 </DropdownMenuItem>
-                                <DropdownMenuItem 
+                                <DropdownMenuItem
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleDeleteCompany(company.id);
@@ -1031,7 +1069,7 @@ export default function Companies() {
                 : "Get started by adding your first company"}
             </p>
             {!searchQuery && filterIndustry === "all" && filterEngagement === "all" && (
-              <Button 
+              <Button
                 onClick={() => setIsCreateModalOpen(true)}
                 className="bg-swag-orange hover:bg-swag-orange/90"
               >
@@ -1052,7 +1090,7 @@ export default function Companies() {
               Update the company information in your CRM system.
             </DialogDescription>
           </DialogHeader>
-          
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleUpdateCompany)} className="space-y-4">
               {/* Same form fields as create modal but for editing */}
@@ -1313,8 +1351,8 @@ export default function Companies() {
                 >
                   Cancel
                 </Button>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={updateCompanyMutation.isPending}
                   className="bg-swag-orange hover:bg-swag-orange/90"
                 >
@@ -1341,7 +1379,7 @@ export default function Companies() {
                     )}
                   </div>
                   {selectedCompany.engagementLevel && (
-                    <Badge 
+                    <Badge
                       className={`ml-auto ${ENGAGEMENT_COLORS[selectedCompany.engagementLevel as keyof typeof ENGAGEMENT_COLORS] || ENGAGEMENT_COLORS.undefined}`}
                     >
                       {selectedCompany.engagementLevel.charAt(0).toUpperCase() + selectedCompany.engagementLevel.slice(1)} Engagement
@@ -1362,7 +1400,7 @@ export default function Companies() {
                         <Mail className="h-5 w-5 text-muted-foreground" />
                         <div>
                           <p className="text-sm text-muted-foreground">Email</p>
-                          <a 
+                          <a
                             href={`mailto:${selectedCompany.email}`}
                             className="text-swag-orange hover:underline"
                           >
@@ -1377,7 +1415,7 @@ export default function Companies() {
                         <Phone className="h-5 w-5 text-muted-foreground" />
                         <div>
                           <p className="text-sm text-muted-foreground">Phone</p>
-                          <a 
+                          <a
                             href={`tel:${selectedCompany.phone}`}
                             className="text-swag-orange hover:underline"
                           >
@@ -1392,7 +1430,7 @@ export default function Companies() {
                         <Globe className="h-5 w-5 text-muted-foreground" />
                         <div>
                           <p className="text-sm text-muted-foreground">Website</p>
-                          <a 
+                          <a
                             href={selectedCompany.website}
                             target="_blank"
                             rel="noopener noreferrer"
@@ -1514,14 +1552,14 @@ export default function Companies() {
               </div>
 
               <div className="flex justify-end gap-3 mt-6 pt-6 border-t">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => setLocation(`/crm/companies/${selectedCompany.id}`)}
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
                   View Full Profile
                 </Button>
-                <Button 
+                <Button
                   onClick={() => {
                     handleEditCompany(selectedCompany);
                     setIsCompanyDetailOpen(false);

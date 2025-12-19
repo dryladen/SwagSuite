@@ -138,6 +138,7 @@ export interface IStorage {
   deleteOrder(id: string): Promise<void>;
   getOrdersByCompany(companyId: string): Promise<Order[]>;
   getOrdersByStatus(status: string): Promise<Order[]>;
+  getProductionOrders(): Promise<any[]>;
   
   // Data Upload operations
   createDataUpload(upload: InsertDataUpload): Promise<DataUpload>;
@@ -517,6 +518,30 @@ export class DatabaseStorage implements IStorage {
       .from(orders)
       .where(eq(orders.status, status as any))
       .orderBy(desc(orders.createdAt));
+  }
+
+  async getProductionOrders(): Promise<any[]> {
+    const results = await db
+      .select({
+        id: orders.id,
+        orderNumber: orders.orderNumber,
+        companyName: companies.name,
+        productName: sql<string>`'Various Products'`, // Placeholder until we aggregate items
+        quantity: sql<number>`0`, // Placeholder
+        currentStage: orders.status,
+        assignedTo: users.firstName,
+        dueDate: orders.inHandsDate,
+        orderValue: orders.total,
+        priority: sql<string>`'medium'`, // Default
+        stageData: sql<any>`'{}'::jsonb`,
+        customNotes: orders.notes
+      })
+      .from(orders)
+      .leftJoin(companies, eq(orders.companyId, companies.id))
+      .leftJoin(users, eq(orders.assignedUserId, users.id))
+      .orderBy(desc(orders.createdAt));
+    
+    return results;
   }
 
   // Order item operations

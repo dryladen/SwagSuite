@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import {
   Dialog,
   DialogContent,
@@ -20,13 +21,16 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import type { Order } from "@shared/schema";
 
 interface OrderModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  order?: Order | null;
 }
 
-export default function OrderModal({ open, onOpenChange }: OrderModalProps) {
+export default function OrderModal({ open, onOpenChange, order }: OrderModalProps) {
+  const [, setLocation] = useLocation();
   const [formData, setFormData] = useState({
     companyId: "",
     orderType: "quote",
@@ -38,6 +42,29 @@ export default function OrderModal({ open, onOpenChange }: OrderModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Reset or populate form when opening
+  useEffect(() => {
+    if (open) {
+      if (order) {
+        setFormData({
+          companyId: order.companyId || "",
+          orderType: order.orderType || "quote",
+          inHandsDate: order.inHandsDate ? new Date(order.inHandsDate).toISOString().split('T')[0] : "",
+          eventDate: order.eventDate ? new Date(order.eventDate).toISOString().split('T')[0] : "",
+          notes: order.notes || "",
+        });
+      } else {
+        setFormData({
+          companyId: "",
+          orderType: "quote",
+          inHandsDate: "",
+          eventDate: "",
+          notes: "",
+        });
+      }
+    }
+  }, [open, order]);
+
   const { data: companies = [] } = useQuery({
     queryKey: ["/api/companies"],
     enabled: open,
@@ -48,7 +75,7 @@ export default function OrderModal({ open, onOpenChange }: OrderModalProps) {
       const response = await apiRequest("POST", "/api/orders", data);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (newOrder) => {
       toast({
         title: "Success",
         description: "Order created successfully",
@@ -57,13 +84,11 @@ export default function OrderModal({ open, onOpenChange }: OrderModalProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       onOpenChange(false);
-      setFormData({
-        companyId: "",
-        orderType: "quote",
-        inHandsDate: "",
-        eventDate: "",
-        notes: "",
-      });
+
+      // Redirect to the project page
+      if (newOrder.id) {
+        setLocation(`/project/${newOrder.id}`);
+      }
     },
     onError: (error: Error) => {
       if (isUnauthorizedError(error)) {
@@ -85,9 +110,32 @@ export default function OrderModal({ open, onOpenChange }: OrderModalProps) {
     },
   });
 
+  const updateOrderMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await apiRequest("PATCH", `/api/orders/${order?.id}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Order updated successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${order?.id}`] });
+      onOpenChange(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: "Failed to update order",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.companyId) {
       toast({
         title: "Validation Error",
@@ -97,11 +145,17 @@ export default function OrderModal({ open, onOpenChange }: OrderModalProps) {
       return;
     }
 
-    createOrderMutation.mutate({
+    const payload = {
       ...formData,
       inHandsDate: formData.inHandsDate ? new Date(formData.inHandsDate) : null,
       eventDate: formData.eventDate ? new Date(formData.eventDate) : null,
-    });
+    };
+
+    if (order) {
+      updateOrderMutation.mutate(payload);
+    } else {
+      createOrderMutation.mutate(payload);
+    }
   };
 
   return (
@@ -110,14 +164,14 @@ export default function OrderModal({ open, onOpenChange }: OrderModalProps) {
         <DialogHeader>
           <DialogTitle>Create New Order</DialogTitle>
         </DialogHeader>
-        
+
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Customer and Order Type */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <Label htmlFor="customer">Customer</Label>
-              <Select 
-                value={formData.companyId} 
+              <Select
+                value={formData.companyId}
                 onValueChange={(value) => setFormData(prev => ({ ...prev, companyId: value }))}
               >
                 <SelectTrigger>
@@ -134,8 +188,8 @@ export default function OrderModal({ open, onOpenChange }: OrderModalProps) {
             </div>
             <div>
               <Label htmlFor="orderType">Order Type</Label>
-              <Select 
-                value={formData.orderType} 
+              <Select
+                value={formData.orderType}
                 onValueChange={(value) => setFormData(prev => ({ ...prev, orderType: value }))}
               >
                 <SelectTrigger>
@@ -158,10 +212,10 @@ export default function OrderModal({ open, onOpenChange }: OrderModalProps) {
                 placeholder="Search products from ASI, ESP, SAGE databases..."
                 className="pr-10"
               />
-              <Button 
-                type="button" 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
                 className="absolute right-2 top-1/2 transform -translate-y-1/2"
               >
                 🔍
@@ -210,10 +264,10 @@ export default function OrderModal({ open, onOpenChange }: OrderModalProps) {
               <div className="text-gray-400 text-3xl mb-2">☁️</div>
               <p className="text-sm text-gray-600">Drop files here or click to upload</p>
               <p className="text-xs text-gray-500 mt-1">Supports: AI, EPS, PDF, PNG, JPG</p>
-              <input 
-                type="file" 
-                className="hidden" 
-                multiple 
+              <input
+                type="file"
+                className="hidden"
+                multiple
                 accept=".ai,.eps,.pdf,.png,.jpg,.jpeg"
               />
             </div>
@@ -224,8 +278,8 @@ export default function OrderModal({ open, onOpenChange }: OrderModalProps) {
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               className="bg-swag-primary hover:bg-swag-primary/90"
               disabled={createOrderMutation.isPending}
             >

@@ -409,7 +409,13 @@ export const insertUserSchema = createInsertSchema(users).omit({
   updatedAt: true,
 });
 
-export const insertCompanySchema = createInsertSchema(companies).omit({
+export const insertCompanySchema = createInsertSchema(companies).extend({
+  linkedinUrl: z.string().optional(),
+  twitterUrl: z.string().optional(),
+  facebookUrl: z.string().optional(),
+  instagramUrl: z.string().optional(),
+  otherSocialUrl: z.string().optional(),
+}).omit({
   id: true,
   createdAt: true,
   updatedAt: true,

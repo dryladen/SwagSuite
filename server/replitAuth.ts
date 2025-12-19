@@ -1,6 +1,6 @@
 import * as client from "openid-client";
 import { Strategy, type VerifyFunction } from "openid-client/passport";
-
+import { Strategy as LocalStrategy } from "passport-local";
 import passport from "passport";
 import session from "express-session";
 import type { Express, RequestHandler } from "express";
@@ -8,7 +8,12 @@ import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 
-if (!process.env.REPLIT_DOMAINS) {
+// Determine if we are in local development mode
+// We consider it local dev if REPL_ID is not set or if it is set to "local-dev"
+const isLocalDev = !process.env.REPL_ID || process.env.REPL_ID === "local-dev";
+
+// Only enforce REPLIT_DOMAINS if not in local dev
+if (!isLocalDev && !process.env.REPLIT_DOMAINS) {
   throw new Error("Environment variable REPLIT_DOMAINS not provided");
 }
 
@@ -22,11 +27,13 @@ const getOidcConfig = memoize(
   { maxAge: 3600 * 1000 }
 );
 
+import { pool } from "./db";
+
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
+    pool, // Use the existing pool with WebSocket configuration
     createTableIfMissing: true,
     ttl: sessionTtl,
     tableName: "sessions",
@@ -38,7 +45,7 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true,
+      secure: !isLocalDev, // Only secure in production
       maxAge: sessionTtl,
     },
   });
@@ -72,60 +79,132 @@ export async function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  const config = await getOidcConfig();
-
-  const verify: VerifyFunction = async (
-    tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
-    verified: passport.AuthenticateCallback
-  ) => {
-    const user = {};
-    updateUserSession(user, tokens);
-    await upsertUser(tokens.claims());
-    verified(null, user);
-  };
-
-  for (const domain of process.env
-    .REPLIT_DOMAINS!.split(",")) {
-    const strategy = new Strategy(
-      {
-        name: `replitauth:${domain}`,
-        config,
-        scope: "openid email profile offline_access",
-        callbackURL: `https://${domain}/api/callback`,
-      },
-      verify,
-    );
-    console.log(`Registering authentication strategy for domain: ${domain}`);
-    passport.use(strategy);
-  }
-
   passport.serializeUser((user: Express.User, cb) => cb(null, user));
   passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
-  app.get("/api/login", (req, res, next) => {
-    const strategy = `replitauth:${req.hostname}`;
-    console.log(`Attempting authentication with strategy: ${strategy}`);
-    passport.authenticate(strategy, {
-      prompt: "login consent",
-      scope: ["openid", "email", "profile", "offline_access"],
-    })(req, res, next);
-  });
+  if (isLocalDev) {
+    console.log("Setting up Local Auth Strategy for development");
 
-  app.get("/api/callback", (req, res, next) => {
-    passport.authenticate(`replitauth:${req.hostname}`, {
-      successReturnToOrRedirect: "/",
-      failureRedirect: "/api/login",
-    })(req, res, next);
-  });
+    // Local Strategy for development
+    passport.use(
+      new LocalStrategy(async (username, password, done) => {
+        // For dev: accept any login, create a mock user
+        const mockUser = {
+          claims: {
+            sub: "dev-user-id",
+            email: "dev@example.com",
+            first_name: "Developer",
+            last_name: "Local",
+            profile_image_url: "https://via.placeholder.com/150",
+            exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours
+          },
+          expires_at: Math.floor(Date.now() / 1000) + (24 * 60 * 60),
+          access_token: "mock-access-token",
+          refresh_token: "mock-refresh-token"
+        };
+        
+        await upsertUser(mockUser.claims);
+        return done(null, mockUser);
+      })
+    );
+
+    app.post("/api/login",
+      passport.authenticate("local", {
+        successRedirect: "/",
+        failureRedirect: "/login?error=true"
+      })
+    );
+
+    // Also support GET for convenience if needed, or redirect
+    app.get("/api/login", (req, res) => {
+       // Since we can't easily do a POST from a simple link, 
+       // for dev convenience we'll just auto-login if they hit this endpoint
+       // Or serve a simple login form. Let's redirect to a simple dev login page
+       // But better yet, let's just cheat and auto-login for GET too in dev
+       req.login({
+          claims: {
+            sub: "dev-user-id",
+            email: "dev@example.com",
+            first_name: "Developer",
+            last_name: "Local",
+            profile_image_url: "https://via.placeholder.com/150",
+            exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60)
+          },
+          expires_at: Math.floor(Date.now() / 1000) + (24 * 60 * 60)
+        }, async (err) => {
+          if (err) { return res.status(500).send("Login failed"); }
+          await upsertUser({
+             sub: "dev-user-id",
+             email: "dev@example.com",
+             first_name: "Developer",
+             last_name: "Local",
+             profile_image_url: "https://via.placeholder.com/150"
+          });
+          return res.redirect("/");
+       });
+    });
+
+  } else {
+    // Original Replit Auth Logic
+    const config = await getOidcConfig();
+
+    const verify: VerifyFunction = async (
+      tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
+      verified: passport.AuthenticateCallback
+    ) => {
+      const user = {};
+      updateUserSession(user, tokens);
+      await upsertUser(tokens.claims());
+      verified(null, user);
+    };
+
+    const domains = process.env.REPLIT_DOMAINS!.split(",");
+    for (const domain of domains) {
+      const strategy = new Strategy(
+        {
+          name: `replitauth:${domain}`,
+          config,
+          scope: "openid email profile offline_access",
+          callbackURL: `https://${domain}/api/callback`,
+        },
+        verify,
+      );
+      console.log(`Registering authentication strategy for domain: ${domain}`);
+      passport.use(strategy);
+    }
+
+    app.get("/api/login", (req, res, next) => {
+      const strategy = `replitauth:${req.hostname}`;
+      console.log(`Attempting authentication with strategy: ${strategy}`);
+      passport.authenticate(strategy, {
+        prompt: "login consent",
+        scope: ["openid", "email", "profile", "offline_access"],
+      })(req, res, next);
+    });
+
+    app.get("/api/callback", (req, res, next) => {
+      passport.authenticate(`replitauth:${req.hostname}`, {
+        successReturnToOrRedirect: "/",
+        failureRedirect: "/api/login",
+      })(req, res, next);
+    });
+  }
 
   app.get("/api/logout", (req, res) => {
     req.logout(() => {
-      res.redirect(
-        client.buildEndSessionUrl(config, {
-          client_id: process.env.REPL_ID!,
-          post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
-        }).href
-      );
+      if (isLocalDev) {
+        res.redirect("/");
+      } else {
+        // Use default config here as we are inside async function not requiring params
+        getOidcConfig().then(config => {
+           res.redirect(
+            client.buildEndSessionUrl(config, {
+              client_id: process.env.REPL_ID!,
+              post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
+            }).href
+          );
+        });
+      }
     });
   });
 }
@@ -133,7 +212,17 @@ export async function setupAuth(app: Express) {
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   const user = req.user as any;
 
-  if (!req.isAuthenticated() || !user.expires_at) {
+  // Check if authenticated
+  if (!req.isAuthenticated()) {
+     return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  // If local dev, skip strict token validation
+  if (isLocalDev) {
+     return next();
+  }
+
+  if (!user.expires_at) {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
