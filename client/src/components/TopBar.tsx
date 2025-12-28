@@ -40,26 +40,20 @@ export default function TopBar() {
       {/* Right side - Notifications and User Menu */}
       <div className="flex items-center gap-2 md:gap-4">
         {/* Notifications */}
-        <Button variant="ghost" size="sm" className="relative">
-          <Bell size={20} />
-          <span className="absolute top-1 right-2 h-2 w-2 bg-red-500 rounded-full"></span>
+        <Button variant="outline" size="icon" className="relative rounded-full">
+          <Bell size={18} />
+          <span className="absolute top-2 right-2.5 h-1.5 w-1.5 bg-red-500 rounded-full"></span>
         </Button>
-
-        {/* Settings */}
-        <Button variant="ghost" size="sm">
-          <Settings size={20} />
-        </Button>
-
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative h-8 w-8 rounded-full">
+            <Button variant="ghost" size="icon" className="relative rounded-full">
               <UserAvatar
                 name={(user as any)?.firstName && (user as any)?.lastName
                   ? `${(user as any).firstName} ${(user as any).lastName}`
                   : (user as any)?.email || 'User'
                 }
-                size="md"
+                size="lg"
               />
             </Button>
           </DropdownMenuTrigger>
@@ -82,7 +76,10 @@ export default function TopBar() {
               <User className="mr-2 h-4 w-4" />
               <span>Profile</span>
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => window.location.href = '/settings'}
+              className="cursor-pointer"
+            >
               <Settings className="mr-2 h-4 w-4" />
               <span>Settings</span>
             </DropdownMenuItem>

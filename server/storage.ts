@@ -1448,20 +1448,21 @@ export class DatabaseStorage implements IStorage {
       const company = insertedCompanies[i % insertedCompanies.length];
       const status = orderStatuses[i % orderStatuses.length];
       const orderValue = 500 + (i * 150) + Math.random() * 1000;
+      const orderType = i % 3 === 0 ? 'rush_order' : 'sales_order' as const;
 
       sampleOrders.push({
         orderNumber: `ORD-2025-${String(1001 + i).padStart(4, '0')}`,
         companyId: company?.id || 'default-company',
         status,
-        orderType: i % 3 === 0 ? 'rush_order' : 'sales_order' as const,
+        orderType,
         subtotal: orderValue.toFixed(2),
         tax: (orderValue * 0.08).toFixed(2),
         shipping: (orderValue * 0.05).toFixed(2),
         total: (orderValue * 1.13).toFixed(2),
-        margin: 45.0 + (Math.random() * 10),
+        margin: (45.0 + (Math.random() * 10)).toFixed(2),
         inHandsDate: new Date(Date.now() + (i * 7 + 14) * 24 * 60 * 60 * 1000),
         eventDate: new Date(Date.now() + (i * 7 + 21) * 24 * 60 * 60 * 1000),
-        notes: `Order for ${company?.name || 'Company'} - ${status === 'rush_order' ? 'Rush delivery required' : 'Standard processing'}`,
+        notes: `Order for ${company?.name || 'Company'} - ${orderType === 'rush_order' ? 'Rush delivery required' : 'Standard processing'}`,
         customerNotes: `Thank you for your business! Expected delivery: ${i + 7}-${i + 14} business days.`,
         trackingNumber: status === 'shipped' || status === 'delivered' ? `1Z999AA1${String(i).padStart(10, '0')}` : null
       });
@@ -1477,7 +1478,7 @@ export class DatabaseStorage implements IStorage {
       for (let i = 0; i < numItems; i++) {
         const product = insertedProducts[Math.floor(Math.random() * insertedProducts.length)];
         const quantity = 25 + Math.floor(Math.random() * 475); // 25-500 quantity
-        const unitPrice = Number(product?.unitPrice) || 10;
+        const unitPrice = 10 + Math.random() * 40; // Random price between 10-50
 
         sampleOrderItems.push({
           orderId: order.id,
@@ -1641,7 +1642,7 @@ export class DatabaseStorage implements IStorage {
   async getPresentationFiles(presentationId: string): Promise<PresentationFile[]> {
     return await db.select().from(presentationFiles)
       .where(eq(presentationFiles.presentationId, presentationId))
-      .orderBy(desc(presentationFiles.createdAt));
+      .orderBy(desc(presentationFiles.uploadedAt));
   }
 
   async createPresentationProduct(product: InsertPresentationProduct): Promise<PresentationProduct> {
@@ -1937,7 +1938,7 @@ export class DatabaseStorage implements IStorage {
 
   async getErrorsByType(errorType: string): Promise<Error[]> {
     return await db.select().from(errors)
-      .where(eq(errors.errorType, errorType))
+      .where(eq(errors.errorType, errorType as any))
       .orderBy(desc(errors.date));
   }
 
@@ -2001,7 +2002,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createNewsletterSubscriber(subscriber: InsertNewsletterSubscriber): Promise<NewsletterSubscriber> {
-    const [newSubscriber] = await db.insert(newsletterSubscribers).values(subscriber).returning();
+    const [newSubscriber] = await db.insert(newsletterSubscribers).values(subscriber as any).returning();
     return newSubscriber;
   }
 

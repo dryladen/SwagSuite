@@ -127,6 +127,6 @@
 
 /* Navigation active state */
 .nav-item.active {
-  background-color: hsl(194, 65%, 48%, 0.2);
-  color: hsl(194, 65%, 48%);
+  background-color: hsla(194, 96%, 53%, 0.2);
+  color: hsla(0, 0%, 100%, 1.00);
 }

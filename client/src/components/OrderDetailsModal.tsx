@@ -26,12 +26,20 @@ import {
   ExternalLink,
   Tag,
   AlertTriangle,
-  Zap
+  Zap,
+  Factory,
+  Eye,
+  ThumbsUp,
+  CreditCard,
+  ShoppingCart,
+  TrendingUp
 } from "lucide-react";
 import type { Order } from "@shared/schema";
 import { useState, useRef } from "react";
 import { useLocation } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import OrderModal from "./OrderModal";
+import { useToast } from "@/hooks/use-toast";
 
 interface OrderDetailsModalProps {
   open: boolean;
@@ -45,6 +53,45 @@ interface TeamMember {
   firstName: string;
   lastName: string;
   email: string;
+}
+
+interface ProjectActivity {
+  id: string;
+  orderId: string;
+  userId: string;
+  activityType: string;
+  content: string;
+  metadata: any;
+  mentionedUsers: string[];
+  isSystemGenerated: boolean;
+  createdAt: string;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+}
+
+interface Communication {
+  id: string;
+  orderId: string;
+  userId: string;
+  communicationType: string;
+  direction: string;
+  recipientEmail: string;
+  recipientName?: string;
+  subject: string;
+  body: string;
+  metadata: any;
+  sentAt: string;
+  createdAt: string;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
 }
 
 const statusColorMap = {
@@ -80,9 +127,150 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
   const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-  // Mock team members for @ mentions
-  const teamMembers: TeamMember[] = [
+  // Fetch team members for @ mentions
+  const { data: teamMembers = [] } = useQuery<TeamMember[]>({
+    queryKey: ["/api/users/team"],
+    enabled: open && !!order,
+  });
+
+  // Fetch project activities (internal notes)
+  const { data: activities = [] } = useQuery<ProjectActivity[]>({
+    queryKey: [`/api/projects/${order?.id}/activities`],
+    enabled: open && !!order,
+  });
+
+  // Fetch client communications
+  const { data: clientCommunications = [] } = useQuery<Communication[]>({
+    queryKey: [`/api/orders/${order?.id}/communications`, { type: "client_email" }],
+    queryFn: async () => {
+      const response = await fetch(`/api/orders/${order?.id}/communications?type=client_email`);
+      if (!response.ok) throw new Error("Failed to fetch client communications");
+      return response.json();
+    },
+    enabled: open && !!order,
+  });
+
+  // Fetch vendor communications
+  const { data: vendorCommunications = [] } = useQuery<Communication[]>({
+    queryKey: [`/api/orders/${order?.id}/communications`, { type: "vendor_email" }],
+    queryFn: async () => {
+      const response = await fetch(`/api/orders/${order?.id}/communications?type=vendor_email`);
+      if (!response.ok) throw new Error("Failed to fetch vendor communications");
+      return response.json();
+    },
+    enabled: open && !!order,
+  });
+
+  // Mutation for creating internal notes
+  const createActivityMutation = useMutation({
+    mutationFn: async (data: { activityType: string; content: string; mentionedUsers?: string[] }) => {
+      const response = await fetch(`/api/projects/${order?.id}/activities`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) throw new Error("Failed to create activity");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${order?.id}/activities`] });
+      toast({
+        title: "Note sent",
+        description: "Internal note has been added successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to send internal note.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation for sending client emails
+  const sendClientEmailMutation = useMutation({
+    mutationFn: async (data: {
+      recipientEmail: string;
+      subject: string;
+      body: string;
+    }) => {
+      const response = await fetch(`/api/orders/${order?.id}/communications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          communicationType: "client_email",
+          direction: "sent",
+          recipientEmail: data.recipientEmail,
+          subject: data.subject,
+          body: data.body,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to send email");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [`/api/orders/${order?.id}/communications`, { type: "client_email" }],
+      });
+      toast({
+        title: "Email sent",
+        description: "Client email has been sent successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to send client email.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation for sending vendor emails
+  const sendVendorEmailMutation = useMutation({
+    mutationFn: async (data: {
+      recipientEmail: string;
+      subject: string;
+      body: string;
+    }) => {
+      const response = await fetch(`/api/orders/${order?.id}/communications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          communicationType: "vendor_email",
+          direction: "sent",
+          recipientEmail: data.recipientEmail,
+          subject: data.subject,
+          body: data.body,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to send email");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [`/api/orders/${order?.id}/communications`, { type: "vendor_email" }],
+      });
+      toast({
+        title: "Email sent",
+        description: "Vendor email has been sent successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to send vendor email.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mock team members for @ mentions (fallback)
+  const defaultTeamMembers: TeamMember[] = [
     { id: "user1", firstName: "Sarah", lastName: "Johnson", email: "sarah@swag.com" },
     { id: "user2", firstName: "Mike", lastName: "Chen", email: "mike@swag.com" },
     { id: "user3", firstName: "Alex", lastName: "Rodriguez", email: "alex@swag.com" },
@@ -131,27 +319,65 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
     textareaRef.current?.focus();
   };
 
-  const filteredTeamMembers = teamMembers.filter((member: TeamMember) =>
+  const filteredTeamMembers = (teamMembers.length > 0 ? teamMembers : defaultTeamMembers).filter((member: TeamMember) =>
     `${member.firstName} ${member.lastName}`.toLowerCase().includes(mentionQuery.toLowerCase())
   );
 
   const handleSendInternalNote = () => {
-    // In a real app, this would send to your backend
-    console.log("Sending internal note:", internalNote);
+    if (!internalNote.trim()) return;
+
+    // Extract mentioned user IDs from the note
+    const mentionedUserIds: string[] = [];
+    (teamMembers.length > 0 ? teamMembers : defaultTeamMembers).forEach((member) => {
+      const fullName = `${member.firstName} ${member.lastName}`;
+      if (internalNote.includes(`@${fullName}`)) {
+        mentionedUserIds.push(member.id);
+      }
+    });
+
+    createActivityMutation.mutate({
+      activityType: "comment",
+      content: internalNote,
+      mentionedUsers: mentionedUserIds,
+    });
     setInternalNote("");
   };
 
   const handleSendEmail = () => {
-    // In a real app, this would integrate with your email service
-    console.log("Sending email:", { to: emailTo, subject: emailSubject, body: emailBody });
+    if (!emailTo.trim() || !emailSubject.trim() || !emailBody.trim()) {
+      toast({
+        title: "Missing fields",
+        description: "Please fill in all email fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    sendClientEmailMutation.mutate({
+      recipientEmail: emailTo,
+      subject: emailSubject,
+      body: emailBody,
+    });
     setEmailTo("");
     setEmailSubject("");
     setEmailBody("");
   };
 
   const handleSendVendorEmail = () => {
-    // In a real app, this would integrate with your email service
-    console.log("Sending vendor email:", { to: vendorEmailTo, subject: vendorEmailSubject, body: vendorEmailBody });
+    if (!vendorEmailTo.trim() || !vendorEmailSubject.trim() || !vendorEmailBody.trim()) {
+      toast({
+        title: "Missing fields",
+        description: "Please fill in all email fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    sendVendorEmailMutation.mutate({
+      recipientEmail: vendorEmailTo,
+      subject: vendorEmailSubject,
+      body: vendorEmailBody,
+    });
     setVendorEmailTo("");
     setVendorEmailSubject("");
     setVendorEmailBody("");
@@ -162,7 +388,7 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-6xl p-4 max-h-[95vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center pt-3 gap-3">
+            <DialogTitle className="flex items-center pt-6 gap-3">
               <FileText className="w-6 h-6" />
               Order #{order.orderNumber}
               <Badge className={statusClass}>
@@ -420,6 +646,111 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                     )}
                   </CardContent>
                 </Card>
+
+                {/* Production Stages Progress */}
+                <Card className="md:col-span-2">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Factory className="w-5 h-5" />
+                      Production Progress
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {/* Current Stage Highlight */}
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="p-2 bg-blue-100 rounded-full">
+                              <Factory className="w-4 h-4 text-blue-600" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-blue-900">Current Stage</p>
+                              <p className="text-xs text-blue-700">
+                                {(order as any).currentStage?.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) || 'Sales Booked'}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                            {((order as any).stagesCompleted?.length || 1)} / 9 Complete
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {/* Stages Timeline */}
+                      <div className="space-y-2">
+                        {[
+                          { id: 'sales-booked', name: 'Sales Order Booked', icon: ShoppingCart },
+                          { id: 'po-placed', name: 'Purchase Order Placed', icon: FileText },
+                          { id: 'confirmation-received', name: 'Confirmation Received', icon: MessageSquare },
+                          { id: 'proof-received', name: 'Proof Received', icon: Eye },
+                          { id: 'proof-approved', name: 'Proof Approved', icon: ThumbsUp },
+                          { id: 'order-placed', name: 'Order Placed', icon: Package },
+                          { id: 'invoice-paid', name: 'Invoice Paid', icon: CreditCard },
+                          { id: 'shipping-scheduled', name: 'Shipping Scheduled', icon: Calendar },
+                          { id: 'shipped', name: 'Shipped', icon: Truck },
+                        ].map((stage, index) => {
+                          const Icon = stage.icon;
+                          const isCompleted = ((order as any).stagesCompleted || ['sales-booked']).includes(stage.id);
+                          const isCurrent = (order as any).currentStage === stage.id && !isCompleted;
+                          
+                          return (
+                            <div key={stage.id} className="flex items-center gap-3">
+                              <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${
+                                isCompleted 
+                                  ? 'bg-green-100 border-green-500' 
+                                  : isCurrent 
+                                  ? 'bg-blue-100 border-blue-500' 
+                                  : 'bg-gray-100 border-gray-300'
+                              }`}>
+                                {isCompleted ? (
+                                  <CheckCircle className="w-4 h-4 text-green-600" />
+                                ) : (
+                                  <Icon className={`w-4 h-4 ${isCurrent ? 'text-blue-600' : 'text-gray-400'}`} />
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <p className={`text-sm font-medium ${
+                                  isCompleted ? 'text-green-700' : isCurrent ? 'text-blue-700' : 'text-gray-600'
+                                }`}>
+                                  {stage.name}
+                                </p>
+                              </div>
+                              {isCurrent && (
+                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-300">
+                                  In Progress
+                                </Badge>
+                              )}
+                              {isCompleted && (
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Next Actions */}
+                      {(order as any).stageData?.nextActionDate && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <TrendingUp className="w-4 h-4 text-amber-600 mt-0.5" />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-amber-900">Next Action</p>
+                              <p className="text-xs text-amber-700 mt-1">
+                                Due: {new Date((order as any).stageData.nextActionDate).toLocaleDateString()}
+                              </p>
+                              {(order as any).customNotes?.nextAction && (
+                                <p className="text-xs text-amber-600 mt-1">
+                                  {(order as any).customNotes.nextAction}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
 
               {/* Action Buttons */}
@@ -496,22 +827,39 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                   <div className="space-y-3">
                     <h4 className="text-sm font-medium text-gray-700">Recent Internal Notes</h4>
                     <div className="space-y-2">
-                      <div className="p-3 bg-gray-50 rounded-lg">
-                        <div className="flex items-center gap-2 mb-1">
-                          <UserAvatar name="Sarah Johnson" size="sm" />
-                          <span className="text-sm font-medium">Sarah Johnson</span>
-                          <span className="text-xs text-gray-500">2 hours ago</span>
+                      {activities.length === 0 ? (
+                        <div className="p-3 bg-gray-50 rounded-lg text-center text-sm text-gray-500">
+                          No internal notes yet. Add a note above to start tracking this project.
                         </div>
-                        <p className="text-sm text-gray-700">Customer confirmed artwork approval. Ready to move to production. @Mike Chen please coordinate with vendor.</p>
-                      </div>
-                      <div className="p-3 bg-gray-50 rounded-lg">
-                        <div className="flex items-center gap-2 mb-1">
-                          <UserAvatar name="Mike Chen" size="sm" />
-                          <span className="text-sm font-medium">Mike Chen</span>
-                          <span className="text-xs text-gray-500">1 day ago</span>
-                        </div>
-                        <p className="text-sm text-gray-700">Vendor confirmed 5-day production timeline. Will ship on Friday.</p>
-                      </div>
+                      ) : (
+                        activities
+                          .filter((activity: ProjectActivity) => activity.activityType === "comment")
+                          .slice(0, 5)
+                          .map((activity: ProjectActivity) => {
+                            const timeAgo = new Date(activity.createdAt).toLocaleString();
+                            const userName = activity.user
+                              ? `${activity.user.firstName} ${activity.user.lastName}`
+                              : "Unknown User";
+
+                            return (
+                              <div key={activity.id} className="p-3 bg-gray-50 rounded-lg">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <UserAvatar name={userName} size="sm" />
+                                  <span className="text-sm font-medium">{userName}</span>
+                                  <span className="text-xs text-gray-500">
+                                    {new Date(activity.createdAt).toLocaleString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: 'numeric',
+                                      minute: '2-digit'
+                                    })}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-700">{activity.content}</p>
+                              </div>
+                            );
+                          })
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -627,20 +975,42 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                   <div className="space-y-3">
                     <h4 className="text-sm font-medium text-gray-700">Recent Communications</h4>
                     <div className="space-y-2">
-                      <div className="p-3 bg-blue-50 rounded-lg border-l-4 border-blue-500">
-                        <div className="flex justify-between items-start mb-1">
-                          <span className="text-sm font-medium">Sent: Artwork Approval Request</span>
-                          <span className="text-xs text-gray-500">Yesterday, 3:24 PM</span>
+                      {clientCommunications.length === 0 ? (
+                        <div className="p-3 bg-gray-50 rounded-lg text-center text-sm text-gray-500">
+                          No client emails yet. Send your first email above.
                         </div>
-                        <p className="text-sm text-gray-700">Requested client approval for logo placement and colors.</p>
-                      </div>
-                      <div className="p-3 bg-green-50 rounded-lg border-l-4 border-green-500">
-                        <div className="flex justify-between items-start mb-1">
-                          <span className="text-sm font-medium">Received: Approval Confirmed</span>
-                          <span className="text-xs text-gray-500">Today, 9:15 AM</span>
-                        </div>
-                        <p className="text-sm text-gray-700">Client approved artwork with minor color adjustment request.</p>
-                      </div>
+                      ) : (
+                        clientCommunications.slice(0, 5).map((comm: Communication) => {
+                          const isSent = comm.direction === "sent";
+                          const bgColor = isSent ? "bg-blue-50 border-blue-500" : "bg-green-50 border-green-500";
+
+                          return (
+                            <div key={comm.id} className={`p-3 rounded-lg border-l-4 ${bgColor}`}>
+                              <div className="flex justify-between items-start mb-1">
+                                <span className="text-sm font-medium">
+                                  {isSent ? "Sent: " : "Received: "}
+                                  {comm.subject}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  {new Date(comm.sentAt).toLocaleString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: 'numeric',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-700 line-clamp-2">{comm.body}</p>
+                              {comm.recipientEmail && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {isSent ? "To: " : "From: "}
+                                  {comm.recipientEmail}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -819,29 +1189,43 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="space-y-2">
-                        <div className="p-3 bg-blue-50 rounded-lg border-l-4 border-blue-500">
-                          <div className="flex justify-between items-start mb-1">
-                            <span className="text-sm font-medium">Sent: Production Timeline Request</span>
-                            <span className="text-xs text-gray-500">2 hours ago</span>
+                        {vendorCommunications.length === 0 ? (
+                          <div className="p-3 bg-gray-50 rounded-lg text-center text-sm text-gray-500">
+                            No vendor communications yet. Send your first email above.
                           </div>
-                          <p className="text-sm text-gray-700">Requested production schedule for current order batch including this order.</p>
-                        </div>
+                        ) : (
+                          vendorCommunications.slice(0, 5).map((comm: Communication) => {
+                            const isSent = comm.direction === "sent";
+                            const bgColor = isSent ? "bg-blue-50 border-blue-500" : "bg-green-50 border-green-500";
 
-                        <div className="p-3 bg-green-50 rounded-lg border-l-4 border-green-500">
-                          <div className="flex justify-between items-start mb-1">
-                            <span className="text-sm font-medium">Received: Timeline Confirmed</span>
-                            <span className="text-xs text-gray-500">Yesterday, 4:30 PM</span>
-                          </div>
-                          <p className="text-sm text-gray-700">Vendor confirmed 5-day production timeline. Ready to start upon artwork approval.</p>
-                        </div>
-
-                        <div className="p-3 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
-                          <div className="flex justify-between items-start mb-1">
-                            <span className="text-sm font-medium">Sent: Artwork Package</span>
-                            <span className="text-xs text-gray-500">2 days ago</span>
-                          </div>
-                          <p className="text-sm text-gray-700">Sent final artwork files and production specifications.</p>
-                        </div>
+                            return (
+                              <div key={comm.id} className={`p-3 rounded-lg border-l-4 ${bgColor}`}>
+                                <div className="flex justify-between items-start mb-1">
+                                  <span className="text-sm font-medium">
+                                    {isSent ? "Sent: " : "Received: "}
+                                    {comm.subject}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {new Date(comm.sentAt).toLocaleString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: 'numeric',
+                                      minute: '2-digit'
+                                    })}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-700 line-clamp-2">{comm.body}</p>
+                                {comm.recipientEmail && (
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {isSent ? "To: " : "From: "}
+                                    {comm.recipientEmail}
+                                    {comm.recipientName && ` (${comm.recipientName})`}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
                     </CardContent>
                   </Card>

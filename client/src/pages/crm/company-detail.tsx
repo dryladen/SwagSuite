@@ -30,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import OrderModal from "@/components/OrderModal";
 
 // Define the Company type with social media posts
 interface Company {
@@ -79,6 +80,7 @@ export default function CompanyDetail() {
   const params = useParams();
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("overview");
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -120,6 +122,40 @@ export default function CompanyDetail() {
 
   const getInitials = (name: string) => {
     return name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  // Quick Action Handlers
+  const handleSendEmail = () => {
+    if (company?.email) {
+      window.location.href = `mailto:${company.email}?subject=Follow up with ${company.name}`;
+    } else {
+      toast({
+        title: "No Email Available",
+        description: "This company doesn't have an email address on file.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCallCompany = () => {
+    if (company?.phone) {
+      window.location.href = `tel:${company.phone}`;
+    } else {
+      toast({
+        title: "No Phone Number Available",
+        description: "This company doesn't have a phone number on file.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleViewContacts = () => {
+    // Navigate to contacts page with company filter
+    setLocation(`/crm/contacts?company=${companyId}`);
+  };
+
+  const handleCreateQuote = () => {
+    setIsOrderModalOpen(true);
   };
 
   if (isLoading) {
@@ -291,7 +327,7 @@ export default function CompanyDetail() {
                   </CardContent>
                 </Card>
 
-                {company.customerScore && (
+                {company.customerScore !== undefined && (
                   <Card>
                     <CardContent className="pt-6">
                       <div className="flex items-center gap-2">
@@ -413,7 +449,7 @@ export default function CompanyDetail() {
             <CardContent className="pt-6">
               <div className="text-center space-y-4">
                 <Avatar className="h-20 w-20 mx-auto">
-                  <AvatarFallback className="text-lg font-semibold bg-swag-orange text-white">
+                  <AvatarFallback className="text-lg font-semibold bg-swag-orange text-blue bg-gray-200">
                     {getInitials(company.name)}
                   </AvatarFallback>
                 </Avatar>
@@ -487,26 +523,56 @@ export default function CompanyDetail() {
               <CardTitle className="text-sm">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button variant="outline" size="sm" className="w-full justify-start">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full justify-start"
+                onClick={handleSendEmail}
+                disabled={!company.email}
+              >
                 <Mail className="h-4 w-4 mr-2" />
                 Send Email
               </Button>
-              <Button variant="outline" size="sm" className="w-full justify-start">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full justify-start"
+                onClick={handleCallCompany}
+                disabled={!company.phone}
+              >
                 <Phone className="h-4 w-4 mr-2" />
                 Call Company
               </Button>
-              <Button variant="outline" size="sm" className="w-full justify-start">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full justify-start"
+                onClick={handleViewContacts}
+              >
                 <Users className="h-4 w-4 mr-2" />
                 View Contacts
               </Button>
-              <Button variant="outline" size="sm" className="w-full justify-start">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full justify-start"
+                onClick={handleCreateQuote}
+              >
                 <DollarSign className="h-4 w-4 mr-2" />
-                Create Quote
+                Create Order
               </Button>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {/* Order Modal for Creating Quote */}
+      <OrderModal 
+        open={isOrderModalOpen} 
+        onOpenChange={setIsOrderModalOpen}
+        order={null}
+        initialCompanyId={company.id}
+      />
     </div>
   );
 }

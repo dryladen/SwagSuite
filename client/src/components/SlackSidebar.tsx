@@ -1,31 +1,48 @@
-import { useState, useEffect, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  MessageSquare,
-  Send,
-  Minimize2,
-  Maximize2,
-  Users,
-  Clock,
-  RefreshCw,
-  Hash
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Textarea } from '@/components/ui/textarea';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
+import {
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Hash,
+  MessageSquare,
+  Minimize2,
+  RefreshCw,
+  Send,
+  User,
+  Users
+} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 interface SlackMessage {
   id: string;
   channelId: string;
   messageId: string;
   userId?: string;
+  username?: string;
   content?: string;
   attachments?: any[];
   threadTs?: string;
+  isReply?: boolean;
+  replyCount?: number;
+  timestamp?: string;
   createdAt: string;
+  botId?: string;
+}
+
+interface ThreadReply {
+  id: string;
+  messageId: string;
+  userId?: string;
+  username?: string;
+  content?: string;
+  timestamp?: string;
+  createdAt: string;
+  botId?: string;
 }
 
 interface SlackSidebarProps {
@@ -36,15 +53,20 @@ interface SlackSidebarProps {
 export function SlackSidebar({ isMinimized, onToggleMinimize }: SlackSidebarProps) {
   const [newMessage, setNewMessage] = useState('');
   const [isConnected, setIsConnected] = useState(true);
+  const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
-  // Fetch Slack messages
-  const { data: messages = [], isLoading, refetch } = useQuery<SlackMessage[]>({
-    queryKey: ['/api/slack/messages'],
-    refetchInterval: 5000, // Refresh every 5 seconds
-    enabled: !isMinimized, // Only fetch when not minimized
+  // Fetch Slack messages from channel history (live sync)
+  const { data: slackResponse, isLoading: isLoadingSlack, refetch: refetchSlack } = useQuery<{ messages: SlackMessage[] }>({
+    queryKey: ['/api/slack/sync-messages'],
+    refetchInterval: 10000, // Refresh every 10 seconds to get new replies from Slack
+    enabled: !isMinimized,
   });
+
+  // Use Slack channel messages (live data from Slack)
+  const messages = slackResponse?.messages || [];
+  const isLoading = isLoadingSlack;
 
   // Send message mutation
   const sendMessageMutation = useMutation({
@@ -54,12 +76,22 @@ export function SlackSidebar({ isMinimized, onToggleMinimize }: SlackSidebarProp
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
       });
-      if (!response.ok) throw new Error('Failed to send message');
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to send message');
+      }
       return response.json();
     },
     onSuccess: () => {
       setNewMessage('');
-      queryClient.invalidateQueries({ queryKey: ['/api/slack/messages'] });
+      // Refetch after a short delay to ensure message is in Slack
+      setTimeout(() => {
+        refetchSlack();
+      }, 1000);
+    },
+    onError: (error: any) => {
+      console.error('Failed to send message:', error);
+      alert(error.message || 'Failed to send message to Slack');
     },
   });
 
@@ -73,6 +105,27 @@ export function SlackSidebar({ isMinimized, onToggleMinimize }: SlackSidebarProp
       e.preventDefault();
       handleSendMessage();
     }
+  };
+
+  const toggleThread = (threadTs: string) => {
+    setExpandedThreads(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(threadTs)) {
+        newSet.delete(threadTs);
+      } else {
+        newSet.add(threadTs);
+      }
+      return newSet;
+    });
+  };
+
+  // Fetch thread replies when expanded
+  const useThreadReplies = (threadTs: string | undefined, enabled: boolean) => {
+    return useQuery<{ replies: ThreadReply[] }>({
+      queryKey: [`/api/slack/thread/${threadTs}`],
+      enabled: enabled && !!threadTs,
+      staleTime: 30000, // Cache for 30 seconds
+    });
   };
 
   // Scroll to bottom when new messages arrive
@@ -112,9 +165,10 @@ export function SlackSidebar({ isMinimized, onToggleMinimize }: SlackSidebarProp
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => refetch()}
+            onClick={() => refetchSlack()}
             className="text-white hover:bg-white/20 h-8 w-8 p-0"
             disabled={isLoading}
+            title="Refresh messages"
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
           </Button>
@@ -147,32 +201,82 @@ export function SlackSidebar({ isMinimized, onToggleMinimize }: SlackSidebarProp
             </div>
           )}
 
-          {messages.map((message: SlackMessage) => (
-            <div key={message.id} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-              <div className="flex items-start justify-between mb-1">
-                <div className="flex items-center space-x-2">
-                  <div className="w-6 h-6 bg-[#4A154B] rounded-full flex items-center justify-center">
-                    <Users size={12} className="text-white" />
+          {messages.map((message: SlackMessage) => {
+            const isFromBot = message.botId || message.username === 'SwagSuite';
+            const displayName = message.username || (isFromBot ? 'SwagSuite' : 'Team Member');
+            const messageTime = message.timestamp
+              ? new Date(message.timestamp)
+              : new Date(message.createdAt);
+            const hasThread = (message.replyCount ?? 0) > 0 && !message.isReply;
+            const isThreadExpanded = expandedThreads.has(message.messageId);
+
+            return (
+              <div key={message.id}>
+                <div
+                  className={`rounded-lg p-3 ${isFromBot
+                      ? 'bg-blue-50 dark:bg-blue-900/20 ml-4'
+                      : 'bg-gray-50 dark:bg-gray-800 mr-4'
+                    }`}
+                >
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="flex items-center space-x-2">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isFromBot ? 'bg-blue-500' : 'bg-[#7b287c]'
+                        }`}>
+                        <User size={12} className="text-white" />
+                      </div>
+                      <span className="font-medium text-sm">{displayName}</span>
+                      {message.isReply && (
+                        <Badge variant="outline" className="text-xs">
+                          Reply
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center text-xs text-gray-500">
+                      <Clock size={10} className="mr-1" />
+                      {formatDistanceToNow(messageTime, { addSuffix: true })}
+                    </div>
                   </div>
-                  <span className="font-medium text-sm">Team Member</span>
+                  <p className="text-sm text-gray-700 dark:text-gray-300 ml-8 whitespace-pre-wrap">
+                    {message.content || 'Message content'}
+                  </p>
+                  {hasThread && (
+                    <div className="ml-8 mt-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleThread(message.messageId)}
+                        className="h-auto p-1 hover:bg-gray-200 dark:hover:bg-gray-700"
+                      >
+                        {isThreadExpanded ? (
+                          <ChevronDown size={14} className="mr-1" />
+                        ) : (
+                          <ChevronRight size={14} className="mr-1" />
+                        )}
+                        <Badge variant="secondary" className="text-xs">
+                          {message.replyCount} {message.replyCount === 1 ? 'reply' : 'replies'}
+                        </Badge>
+                      </Button>
+                    </div>
+                  )}
+                  {message.attachments && message.attachments.length > 0 && (
+                    <div className="ml-8 mt-2">
+                      <Badge variant="outline" className="text-xs">
+                        {message.attachments.length} attachment(s)
+                      </Badge>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center text-xs text-gray-500">
-                  <Clock size={10} className="mr-1" />
-                  {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
-                </div>
+
+                {/* Thread Replies */}
+                {hasThread && isThreadExpanded && (
+                  <ThreadReplies
+                    threadTs={message.messageId}
+                    useThreadReplies={useThreadReplies}
+                  />
+                )}
               </div>
-              <p className="text-sm text-gray-700 dark:text-gray-300 ml-8">
-                {message.content || 'Message content'}
-              </p>
-              {message.attachments && message.attachments.length > 0 && (
-                <div className="ml-8 mt-2">
-                  <Badge variant="outline" className="text-xs">
-                    {message.attachments.length} attachment(s)
-                  </Badge>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
           <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
@@ -204,6 +308,72 @@ export function SlackSidebar({ isMinimized, onToggleMinimize }: SlackSidebarProp
           Press Enter to send, Shift+Enter for new line
         </p>
       </div>
+    </div>
+  );
+}
+
+// Thread Replies Component
+function ThreadReplies({
+  threadTs,
+  useThreadReplies
+}: {
+  threadTs: string;
+  useThreadReplies: (threadTs: string | undefined, enabled: boolean) => any;
+}) {
+  const { data: threadData, isLoading } = useThreadReplies(threadTs, true);
+  const replies = threadData?.replies || [];
+
+  if (isLoading) {
+    return (
+      <div className="ml-12 mt-2 p-2 bg-gray-100 dark:bg-gray-900 rounded">
+        <div className="flex items-center text-xs text-gray-500">
+          <RefreshCw size={12} className="animate-spin mr-1" />
+          Loading replies...
+        </div>
+      </div>
+    );
+  }
+
+  if (replies.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="ml-12 mt-2 space-y-2 border-l-2 border-gray-300 dark:border-gray-600 pl-3">
+      {replies.map((reply: ThreadReply) => {
+        const isFromBot = reply.botId || reply.username === 'SwagSuite';
+        const displayName = reply.username || (isFromBot ? 'SwagSuite' : 'Team Member');
+        const replyTime = reply.timestamp
+          ? new Date(reply.timestamp)
+          : new Date(reply.createdAt);
+
+        return (
+          <div
+            key={reply.id}
+            className={`rounded p-2 text-sm ${isFromBot
+                ? 'bg-blue-100 dark:bg-blue-900/30'
+                : 'bg-gray-100 dark:bg-gray-800'
+              }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center space-x-1">
+                <div className={`w-4 h-4 rounded-full flex items-center justify-center ${isFromBot ? 'bg-blue-500' : 'bg-[#4A154B]'
+                  }`}>
+                  <Users size={8} className="text-white" />
+                </div>
+                <span className="font-medium text-xs">{displayName}</span>
+              </div>
+              <div className="flex items-center text-xs text-gray-500">
+                <Clock size={8} className="mr-1" />
+                {formatDistanceToNow(replyTime, { addSuffix: true })}
+              </div>
+            </div>
+            <p className="text-xs text-gray-700 dark:text-gray-300 ml-5 whitespace-pre-wrap">
+              {reply.content || 'Reply content'}
+            </p>
+          </div>
+        );
+      })}
     </div>
   );
 }

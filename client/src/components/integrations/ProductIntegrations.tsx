@@ -42,10 +42,16 @@ interface IntegrationConfig {
   status: string;
 }
 
+interface ProductSearchResponse {
+  results: ProductSearchResult[];
+  totalFound: number;
+  searchTime: string;
+}
+
 export function ProductIntegrations() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSource, setSelectedSource] = useState<string>("all");
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedProduct, setSelectedProduct] = useState<ProductSearchResult | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -56,7 +62,7 @@ export function ProductIntegrations() {
   });
 
   // Search products across all platforms
-  const { data: searchResults, isLoading: searchLoading, refetch: searchProducts } = useQuery({
+  const { data: searchResults, isLoading: searchLoading, refetch: searchProducts } = useQuery<ProductSearchResponse>({
     queryKey: ['/api/integrations/products/search', { query: searchQuery, source: selectedSource, category: selectedCategory }],
     enabled: false, // Only search when explicitly triggered
   });
@@ -167,7 +173,6 @@ export function ProductIntegrations() {
         )}
       </div>
 
-      {/* Product Search Interface */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -210,7 +215,7 @@ export function ProductIntegrations() {
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Categories</SelectItem>
+                  <SelectItem value="all">All Categories</SelectItem>
                   <SelectItem value="drinkware">Drinkware</SelectItem>
                   <SelectItem value="apparel">Apparel</SelectItem>
                   <SelectItem value="bags">Bags</SelectItem>
@@ -236,7 +241,7 @@ export function ProductIntegrations() {
           <CardHeader>
             <CardTitle>Search Results</CardTitle>
             <CardDescription>
-              Found {(searchResults as any)?.totalFound || 0} products in {(searchResults as any)?.searchTime || '0s'}
+              Found {searchResults?.totalFound || 0} products in {searchResults?.searchTime || '0s'}
             </CardDescription>
           </CardHeader>
           <CardContent>

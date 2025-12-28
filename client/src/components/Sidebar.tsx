@@ -27,17 +27,17 @@ const navigation = [
   { name: "CRM", href: "/crm", icon: Users },
   { name: "Orders", href: "/orders", icon: ShoppingCart },
   { name: "Production Report", href: "/production-report", icon: Factory },
-  { name: "Errors", href: "/errors", icon: AlertCircle },
   { name: "Products", href: "/products", icon: Box },
   { name: "Suppliers", href: "/suppliers", icon: Truck },
   { name: "Artwork", href: "/artwork", icon: Palette },
-  { name: "Mock-up Builder", href: "/mockup-builder", icon: Wand2 },
-  { name: "AI Presentation Builder", href: "/ai-presentation-builder", icon: Presentation },
+  { name: "Errors", href: "/errors", icon: AlertCircle },
   { name: "Reports", href: "/reports", icon: ChartBar },
-  { name: "Knowledge Base", href: "/knowledge-base", icon: Brain },
-  { name: "Sequence Builder", href: "/sequence-builder", icon: Zap },
   { name: "Newsletter", href: "/newsletter", icon: Package },
   { name: "Team Performance", href: "/team-performance", icon: ChartBar },
+  { name: "Knowledge Base", href: "/knowledge-base", icon: Brain },
+  { name: "Mock-up Builder", href: "/mockup-builder", icon: Wand2 },
+  { name: "Sequence Builder", href: "/sequence-builder", icon: Zap },
+  { name: "AI Presentation Builder", href: "/ai-presentation-builder", icon: Presentation },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -95,7 +95,7 @@ export default function Sidebar() {
                   className={cn(
                     "flex items-center px-4 py-3 text-sm font-medium rounded-lg mb-1 transition-colors cursor-pointer",
                     isActive
-                      ? "bg-swag-primary/20 text-swag-primary nav-item active"
+                      ? "bg-swag-primary/20 text-white nav-item active"
                       : "text-gray-300 hover:bg-gray-700 hover:text-white"
                   )}
                 >

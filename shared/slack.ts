@@ -1,15 +1,9 @@
 import { type ChatPostMessageArguments, WebClient } from "@slack/web-api"
 
-// Use
-if (!process.env.SLACK_BOT_TOKEN) {
-  throw new Error("SLACK_BOT_TOKEN environment variable must be set");
-}
-
-if (!process.env.SLACK_CHANNEL_ID) {
-  throw new Error("SLACK_CHANNEL_ID environment variable must be set");
-}
-
-const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
+// Slack configuration is optional - will return null if not configured
+const slack = process.env.SLACK_BOT_TOKEN 
+  ? new WebClient(process.env.SLACK_BOT_TOKEN)
+  : null;
 
 /**
  * Sends a structured message to a Slack channel using the Slack Web API
@@ -21,6 +15,11 @@ const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
 export async function sendSlackMessage(
   message: ChatPostMessageArguments
 ): Promise<string | undefined> {
+  if (!slack || !process.env.SLACK_BOT_TOKEN) {
+    console.warn('Slack is not configured. Skipping message send.');
+    return undefined;
+  }
+
   try {
     // Send the message
     const response = await slack.chat.postMessage(message);
@@ -29,7 +28,8 @@ export async function sendSlackMessage(
     return response.ts;
   } catch (error) {
     console.error('Error sending Slack message:', error);
-    throw error;
+    // Don't throw - just log and return undefined
+    return undefined;
   }
 }
 
@@ -42,6 +42,11 @@ export async function readSlackHistory(
   channel_id: string,
   messageLimit: number = 100,
 ) {
+  if (!slack || !process.env.SLACK_BOT_TOKEN) {
+    console.warn('Slack is not configured. Cannot read history.');
+    return { messages: [] };
+  }
+
   try {
     // Get messages
     return await slack.conversations.history({
@@ -50,6 +55,74 @@ export async function readSlackHistory(
     });
   } catch (error) {
     console.error('Error reading Slack history:', error);
-    throw error;
+    return { messages: [] };
+  }
+}
+
+/**
+ * Gets user information from Slack
+ * @param user_id - User ID to fetch information for
+ * @returns Promise resolving to user info
+ */
+export async function getSlackUserInfo(user_id: string) {
+  if (!slack || !process.env.SLACK_BOT_TOKEN) {
+    console.warn('Slack is not configured. Cannot get user info.');
+    return null;
+  }
+
+  try {
+    const response = await slack.users.info({
+      user: user_id,
+    });
+    
+    if (response.ok && response.user) {
+      return {
+        id: response.user.id,
+        name: response.user.name,
+        realName: response.user.real_name,
+        displayName: response.user.profile?.display_name || response.user.real_name || response.user.name,
+        avatar: response.user.profile?.image_72,
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting Slack user info:', error);
+    return null;
+  }
+}
+
+/**
+ * Gets all replies in a thread
+ * @param channel_id - Channel ID where the thread is
+ * @param thread_ts - Thread timestamp (parent message timestamp)
+ * @returns Promise resolving to the thread messages
+ */
+export async function getSlackThreadReplies(channel_id: string, thread_ts: string) {
+  if (!slack || !process.env.SLACK_BOT_TOKEN) {
+    console.warn('Slack is not configured. Cannot get thread replies.');
+    return { messages: [] };
+  }
+
+  try {
+    const response = await slack.conversations.replies({
+      channel: channel_id,
+      ts: thread_ts,
+    });
+    
+    if (response.ok && response.messages) {
+      // First message is the parent, rest are replies
+      const allMessages = response.messages;
+      const replies = allMessages.slice(1); // Skip first message (parent)
+      
+      return { 
+        messages: replies
+      };
+    }
+    
+    return { messages: [] };
+  } catch (error) {
+    console.error('Error getting Slack thread replies:', error);
+    return { messages: [] };
   }
 }

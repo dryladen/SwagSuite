@@ -109,90 +109,49 @@ export default function ProductionReport() {
   const [stageInputs, setStageInputs] = useState<Record<string, string>>({});
   const [viewMode, setViewMode] = useState<'expanded' | 'list'>('expanded');
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const [nextActionDate, setNextActionDate] = useState<string>('');
+  const [nextActionNotes, setNextActionNotes] = useState<string>('');
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch production orders from API
-  const { data: productionOrders = [], isLoading } = useQuery<ProductionOrder[]>({
-    queryKey: ["/api/production/orders"],
+  // Fetch real orders from API
+  const { data: ordersData = [], isLoading: ordersLoading } = useQuery<any[]>({
+    queryKey: ["/api/orders"],
   });
 
-  // Mock production orders fallback
-  const mockProductionOrders: ProductionOrder[] = [
-    {
-      id: '1',
-      orderNumber: 'ORD-2024-001',
-      companyName: 'TechCorp Inc',
-      productName: 'Custom T-Shirts',
-      quantity: 500,
-      currentStage: 'proof-received',
-      assignedTo: 'Sarah Wilson',
-      nextActionDate: format(new Date(), 'yyyy-MM-dd'),
-      nextActionNotes: 'Follow up with client on proof approval',
-      stagesCompleted: ['sales-booked', 'po-placed', 'confirmation-received'],
-      priority: 'high',
-      dueDate: format(addDays(new Date(), 7), 'yyyy-MM-dd'),
-      orderValue: 12500,
-      stageData: {
-        'sales-booked': { confirmedBy: 'John Smith', salesOrderNumber: 'SO-2024-001' },
-        'po-placed': { poNumber: 'PO-ABC-789', vendorConfirmation: 'Pending' },
-        'confirmation-received': { confirmedDate: '2024-01-15', estimatedShipDate: '2024-01-22' }
-      },
-      customNotes: {
-        'proof-received': 'Client requested minor color adjustments'
-      }
-    },
-    {
-      id: '2',
-      orderNumber: 'ORD-2024-002',
-      companyName: 'StartupXYZ',
-      productName: 'Branded Mugs',
-      quantity: 200,
-      currentStage: 'order-placed',
-      assignedTo: 'Mike Johnson',
-      nextActionDate: format(addDays(new Date(), 2), 'yyyy-MM-dd'),
-      nextActionNotes: 'Check production timeline with vendor',
-      stagesCompleted: ['sales-booked', 'po-placed', 'confirmation-received', 'proof-received', 'proof-approved'],
-      priority: 'medium',
-      dueDate: format(addDays(new Date(), 14), 'yyyy-MM-dd'),
-      orderValue: 4800,
-      stageData: {
-        'sales-booked': { confirmedBy: 'Sarah Wilson', salesOrderNumber: 'SO-2024-002' },
-        'po-placed': { poNumber: 'PO-XYZ-456', vendorConfirmation: 'Confirmed' },
-        'order-placed': { productionStartDate: '2024-01-18', estimatedCompletion: '2024-01-25' }
-      },
-      customNotes: {
-        'order-placed': 'Rush production requested - expedited timeline'
-      }
-    },
-    {
-      id: '3',
-      orderNumber: 'ORD-2024-003',
-      companyName: 'Global Enterprise',
-      productName: 'Laptop Bags',
-      quantity: 1000,
-      currentStage: 'shipping-scheduled',
-      assignedTo: 'Emma Davis',
-      nextActionDate: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
-      nextActionNotes: 'Coordinate delivery logistics',
-      stagesCompleted: ['sales-booked', 'po-placed', 'confirmation-received', 'proof-received', 'proof-approved', 'order-placed', 'invoice-paid'],
-      priority: 'urgent',
-      dueDate: format(addDays(new Date(), 3), 'yyyy-MM-dd'),
-      orderValue: 25000,
-      trackingNumber: 'UPS1Z999AA1234567890',
-      stageData: {
-        'shipping-scheduled': {
-          carrier: 'UPS',
-          scheduledDate: '2024-01-20',
-          deliveryAddress: '123 Business Way, Corporate City, CA 90210'
-        }
-      },
-      customNotes: {
-        'shipping-scheduled': 'Signature required on delivery - contact recipient day before'
-      }
-    }
-  ];
+  // Fetch companies for names
+  const { data: companies = [] } = useQuery<any[]>({
+    queryKey: ["/api/companies"],
+  });
+
+  // Transform orders to production format
+  const productionOrders: ProductionOrder[] = ordersData
+    .filter((order: any) => order.status !== 'quote' && order.status !== 'cancelled')
+    .map((order: any) => {
+      const company = companies.find((c: any) => c.id === order.companyId);
+      
+      return {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        companyName: company?.name || 'Unknown Company',
+        productName: 'Order Items', // We'll enhance this later with actual product names
+        quantity: 1, // Calculate from order items
+        currentStage: order.currentStage || 'sales-booked',
+        assignedTo: order.assignedUserId ? 'Team Member' : undefined,
+        nextActionDate: order.stageData?.nextActionDate,
+        nextActionNotes: order.customNotes?.nextAction,
+        stagesCompleted: order.stagesCompleted || ['sales-booked'],
+        priority: order.inHandsDate && new Date(order.inHandsDate) <= addDays(new Date(), 7) ? 'high' : 'medium',
+        dueDate: order.inHandsDate,
+        orderValue: Number(order.total || 0),
+        stageData: order.stageData || {},
+        trackingNumber: order.trackingNumber,
+        customNotes: order.customNotes || {},
+      } as ProductionOrder;
+    });
+
+  const isLoading = ordersLoading;
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -207,8 +166,17 @@ export default function ProductionReport() {
   const getProgressPercentage = (order: ProductionOrder) => {
     const totalStages = stages.length;
     const completedStages = order.stagesCompleted.length;
-    const currentStageIndex = stages.findIndex(s => s.id === order.currentStage);
-    return Math.round(((completedStages + (currentStageIndex >= 0 ? 0.5 : 0)) / totalStages) * 100);
+    
+    // If all stages are completed, return 100%
+    if (completedStages >= totalStages) {
+      return 100;
+    }
+    
+    // If current stage is already in completed stages, don't add extra percentage
+    const isCurrentStageCompleted = order.stagesCompleted.includes(order.currentStage);
+    const currentStageBonus = isCurrentStageCompleted ? 0 : 0.5;
+    
+    return Math.round(((completedStages + currentStageBonus) / totalStages) * 100);
   };
 
   const handleStageReorder = (fromIndex: number, toIndex: number) => {
@@ -247,21 +215,29 @@ export default function ProductionReport() {
 
   const handleOrderClick = (order: ProductionOrder) => {
     setSelectedOrder(order);
+    setNextActionDate(order.nextActionDate || '');
+    setNextActionNotes(order.nextActionNotes || '');
     setIsOrderModalOpen(true);
   };
 
   const updateOrderProductionMutation = useMutation({
     mutationFn: async ({ orderId, data }: { orderId: string, data: any }) => {
-      const response = await apiRequest("PATCH", `/api/orders/${orderId}/production`, data);
+      const response = await apiRequest("PATCH", `/api/orders/${orderId}`, data);
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/production/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-orders"] });
       if (selectedOrder && selectedOrder.id === data.id) {
+        const company = companies.find((c: any) => c.id === data.companyId);
         setSelectedOrder({
           ...selectedOrder,
-          ...data,
-          orderValue: parseFloat(data.total)
+          currentStage: data.currentStage,
+          stagesCompleted: data.stagesCompleted,
+          stageData: data.stageData,
+          customNotes: data.customNotes,
+          orderValue: parseFloat(data.total),
+          companyName: company?.name || selectedOrder.companyName,
         });
       }
       toast({
@@ -270,6 +246,17 @@ export default function ProductionReport() {
       });
     },
     onError: (error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
       toast({
         title: "Error",
         description: "Failed to update production information.",
@@ -430,16 +417,16 @@ export default function ProductionReport() {
     });
   };
 
-  // Use actual data if available, otherwise fallback to mock data
-  const ordersToDisplay = productionOrders.length > 0 ? productionOrders : mockProductionOrders;
+  // Use actual data from API
+  const ordersToDisplay = productionOrders;
 
-  const filteredOrders = ordersToDisplay.filter(order => {
+  const filteredOrders = ordersToDisplay.filter((order: ProductionOrder) => {
     if (filterAssignee !== 'all' && order.assignedTo !== filterAssignee) return false;
     if (filterPriority !== 'all' && order.priority !== filterPriority) return false;
     return true;
   });
 
-  const uniqueAssignees = Array.from(new Set(ordersToDisplay.map(o => o.assignedTo).filter(Boolean)));
+  const uniqueAssignees = Array.from(new Set(ordersToDisplay.map((o: ProductionOrder) => o.assignedTo).filter(Boolean))) as string[];
 
   // Helper functions for view modes
   const toggleOrderExpansion = (orderId: string) => {
@@ -607,8 +594,8 @@ export default function ProductionReport() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Assignees</SelectItem>
-                  {uniqueAssignees.map(assignee => (
-                    <SelectItem key={assignee} value={assignee || ''}>
+                  {uniqueAssignees.map((assignee: string) => (
+                    <SelectItem key={assignee} value={assignee}>
                       {assignee}
                     </SelectItem>
                   ))}
@@ -1112,7 +1099,8 @@ export default function ProductionReport() {
                     <Input
                       id="nextActionDate"
                       type="date"
-                      value={selectedOrder.nextActionDate || ''}
+                      value={nextActionDate}
+                      onChange={(e) => setNextActionDate(e.target.value)}
                       className="max-w-xs"
                     />
                   </div>
@@ -1120,7 +1108,8 @@ export default function ProductionReport() {
                     <Label htmlFor="nextActionNotes">Next Action Notes</Label>
                     <Textarea
                       id="nextActionNotes"
-                      value={selectedOrder.nextActionNotes || ''}
+                      value={nextActionNotes}
+                      onChange={(e) => setNextActionNotes(e.target.value)}
                       placeholder="Describe what needs to be done next..."
                       rows={3}
                     />
@@ -1332,8 +1321,28 @@ export default function ProductionReport() {
                 <Button variant="outline" onClick={() => setIsOrderModalOpen(false)}>
                   Close
                 </Button>
-                <Button className="bg-swag-primary hover:bg-swag-primary/90">
-                  Save Changes
+                <Button 
+                  className="bg-swag-primary hover:bg-swag-primary/90"
+                  onClick={() => {
+                    if (selectedOrder) {
+                      updateOrderProductionMutation.mutate({
+                        orderId: selectedOrder.id,
+                        data: {
+                          stageData: {
+                            ...(selectedOrder.stageData || {}),
+                            nextActionDate: nextActionDate || undefined,
+                          },
+                          customNotes: {
+                            ...(selectedOrder.customNotes || {}),
+                            nextAction: nextActionNotes || undefined,
+                          }
+                        }
+                      });
+                    }
+                  }}
+                  disabled={updateOrderProductionMutation.isPending}
+                >
+                  {updateOrderProductionMutation.isPending ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
             </div>

@@ -29,86 +29,44 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
-interface SlackChannel {
+interface SlackMessage {
   id: string;
-  name: string;
-  memberCount: number;
-  isArchived: boolean;
+  messageId: string;
+  userId?: string;
+  username?: string;
+  content?: string;
+  timestamp?: string;
+  createdAt: string;
+  replyCount?: number;
 }
 
-interface SlackConfig {
-  enabled: boolean;
-  botToken: string;
-  channelId: string;
-  notifications: {
-    newOrders: boolean;
-    orderUpdates: boolean;
-    customerMessages: boolean;
-    supplierAlerts: boolean;
-    teamMentions: boolean;
-  };
+interface SlackStatus {
+  configured: boolean;
+  connected: boolean;
+  channelId?: string;
 }
 
 export function SlackPanel() {
-  const [config, setConfig] = useState<SlackConfig>({
-    enabled: false, // Disable until we get the correct token
-    botToken: "",
-    channelId: "",
-    notifications: {
-      newOrders: true,
-      orderUpdates: true,
-      customerMessages: false,
-      supplierAlerts: true,
-      teamMentions: true,
-    }
-  });
   const [quickMessage, setQuickMessage] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch Slack channels
-  const { data: channels, isLoading: channelsLoading } = useQuery<SlackChannel[]>({
-    queryKey: ['/api/integrations/slack/channels'],
-    enabled: config.enabled,
-  });
-
-  // Fetch recent messages
-  const { data: messages = [], isLoading: messagesLoading } = useQuery({
-    queryKey: ['/api/integrations/slack/messages'],
-    enabled: config.enabled,
+  // Check Slack connection status
+  const { data: slackResponse, isLoading: statusLoading } = useQuery<{ messages: SlackMessage[] }>({
+    queryKey: ['/api/slack/sync-messages'],
     refetchInterval: 30000, // Refresh every 30 seconds
+    retry: false,
   });
 
-  // Save Slack configuration
-  const saveConfigMutation = useMutation({
-    mutationFn: async (configData: SlackConfig) => {
-      return await apiRequest('/api/integrations/slack/config', 'POST', configData);
-    },
-    onSuccess: () => {
-      toast({
-        title: "Slack Connected",
-        description: "Your Slack integration is now active.",
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/integrations/slack/channels'] });
-    },
-    onError: () => {
-      toast({
-        title: "Connection Failed",
-        description: "Failed to connect to Slack. Check your bot token.",
-        variant: "destructive",
-      });
-    },
-  });
+  const messages = slackResponse?.messages || [];
+  const isConnected = !!slackResponse && !statusLoading;
 
   // Send quick message
   const sendMessageMutation = useMutation({
-    mutationFn: async (message: string) => {
-      return await apiRequest('/api/integrations/slack/message', 'POST', {
-        message,
-        channel: config.channelId
-      });
+    mutationFn: async (content: string) => {
+      return await apiRequest('/api/slack/send-message', 'POST', { content });
     },
     onSuccess: () => {
       toast({
@@ -116,6 +74,7 @@ export function SlackPanel() {
         description: "Message sent to Slack successfully!",
       });
       setQuickMessage("");
+      queryClient.invalidateQueries({ queryKey: ['/api/slack/sync-messages'] });
     },
     onError: () => {
       toast({
@@ -135,19 +94,7 @@ export function SlackPanel() {
       });
       return;
     }
-    if (!config.channelId) {
-      toast({
-        title: "Channel Required",
-        description: "Please select a Slack channel first.",
-        variant: "destructive",
-      });
-      return;
-    }
     sendMessageMutation.mutate(quickMessage);
-  };
-
-  const handleSaveConfig = () => {
-    saveConfigMutation.mutate(config);
   };
 
   return (
@@ -159,7 +106,7 @@ export function SlackPanel() {
             Slack Integration
           </div>
           <div className="flex items-center gap-2">
-            {config.enabled ? (
+            {isConnected ? (
               <Badge variant="default" className="bg-green-100 text-green-800">
                 <CheckCircle className="h-3 w-3 mr-1" />
                 Connected
@@ -167,7 +114,7 @@ export function SlackPanel() {
             ) : (
               <Badge variant="secondary" className="bg-gray-100 text-gray-600">
                 <AlertCircle className="h-3 w-3 mr-1" />
-                Not Connected
+                {statusLoading ? "Checking..." : "Not Connected"}
               </Badge>
             )}
             <Button
@@ -185,27 +132,34 @@ export function SlackPanel() {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Connection Status - Show Error */}
-        <div className="space-y-3 p-3 bg-red-50 rounded-lg border border-red-200">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <div className="text-sm font-medium text-red-800">Token Type Error</div>
+        {/* Connection Status - Not Connected */}
+        {!isConnected && !statusLoading && (
+          <div className="space-y-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-yellow-600" />
+              <div className="text-sm font-medium text-yellow-800">Slack Not Configured</div>
+            </div>
+            <div className="text-xs text-yellow-700 space-y-2">
+              <div>To enable Slack integration, add these environment variables:</div>
+              <div className="font-mono bg-yellow-100 p-2 rounded">
+                SLACK_BOT_TOKEN=xoxb-...<br />
+                SLACK_CHANNEL_ID=C...
+              </div>
+              <div className="font-medium mt-2">Setup Instructions:</div>
+              <ol className="list-decimal list-inside space-y-1 ml-2">
+                <li>Go to <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" className="underline text-blue-600">api.slack.com/apps</a></li>
+                <li>Create or select your SwagSuite app</li>
+                <li>Go to "OAuth & Permissions" → Copy "Bot User OAuth Token" (xoxb-...)</li>
+                <li>Add scopes: chat:write, channels:read, channels:history, users:read</li>
+                <li>Find Channel ID from Slack channel details</li>
+                <li>Restart the application</li>
+              </ol>
+            </div>
           </div>
-          <div className="text-xs text-red-600 space-y-2">
-            <div>The provided token (xoxe-...) is an Enterprise Grid token, but SwagSuite needs a Bot User OAuth Token that starts with "xoxb-".</div>
-            <div className="font-medium">To get the correct token:</div>
-            <ol className="list-decimal list-inside space-y-1 ml-2">
-              <li>Go to <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" className="underline text-blue-600">api.slack.com/apps</a></li>
-              <li>Select your SwagSuite app (or create a new one)</li>
-              <li>Go to "OAuth & Permissions" in the sidebar</li>
-              <li>Copy the "Bot User OAuth Token" (starts with xoxb-)</li>
-              <li>Add these scopes: channels:read, chat:write, chat:write.public</li>
-            </ol>
-          </div>
-        </div>
+        )}
 
         {/* Quick Message - When Connected */}
-        {config.enabled && (
+        {isConnected && (
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               <MessageSquare className="h-4 w-4" />
@@ -213,31 +167,6 @@ export function SlackPanel() {
             </div>
             
             <div className="space-y-2">
-              <Select
-                value={config.channelId}
-                onValueChange={(value) => setConfig(prev => ({ ...prev, channelId: value }))}
-              >
-                <SelectTrigger className="text-sm">
-                  <SelectValue placeholder="Select channel..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {channelsLoading ? (
-                    <SelectItem value="loading" disabled>Loading channels...</SelectItem>
-                  ) : channels?.length ? (
-                    channels.map((channel) => (
-                      <SelectItem key={channel.id} value={channel.id}>
-                        <div className="flex items-center gap-2">
-                          <Hash className="h-3 w-3" />
-                          {channel.name}
-                        </div>
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="none" disabled>No channels available</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-
               <Textarea
                 placeholder="Type your message here..."
                 value={quickMessage}
@@ -248,7 +177,7 @@ export function SlackPanel() {
 
               <Button
                 onClick={handleQuickSend}
-                disabled={sendMessageMutation.isPending || !config.channelId || !quickMessage.trim()}
+                disabled={sendMessageMutation.isPending || !quickMessage.trim()}
                 size="sm"
                 className="w-full"
               >
@@ -259,54 +188,8 @@ export function SlackPanel() {
           </div>
         )}
 
-        {/* Expanded Settings */}
-        {isExpanded && config.enabled && (
-          <>
-            <Separator />
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Bell className="h-4 w-4" />
-                Notification Settings
-              </div>
-              
-              <div className="space-y-2">
-                {Object.entries({
-                  newOrders: "New Orders",
-                  orderUpdates: "Order Updates",
-                  customerMessages: "Customer Messages",
-                  supplierAlerts: "Supplier Alerts",
-                  teamMentions: "Team Mentions",
-                }).map(([key, label]) => (
-                  <div key={key} className="flex items-center justify-between">
-                    <Label className="text-xs">{label}</Label>
-                    <Switch
-                      checked={config.notifications[key as keyof typeof config.notifications]}
-                      onCheckedChange={(checked) => 
-                        setConfig(prev => ({
-                          ...prev,
-                          notifications: { ...prev.notifications, [key]: checked }
-                        }))
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSaveConfig}
-                disabled={saveConfigMutation.isPending}
-                className="w-full"
-              >
-                Save Settings
-              </Button>
-            </div>
-          </>
-        )}
-
         {/* Recent Messages */}
-        {config.enabled && messages && messages.length > 0 && (
+        {isConnected && messages && messages.length > 0 && (
           <div className="pt-3 border-t">
             <div className="text-xs text-muted-foreground mb-2">Recent Messages</div>
             <div className="space-y-2 max-h-32 overflow-y-auto">
@@ -314,38 +197,15 @@ export function SlackPanel() {
                 <div key={message.id} className="text-xs bg-muted rounded p-2">
                   <div className="flex items-center gap-1 mb-1">
                     <Users className="h-3 w-3" />
-                    <span className="font-medium">{message.user}</span>
+                    <span className="font-medium">{message.username || 'Unknown'}</span>
                     <span className="text-muted-foreground">
-                      {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(message.timestamp || message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                   <div className="text-muted-foreground">{message.content}</div>
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Channel Info - When Connected */}
-        {config.enabled && channels && channels.length > 0 && (
-          <div className="pt-3 border-t">
-            <div className="text-xs text-muted-foreground mb-2">Available Channels</div>
-            <div className="grid grid-cols-2 gap-1">
-              {channels.slice(0, 4).map((channel) => (
-                <div key={channel.id} className="flex items-center gap-1 text-xs bg-muted rounded px-2 py-1">
-                  <Hash className="h-3 w-3" />
-                  <span className="truncate">{channel.name}</span>
-                  <Badge variant="secondary" className="text-xs px-1 py-0">
-                    {channel.memberCount}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-            {channels.length > 4 && (
-              <div className="text-xs text-muted-foreground mt-1">
-                +{channels.length - 4} more channels
-              </div>
-            )}
           </div>
         )}
       </CardContent>

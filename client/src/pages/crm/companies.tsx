@@ -204,7 +204,8 @@ export default function Companies() {
           other: otherSocialUrl || ""
         }
       };
-      return apiRequest("/api/companies", "POST", formattedData);
+      const response = await apiRequest("POST", "/api/companies", formattedData);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
@@ -240,7 +241,8 @@ export default function Companies() {
           }
         } : {})
       };
-      return apiRequest(`/api/companies/${id}`, "PATCH", formattedData);
+      const response = await apiRequest("PATCH", `/api/companies/${id}`, formattedData);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
@@ -252,10 +254,11 @@ export default function Companies() {
         description: "The company has been successfully updated.",
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
+      console.error("Update company error:", error);
       toast({
         title: "Error",
-        description: "Failed to update company. Please try again.",
+        description: `Failed to update company: ${error.message || "Please try again."}`,
         variant: "destructive",
       });
     },
@@ -263,7 +266,8 @@ export default function Companies() {
 
   const deleteCompanyMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest(`/api/companies/${id}`, "DELETE");
+      const response = await apiRequest("DELETE", `/api/companies/${id}`);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
@@ -1354,7 +1358,7 @@ export default function Companies() {
                 <Button
                   type="submit"
                   disabled={updateCompanyMutation.isPending}
-                  className="bg-swag-orange hover:bg-swag-orange/90"
+                  className="bg-swag-primary hover:bg-swag-primary/90"
                 >
                   {updateCompanyMutation.isPending ? "Updating..." : "Update Company"}
                 </Button>

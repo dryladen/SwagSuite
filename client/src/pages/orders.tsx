@@ -134,13 +134,22 @@ export default function Orders() {
           <p className="text-gray-600 mt-1">Manage quotes, sales orders, and production</p>
         </div>
 
-        <Button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="bg-swag-primary hover:bg-swag-primary/90"
-        >
-          <PlusCircle size={20} />
-          New Order
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setLocation('/production-report')}
+          >
+            <Calendar size={20} className="mr-2" />
+            Production Report
+          </Button>
+          <Button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="bg-swag-primary hover:bg-swag-primary/90"
+          >
+            <PlusCircle size={20} />
+            New Order
+          </Button>
+        </div>
       </div>
 
       {/* Order Stats */}

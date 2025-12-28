@@ -1325,8 +1325,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Calculate total quantity and primary product
         const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
-        const primaryProduct = items.length > 0
-          ? (await storage.getProduct(items[0].productId))?.name ?? "Unknown Product"
+        const firstProductId = items[0]?.productId;
+        const primaryProduct = items.length > 0 && firstProductId
+          ? (await storage.getProduct(firstProductId))?.name ?? "Unknown Product"
           : "No Products";
         const productName = items.length > 1 ? `${primaryProduct} + ${items.length - 1} more` : primaryProduct;
 
@@ -1342,7 +1343,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           stagesCompleted: (order as any).stagesCompleted || ['sales-booked'],
           priority: (order as any).priority || 'medium', // Note: Check priority column if exists
           dueDate: order.inHandsDate ? order.inHandsDate.toISOString() : undefined,
-          orderValue: parseFloat(order.total),
+          orderValue: parseFloat(order.total || "0"),
           stageData: (order as any).stageData || {},
           trackingNumber: order.trackingNumber || undefined
         };
@@ -4235,11 +4236,164 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Fetch messages from Slack channel and sync with database
+  app.get('/api/slack/sync-messages', isAuthenticated, async (req, res) => {
+    try {
+      if (!process.env.SLACK_BOT_TOKEN || !process.env.SLACK_CHANNEL_ID) {
+        return res.status(503).json({ 
+          message: "Slack is not configured. Please add SLACK_BOT_TOKEN and SLACK_CHANNEL_ID to your environment variables." 
+        });
+      }
+
+      // Import slack helper dynamically to avoid issues
+      const { readSlackHistory, getSlackUserInfo } = await import('@shared/slack');
+      
+      // Fetch messages from Slack
+      const history = await readSlackHistory(process.env.SLACK_CHANNEL_ID, 50);
+      
+      if (!history || !history.messages) {
+        return res.status(503).json({ 
+          message: "Failed to fetch messages from Slack. Check your configuration." 
+        });
+      }
+
+      // Get unique user IDs
+      const userIds = Array.from(new Set(history.messages
+        .filter((msg: any) => msg.user)
+        .map((msg: any) => msg.user)));
+
+      // Fetch user info for all unique users
+      const userInfoMap = new Map();
+      await Promise.all(
+        userIds.map(async (userId: string) => {
+          const userInfo = await getSlackUserInfo(userId);
+          if (userInfo) {
+            userInfoMap.set(userId, userInfo);
+          }
+        })
+      );
+
+      // Format messages with user info and thread context
+      const formattedMessages = history.messages
+        .map((msg: any) => {
+          const userInfo = msg.user ? userInfoMap.get(msg.user) : null;
+          const displayName = msg.username 
+            || userInfo?.displayName 
+            || userInfo?.realName 
+            || userInfo?.name 
+            || (msg.bot_id ? 'SwagSuite' : 'Unknown');
+
+          return {
+            id: msg.ts,
+            channelId: process.env.SLACK_CHANNEL_ID!,
+            messageId: msg.ts,
+            userId: msg.user || 'bot',
+            content: msg.text || '',
+            username: displayName,
+            timestamp: new Date(parseFloat(msg.ts) * 1000).toISOString(),
+            createdAt: new Date(parseFloat(msg.ts) * 1000).toISOString(),
+            threadTs: msg.thread_ts,
+            isReply: !!msg.thread_ts && msg.thread_ts !== msg.ts,
+            replyCount: msg.reply_count || 0,
+            botId: msg.bot_id
+          };
+        })
+        .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()); // Sort oldest first
+
+      res.json({ messages: formattedMessages });
+    } catch (error: any) {
+      console.error("Error syncing Slack messages:", error);
+      
+      if (error?.code === 'slack_webapi_platform_error') {
+        const slackError = error.data?.error;
+        return res.status(400).json({ 
+          message: `Slack error: ${slackError || 'Unknown error'}` 
+        });
+      }
+      
+      res.status(500).json({ message: "Failed to sync Slack messages" });
+    }
+  });
+
+  // Fetch thread replies from Slack
+  app.get('/api/slack/thread/:threadTs', isAuthenticated, async (req, res) => {
+    try {
+      const { threadTs } = req.params;
+      
+      if (!process.env.SLACK_BOT_TOKEN || !process.env.SLACK_CHANNEL_ID) {
+        return res.status(503).json({ 
+          message: "Slack is not configured." 
+        });
+      }
+
+      const { getSlackThreadReplies, getSlackUserInfo } = await import('@shared/slack');
+      
+      // Fetch thread replies
+      const threadData = await getSlackThreadReplies(process.env.SLACK_CHANNEL_ID, threadTs);
+      
+      if (!threadData || !threadData.messages) {
+        return res.json({ replies: [] });
+      }
+
+      // Get unique user IDs from replies
+      const userIds = Array.from(new Set(threadData.messages
+        .filter((msg: any) => msg.user)
+        .map((msg: any) => msg.user)));
+
+      // Fetch user info
+      const userInfoMap = new Map();
+      await Promise.all(
+        userIds.map(async (userId: string) => {
+          try {
+            const userInfo = await getSlackUserInfo(userId);
+            if (userInfo) {
+              userInfoMap.set(userId, userInfo);
+            }
+          } catch (error) {
+            console.error(`Error fetching user info for ${userId}:`, error);
+          }
+        })
+      );
+
+      // Format replies
+      const formattedReplies = threadData.messages.map((msg: any) => {
+        const userInfo = msg.user ? userInfoMap.get(msg.user) : null;
+        const displayName = msg.username 
+          || userInfo?.displayName 
+          || userInfo?.realName 
+          || userInfo?.name 
+          || (msg.bot_id ? 'SwagSuite' : 'Unknown');
+
+        return {
+          id: msg.ts,
+          messageId: msg.ts,
+          userId: msg.user || 'bot',
+          content: msg.text || '',
+          username: displayName,
+          timestamp: new Date(parseFloat(msg.ts) * 1000).toISOString(),
+          createdAt: new Date(parseFloat(msg.ts) * 1000).toISOString(),
+          botId: msg.bot_id
+        };
+      });
+
+      res.json({ replies: formattedReplies });
+    } catch (error: any) {
+      console.error("Error fetching thread replies:", error);
+      res.status(500).json({ message: "Failed to fetch thread replies" });
+    }
+  });
+
   app.post('/api/slack/send-message', isAuthenticated, async (req, res) => {
     try {
       const { content } = req.body;
       if (!content?.trim()) {
         return res.status(400).json({ message: "Message content is required" });
+      }
+
+      if (!process.env.SLACK_BOT_TOKEN || !process.env.SLACK_CHANNEL_ID) {
+        return res.status(503).json({ 
+          message: "Slack is not configured. Please add SLACK_BOT_TOKEN and SLACK_CHANNEL_ID to your environment variables." 
+        });
       }
 
       // Send message to Slack
@@ -4250,6 +4404,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         icon_emoji: ':briefcase:'
       });
 
+      if (!messageResponse) {
+        return res.status(503).json({ 
+          message: "Failed to send message to Slack. Check your Slack configuration and token validity." 
+        });
+      }
+
       // Store message in database
       const message = await storage.createSlackMessage({
         channelId: process.env.SLACK_CHANNEL_ID!,
@@ -4259,8 +4419,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       res.json(message);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error sending Slack message:", error);
+      
+      // Handle specific Slack errors
+      if (error?.code === 'slack_webapi_platform_error') {
+        const slackError = error.data?.error;
+        
+        if (slackError === 'channel_not_found') {
+          return res.status(400).json({ 
+            message: `Slack channel not found. Please check your SLACK_CHANNEL_ID (${process.env.SLACK_CHANNEL_ID}). Make sure the bot is added to the channel.` 
+          });
+        } else if (slackError === 'invalid_auth') {
+          return res.status(401).json({ 
+            message: "Invalid Slack token. Please check your SLACK_BOT_TOKEN in environment variables." 
+          });
+        } else if (slackError === 'not_in_channel') {
+          return res.status(403).json({ 
+            message: `Bot is not in the channel. Please invite the bot to channel ${process.env.SLACK_CHANNEL_ID}` 
+          });
+        }
+        
+        return res.status(400).json({ 
+          message: `Slack error: ${slackError || 'Unknown error'}` 
+        });
+      }
+      
       res.status(500).json({ message: "Failed to send Slack message" });
     }
   });
@@ -4733,61 +4917,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/projects/:orderId/activities", async (req, res) => {
     try {
       const { orderId } = req.params;
+      
+      // Import dependencies
+      const { db } = await import("./db");
+      const { users } = await import("@shared/schema");
+      const { projectActivities } = await import("@shared/project-schema");
+      const { eq, desc } = await import("drizzle-orm");
 
-      // Mock data for project activities
-      const activities = [
-        {
-          id: "1",
-          orderId: orderId,
-          userId: "user1",
-          activityType: "system_action",
-          content: "Project created",
-          metadata: {},
-          mentionedUsers: [],
-          isSystemGenerated: true,
-          createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      // Fetch real activities from database with user information
+      const activities = await db
+        .select({
+          id: projectActivities.id,
+          orderId: projectActivities.orderId,
+          userId: projectActivities.userId,
+          activityType: projectActivities.activityType,
+          content: projectActivities.content,
+          metadata: projectActivities.metadata,
+          mentionedUsers: projectActivities.mentionedUsers,
+          isSystemGenerated: projectActivities.isSystemGenerated,
+          createdAt: projectActivities.createdAt,
           user: {
-            id: "user1",
-            firstName: "System",
-            lastName: "Admin",
-            email: "system@swag.com"
-          }
-        },
-        {
-          id: "2",
-          orderId: orderId,
-          userId: "user2",
-          activityType: "status_change",
-          content: "Status changed",
-          metadata: { oldStatus: "New", newStatus: "In Progress" },
-          mentionedUsers: [],
-          isSystemGenerated: false,
-          createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-          user: {
-            id: "user2",
-            firstName: "Mike",
-            lastName: "Chen",
-            email: "mike@swag.com"
-          }
-        },
-        {
-          id: "3",
-          orderId: orderId,
-          userId: "user3",
-          activityType: "comment",
-          content: "Customer confirmed the artwork, ready to proceed with production @Sarah Johnson",
-          metadata: {},
-          mentionedUsers: ["user4"],
-          isSystemGenerated: false,
-          createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-          user: {
-            id: "user3",
-            firstName: "Alex",
-            lastName: "Rodriguez",
-            email: "alex@swag.com"
-          }
-        }
-      ];
+            id: users.id,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            email: users.email,
+          },
+        })
+        .from(projectActivities)
+        .leftJoin(users, eq(projectActivities.userId, users.id))
+        .where(eq(projectActivities.orderId, orderId))
+        .orderBy(desc(projectActivities.createdAt));
 
       res.json(activities);
     } catch (error) {
@@ -4800,27 +4959,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { orderId } = req.params;
       const { activityType, content, mentionedUsers } = req.body;
+      
+      // Import dependencies
+      const { db } = await import("./db");
+      const { users } = await import("@shared/schema");
+      const { projectActivities, insertProjectActivitySchema } = await import("@shared/project-schema");
 
-      // In a real app, you would save to database here
-      const newActivity = {
-        id: Date.now().toString(),
-        orderId: orderId,
-        userId: "current-user",
+      // Get current user ID (in production, this should come from req.user)
+      const currentUserId = req.user?.claims?.sub || "system-user";
+
+      // Validate and insert activity
+      const validatedData = insertProjectActivitySchema.parse({
+        orderId,
+        userId: currentUserId,
         activityType,
         content,
-        metadata: {},
         mentionedUsers: mentionedUsers || [],
         isSystemGenerated: false,
-        createdAt: new Date().toISOString(),
-        user: {
-          id: "current-user",
-          firstName: "Current",
-          lastName: "User",
-          email: "user@swag.com"
-        }
-      };
+        metadata: {},
+      });
 
-      res.json(newActivity);
+      const [newActivity] = await db
+        .insert(projectActivities)
+        .values(validatedData)
+        .returning();
+
+      // Fetch the complete activity with user info
+      const { eq } = await import("drizzle-orm");
+      const [activityWithUser] = await db
+        .select({
+          id: projectActivities.id,
+          orderId: projectActivities.orderId,
+          userId: projectActivities.userId,
+          activityType: projectActivities.activityType,
+          content: projectActivities.content,
+          metadata: projectActivities.metadata,
+          mentionedUsers: projectActivities.mentionedUsers,
+          isSystemGenerated: projectActivities.isSystemGenerated,
+          createdAt: projectActivities.createdAt,
+          user: {
+            id: users.id,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            email: users.email,
+          },
+        })
+        .from(projectActivities)
+        .leftJoin(users, eq(projectActivities.userId, users.id))
+        .where(eq(projectActivities.id, newActivity.id));
+
+      res.json(activityWithUser);
     } catch (error) {
       console.error("Error creating project activity:", error);
       res.status(500).json({ error: "Failed to create project activity" });
@@ -4843,6 +5031,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching team members:", error);
       res.status(500).json({ error: "Failed to fetch team members" });
+    }
+  });
+
+  // Communications API Routes (for client and vendor emails)
+  app.get("/api/orders/:orderId/communications", async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const { type } = req.query; // 'client_email' or 'vendor_email'
+      
+      // Import dependencies
+      const { db } = await import("./db");
+      const { users } = await import("@shared/schema");
+      const { communications } = await import("@shared/project-schema");
+      const { eq, and, desc } = await import("drizzle-orm");
+
+      // Build query
+      let query = db
+        .select({
+          id: communications.id,
+          orderId: communications.orderId,
+          userId: communications.userId,
+          communicationType: communications.communicationType,
+          direction: communications.direction,
+          recipientEmail: communications.recipientEmail,
+          recipientName: communications.recipientName,
+          subject: communications.subject,
+          body: communications.body,
+          metadata: communications.metadata,
+          sentAt: communications.sentAt,
+          createdAt: communications.createdAt,
+          user: {
+            id: users.id,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            email: users.email,
+          },
+        })
+        .from(communications)
+        .leftJoin(users, eq(communications.userId, users.id))
+        .$dynamic();
+
+      // Add filters
+      if (type) {
+        query = query.where(
+          and(
+            eq(communications.orderId, orderId),
+            eq(communications.communicationType, type as string)
+          )
+        );
+      } else {
+        query = query.where(eq(communications.orderId, orderId));
+      }
+
+      const result = await query.orderBy(desc(communications.sentAt));
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching communications:", error);
+      res.status(500).json({ error: "Failed to fetch communications" });
+    }
+  });
+
+  app.post("/api/orders/:orderId/communications", async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const {
+        communicationType,
+        direction,
+        recipientEmail,
+        recipientName,
+        subject,
+        body,
+        metadata,
+      } = req.body;
+      
+      // Import dependencies
+      const { db } = await import("./db");
+      const { users } = await import("@shared/schema");
+      const { communications, insertCommunicationSchema } = await import("@shared/project-schema");
+      const { eq } = await import("drizzle-orm");
+
+      // Get current user ID (in production, this should come from req.user)
+      const currentUserId = req.user?.claims?.sub || "system-user";
+
+      // Validate and insert communication
+      const validatedData = insertCommunicationSchema.parse({
+        orderId,
+        userId: currentUserId,
+        communicationType,
+        direction,
+        recipientEmail,
+        recipientName,
+        subject,
+        body,
+        metadata: metadata || {},
+      });
+
+      const [newCommunication] = await db
+        .insert(communications)
+        .values(validatedData)
+        .returning();
+
+      // Fetch the complete communication with user info
+      const [communicationWithUser] = await db
+        .select({
+          id: communications.id,
+          orderId: communications.orderId,
+          userId: communications.userId,
+          communicationType: communications.communicationType,
+          direction: communications.direction,
+          recipientEmail: communications.recipientEmail,
+          recipientName: communications.recipientName,
+          subject: communications.subject,
+          body: communications.body,
+          metadata: communications.metadata,
+          sentAt: communications.sentAt,
+          createdAt: communications.createdAt,
+          user: {
+            id: users.id,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            email: users.email,
+          },
+        })
+        .from(communications)
+        .leftJoin(users, eq(communications.userId, users.id))
+        .where(eq(communications.id, newCommunication.id));
+
+      res.json(communicationWithUser);
+    } catch (error) {
+      console.error("Error creating communication:", error);
+      res.status(500).json({ error: "Failed to create communication" });
     }
   });
 

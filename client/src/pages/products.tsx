@@ -9,11 +9,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Box, Search, Plus, DollarSign, Package, Database, ShoppingCart, Trash2, TrendingUp } from "lucide-react";
+import { Box, Search, Plus, DollarSign, Package, Database, ShoppingCart, Trash2, TrendingUp, Eye } from "lucide-react";
 import ProductModal from "@/components/ProductModal";
 import { ProductIntegrations } from "@/components/integrations/ProductIntegrations";
 import { SsActivewearIntegration } from "@/components/integrations/SsActivewearIntegration";
 import { PopularProducts } from "@/components/PopularProducts";
+import { ProductDetailModal } from "@/components/ProductDetailModal";
 
 interface Product {
   id: string;
@@ -41,6 +42,8 @@ interface Supplier {
 export default function Products() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [activeTab, setActiveTab] = useState("my-catalog");
 
   const { toast } = useToast();
@@ -119,6 +122,13 @@ export default function Products() {
       <ProductModal 
         open={isProductModalOpen} 
         onOpenChange={setIsProductModalOpen} 
+      />
+
+      <ProductDetailModal
+        open={isDetailModalOpen}
+        onOpenChange={setIsDetailModalOpen}
+        product={selectedProduct}
+        supplierName={selectedProduct ? suppliers.find((s: Supplier) => s.id === selectedProduct.supplierId)?.name : undefined}
       />
 
       {/* Main Content */}
@@ -248,15 +258,19 @@ export default function Products() {
                         </div>
                       )}
 
-                      <div className="flex items-center justify-between pt-2">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          {product.minimumQuantity && (
-                            <span>Min: {product.minimumQuantity}</span>
-                          )}
-                          {product.leadTime && (
-                            <span>Lead: {product.leadTime}d</span>
-                          )}
-                        </div>
+                      <div className="flex items-center justify-between pt-2 gap-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => {
+                            setSelectedProduct(product);
+                            setIsDetailModalOpen(true);
+                          }}
+                          className="flex-1"
+                        >
+                          <Eye size={12} className="mr-1" />
+                          View Details
+                        </Button>
                         <Button variant="outline" size="sm">
                           <ShoppingCart size={12} className="mr-1" />
                           Add to Quote

@@ -10,11 +10,11 @@ export default function Home() {
       </div>
       
       {/* Right Sidebar - Slack Panel */}
-      <div className="w-80 flex-shrink-0">
+      {/* <div className="w-80 flex-shrink-0">
         <div className="sticky top-0">
           <SlackPanel />
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }

@@ -27,9 +27,10 @@ interface OrderModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   order?: Order | null;
+  initialCompanyId?: string;
 }
 
-export default function OrderModal({ open, onOpenChange, order }: OrderModalProps) {
+export default function OrderModal({ open, onOpenChange, order, initialCompanyId }: OrderModalProps) {
   const [, setLocation] = useLocation();
   const [formData, setFormData] = useState({
     companyId: "",
@@ -59,7 +60,7 @@ export default function OrderModal({ open, onOpenChange, order }: OrderModalProp
         });
       } else {
         setFormData({
-          companyId: "",
+          companyId: initialCompanyId || "",
           orderType: "quote",
           inHandsDate: "",
           eventDate: "",
@@ -69,7 +70,7 @@ export default function OrderModal({ open, onOpenChange, order }: OrderModalProp
         });
       }
     }
-  }, [open, order]); // depend on open and order
+  }, [open, order, initialCompanyId]); // depend on open, order, and initialCompanyId
 
   // Helper to update specific fields
   const handleFieldChange = (field: string, value: any) => {
@@ -123,7 +124,23 @@ export default function OrderModal({ open, onOpenChange, order }: OrderModalProp
 
   const updateOrderMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await apiRequest("PATCH", `/api/orders/${order?.id}`, data);
+      // Only send fields that are being updated
+      const payload: any = { ...data };
+      
+      // Convert date strings to Date objects, or set to null if empty
+      if (payload.inHandsDate) {
+        payload.inHandsDate = new Date(payload.inHandsDate);
+      } else if (payload.inHandsDate === "") {
+        payload.inHandsDate = null;
+      }
+      
+      if (payload.eventDate) {
+        payload.eventDate = new Date(payload.eventDate);
+      } else if (payload.eventDate === "") {
+        payload.eventDate = null;
+      }
+      
+      const response = await apiRequest("PATCH", `/api/orders/${order?.id}`, payload);
       return response.json();
     },
     onSuccess: () => {
@@ -156,11 +173,22 @@ export default function OrderModal({ open, onOpenChange, order }: OrderModalProp
       return;
     }
 
-    const payload = {
+    const payload: any = {
       ...formData,
-      inHandsDate: formData.inHandsDate ? new Date(formData.inHandsDate) : null,
-      eventDate: formData.eventDate ? new Date(formData.eventDate) : null,
     };
+    
+    // Convert date strings to Date objects or null
+    if (formData.inHandsDate) {
+      payload.inHandsDate = new Date(formData.inHandsDate);
+    } else {
+      payload.inHandsDate = null;
+    }
+    
+    if (formData.eventDate) {
+      payload.eventDate = new Date(formData.eventDate);
+    } else {
+      payload.eventDate = null;
+    }
 
     if (order) {
       updateOrderMutation.mutate(payload);
@@ -299,9 +327,13 @@ export default function OrderModal({ open, onOpenChange, order }: OrderModalProp
             <Button
               type="submit"
               className="bg-swag-primary hover:bg-swag-primary/90"
-              disabled={createOrderMutation.isPending}
+              disabled={createOrderMutation.isPending || updateOrderMutation.isPending}
             >
-              {createOrderMutation.isPending ? "Creating..." : "Create Order"}
+              {order ? (
+              updateOrderMutation.isPending ? "Updating..." : "Update Order"
+              ) : (
+              createOrderMutation.isPending ? "Creating..." : "Create Order"
+              )}
             </Button>
           </div>
         </form>

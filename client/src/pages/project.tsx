@@ -1,45 +1,43 @@
-import React, { useState, useRef, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useParams, useLocation } from "wouter";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { UserAvatar } from "@/components/UserAvatar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { UserAvatar } from "@/components/UserAvatar";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { format } from "date-fns";
 import {
-  ArrowLeft,
-  Send,
-  Calendar,
-  User,
-  FileText,
-  MessageSquare,
-  Upload,
-  Settings,
-  Bell,
-  AtSign,
-  Clock,
   Activity,
+  ArrowLeft,
+  AtSign,
+  Bell,
+  Calendar,
+  Clock,
+  CreditCard,
+  Eye,
+  Factory,
+  FileText,
+  MapPin,
+  MessageSquare,
   Package,
   Plus,
-  Trash2,
-  Factory,
+  Send,
+  Settings,
   ShoppingCart,
-  Eye,
   ThumbsUp,
-  CreditCard,
+  Trash2,
   Truck,
-  MapPin,
-  CheckCircle
+  Upload,
+  User
 } from "lucide-react";
-import { format } from "date-fns";
-import { apiRequest } from "@/lib/queryClient";
+import React, { useRef, useState } from "react";
+import { useLocation, useParams } from "wouter";
 
 interface ProjectActivityUser {
   id: string;
@@ -143,6 +141,12 @@ export default function ProjectPage() {
   const [mentionQuery, setMentionQuery] = useState("");
   const [selectedMentions, setSelectedMentions] = useState<TeamMember[]>([]);
   const [isAddProductDialogOpen, setIsAddProductDialogOpen] = useState(false);
+  const [isUpdateStatusDialogOpen, setIsUpdateStatusDialogOpen] = useState(false);
+  const [isReassignDialogOpen, setIsReassignDialogOpen] = useState(false);
+  const [isUploadFileDialogOpen, setIsUploadFileDialogOpen] = useState(false);
+  const [newStatus, setNewStatus] = useState("");
+  const [assignedUserId, setAssignedUserId] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [newProductForm, setNewProductForm] = useState({
     productId: "",
     quantity: "1",
@@ -310,6 +314,88 @@ export default function ProjectPage() {
     },
   });
 
+  // Update order status mutation
+  const updateOrderStatusMutation = useMutation({
+    mutationFn: async (status: string) => {
+      const response = await apiRequest("PATCH", `/api/orders/${orderId}`, { status });
+      return response.json();
+    },
+    onSuccess: (data, status) => {
+      toast({
+        title: "Status Updated",
+        description: `Order status changed to ${status}`,
+      });
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${orderId}/activities`] });
+      setIsUpdateStatusDialogOpen(false);
+      setNewStatus("");
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update order status.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Reassign order mutation
+  const reassignOrderMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest("PATCH", `/api/orders/${orderId}`, { assignedUserId: userId });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Project Reassigned",
+        description: "Project has been reassigned successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${orderId}/activities`] });
+      setIsReassignDialogOpen(false);
+      setAssignedUserId("");
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to reassign project.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Upload file mutation
+  const uploadFileMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('orderId', orderId!);
+      
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) throw new Error('Upload failed');
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "File Uploaded",
+        description: "File has been uploaded successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${orderId}/activities`] });
+      setIsUploadFileDialogOpen(false);
+      setUploadFile(null);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to upload file.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleProductChange = (productId: string) => {
     setNewProductForm(prev => ({ ...prev, productId }));
     const product = products.find(p => p.id === productId);
@@ -463,6 +549,21 @@ export default function ProjectPage() {
                   <span className="text-sm">{getCompanyName(order.companyId)}</span>
                 </div>
               </div>
+              <div>
+                <p className="text-sm text-gray-500">Assigned To</p>
+                <div className="flex items-center space-x-2 mt-1">
+                  {order.assignedUserId ? (
+                    <>
+                      <UserAvatar name={teamMembers.find(m => m.id === order.assignedUserId)?.firstName || 'Team Member'} size="sm" />
+                      <span className="text-sm">
+                        {teamMembers.find(m => m.id === order.assignedUserId)?.firstName || 'Team Member'} {teamMembers.find(m => m.id === order.assignedUserId)?.lastName || ''}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-sm text-gray-400">Unassigned</span>
+                  )}
+                </div>
+              </div>
               {order.inHandsDate && (
                 <div>
                   <p className="text-sm text-gray-500">In-Hands Date</p>
@@ -489,15 +590,36 @@ export default function ProjectPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button variant="outline" size="sm" className="w-full justify-start">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full justify-start"
+                onClick={() => {
+                  setNewStatus(order?.status || "");
+                  setIsUpdateStatusDialogOpen(true);
+                }}
+              >
                 <Settings className="w-4 h-4 mr-2" />
                 Update Status
               </Button>
-              <Button variant="outline" size="sm" className="w-full justify-start">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full justify-start"
+                onClick={() => setIsUploadFileDialogOpen(true)}
+              >
                 <Upload className="w-4 h-4 mr-2" />
                 Upload File
               </Button>
-              <Button variant="outline" size="sm" className="w-full justify-start">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full justify-start"
+                onClick={() => {
+                  setAssignedUserId(order?.assignedUserId || "");
+                  setIsReassignDialogOpen(true);
+                }}
+              >
                 <User className="w-4 h-4 mr-2" />
                 Reassign Project
               </Button>
@@ -588,7 +710,18 @@ export default function ProjectPage() {
                   <Card>
                     <CardContent className="p-8 text-center">
                       <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-500">No activity yet. Be the first to add a comment!</p>
+                      <h4 className="font-semibold text-gray-900 mb-2">No activity yet</h4>
+                      <p className="text-gray-500 mb-4">Start collaborating by adding a comment, updating status, or uploading files.</p>
+                      <div className="flex gap-2 justify-center">
+                        <Button size="sm" variant="outline" onClick={() => textareaRef.current?.focus()}>
+                          <MessageSquare className="w-4 h-4 mr-2" />
+                          Add Comment
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setIsUploadFileDialogOpen(true)}>
+                          <Upload className="w-4 h-4 mr-2" />
+                          Upload File
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ) : (
@@ -900,6 +1033,121 @@ export default function ProjectPage() {
           </Tabs>
         </div>
       </div>
+
+      {/* Update Status Dialog */}
+      <Dialog open={isUpdateStatusDialogOpen} onOpenChange={setIsUpdateStatusDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Order Status</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="status">Select New Status</Label>
+              <Select value={newStatus} onValueChange={setNewStatus}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="quote">Quote</SelectItem>
+                  <SelectItem value="pending_approval">Pending Approval</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="in_production">In Production</SelectItem>
+                  <SelectItem value="shipped">Shipped</SelectItem>
+                  <SelectItem value="delivered">Delivered</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsUpdateStatusDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => updateOrderStatusMutation.mutate(newStatus)}
+                disabled={!newStatus || updateOrderStatusMutation.isPending}
+              >
+                {updateOrderStatusMutation.isPending ? "Updating..." : "Update Status"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reassign Project Dialog */}
+      <Dialog open={isReassignDialogOpen} onOpenChange={setIsReassignDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reassign Project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="assignUser">Assign To</Label>
+              <Select value={assignedUserId} onValueChange={setAssignedUserId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select team member..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {teamMembers.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.firstName} {member.lastName} ({member.email})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsReassignDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => reassignOrderMutation.mutate(assignedUserId)}
+                disabled={!assignedUserId || reassignOrderMutation.isPending}
+              >
+                {reassignOrderMutation.isPending ? "Reassigning..." : "Reassign Project"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload File Dialog */}
+      <Dialog open={isUploadFileDialogOpen} onOpenChange={setIsUploadFileDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload File</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="file">Select File</Label>
+              <Input 
+                id="file"
+                type="file"
+                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                className="cursor-pointer"
+              />
+              {uploadFile && (
+                <p className="text-sm text-gray-500 mt-2">
+                  Selected: {uploadFile.name} ({(uploadFile.size / 1024).toFixed(2)} KB)
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => {
+                setIsUploadFileDialogOpen(false);
+                setUploadFile(null);
+              }}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => uploadFile && uploadFileMutation.mutate(uploadFile)}
+                disabled={!uploadFile || uploadFileMutation.isPending}
+              >
+                {uploadFileMutation.isPending ? "Uploading..." : "Upload File"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Product Dialog */}
       <Dialog open={isAddProductDialogOpen} onOpenChange={setIsAddProductDialogOpen}>
