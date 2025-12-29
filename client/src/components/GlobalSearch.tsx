@@ -4,9 +4,12 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
+import { OrderDetailsModal } from "./OrderDetailsModal";
+import { ProductDetailModal } from "./ProductDetailModal";
+import type { Order, Company } from "@shared/schema";
 
 interface SearchResult {
   id: string;
@@ -48,6 +51,38 @@ export default function GlobalSearch() {
   const [, setLocation] = useLocation();
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  
+  // Modal states
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+
+  // Fetch order details when selected
+  const { data: selectedOrder } = useQuery<Order>({
+    queryKey: [`/api/orders/${selectedOrderId}`],
+    enabled: !!selectedOrderId && isOrderModalOpen,
+  });
+
+  // Fetch all products and find selected one
+  const { data: allProducts = [] } = useQuery<any[]>({
+    queryKey: ["/api/products"],
+    enabled: isProductModalOpen,
+  });
+
+  const selectedProduct = selectedProductId 
+    ? allProducts.find(p => p.id === selectedProductId) 
+    : null;
+
+  // Fetch companies for OrderDetailsModal
+  const { data: companies = [] } = useQuery<Company[]>({
+    queryKey: ["/api/companies"],
+  });
+
+  // Fetch suppliers for ProductDetailModal
+  const { data: suppliers = [] } = useQuery<any[]>({
+    queryKey: ["/api/suppliers"],
+  });
 
   // AI-powered search mutation
   const searchMutation = useMutation({
@@ -78,9 +113,20 @@ export default function GlobalSearch() {
 
   // Handle result click
   const handleResultClick = (result: SearchResult) => {
-    if (result.url) {
+    // Handle different result types
+    if (result.type === "order") {
+      setSelectedOrderId(result.id);
+      setIsOrderModalOpen(true);
+    } else if (result.type === "product") {
+      setSelectedProductId(result.id);
+      setIsProductModalOpen(true);
+    } else if (result.type === "company") {
+      setLocation(`/crm/companies/${result.id}`);
+    } else if (result.url) {
       setLocation(result.url);
     }
+    
+    // Close search
     setIsOpen(false);
     setQuery("");
     setResults([]);
@@ -216,6 +262,36 @@ export default function GlobalSearch() {
           </CardContent>
         </Card>
       )}
+
+      {/* Order Details Modal */}
+      <OrderDetailsModal
+        open={isOrderModalOpen && !!selectedOrder}
+        onOpenChange={(open: boolean) => {
+          setIsOrderModalOpen(open);
+          if (!open) {
+            setSelectedOrderId(null);
+          }
+        }}
+        order={(selectedOrder ?? null) as Order | null}
+        companyName={
+          selectedOrder && companies.find((c) => c.id === selectedOrder.companyId)?.name || "Unknown Company"
+        }
+      />
+
+      {/* Product Details Modal */}
+      <ProductDetailModal
+        open={isProductModalOpen && !!selectedProduct}
+        onOpenChange={(open: boolean) => {
+          setIsProductModalOpen(open);
+          if (!open) {
+            setSelectedProductId(null);
+          }
+        }}
+        product={(selectedProduct ?? null) as any}
+        supplierName={
+          selectedProduct && suppliers.find((s) => s.id === selectedProduct.supplierId)?.name || "Unknown Supplier"
+        }
+      />
     </div>
   );
 }
