@@ -125,11 +125,17 @@ export default function ProductionReport() {
     queryKey: ["/api/companies"],
   });
 
+  // Fetch users for assigned names
+  const { data: users = [] } = useQuery<any[]>({
+    queryKey: ["/api/users"],
+  });
+
   // Transform orders to production format
   const productionOrders: ProductionOrder[] = ordersData
     .filter((order: any) => order.status !== 'quote' && order.status !== 'cancelled')
     .map((order: any) => {
       const company = companies.find((c: any) => c.id === order.companyId);
+      const assignedUser = users.find((u: any) => u.id === order.assignedUserId);
       
       return {
         id: order.id,
@@ -138,7 +144,7 @@ export default function ProductionReport() {
         productName: 'Order Items', // We'll enhance this later with actual product names
         quantity: 1, // Calculate from order items
         currentStage: order.currentStage || 'sales-booked',
-        assignedTo: order.assignedUserId ? 'Team Member' : undefined,
+        assignedTo: assignedUser ? assignedUser.name : undefined,
         nextActionDate: order.stageData?.nextActionDate,
         nextActionNotes: order.customNotes?.nextAction,
         stagesCompleted: order.stagesCompleted || ['sales-booked'],

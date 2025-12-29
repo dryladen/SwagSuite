@@ -70,6 +70,10 @@ export default function Orders() {
     queryKey: ["/api/companies"],
   });
 
+  const { data: suppliers = [] } = useQuery<any[]>({
+    queryKey: ["/api/suppliers"],
+  });
+
   const updateOrderMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
       const response = await apiRequest("PATCH", `/api/orders/${id}`, data);
@@ -106,6 +110,12 @@ export default function Orders() {
   const getCompanyName = (companyId: string) => {
     const company = companies?.find((c: any) => c.id === companyId);
     return company?.name || "Unknown Company";
+  };
+
+  const getSupplierName = (supplierId: string | undefined) => {
+    if (!supplierId) return null;
+    const supplier = suppliers?.find((s: any) => s.id === supplierId);
+    return supplier?.name || "Unknown Vendor";
   };
 
   const filteredOrders = orders?.filter((order: Order) => {
@@ -279,6 +289,7 @@ export default function Orders() {
                 <TableRow>
                   <TableHead className="text-center">Order #</TableHead>
                   <TableHead className="text-center">Customer</TableHead>
+                  <TableHead className="text-center">Vendor</TableHead>
                   <TableHead className="text-center">Type</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-center">Value</TableHead>
@@ -305,6 +316,15 @@ export default function Orders() {
                         />
                         <span>{getCompanyName(order.companyId!)}</span>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {getSupplierName((order as any).supplierId) ? (
+                        <Badge variant="secondary" className="text-xs rounded-lg">
+                          {getSupplierName((order as any).supplierId)}
+                        </Badge>
+                      ) : (
+                        <span className="text-gray-400 text-sm">-</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-nowrap">

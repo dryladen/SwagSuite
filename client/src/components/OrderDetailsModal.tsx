@@ -401,10 +401,17 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                 </Badge>
               )}
               <Button
+                variant="default"
+                size="sm"
+                onClick={() => setIsEditModalOpen(true)}
+                className="ml-auto"
+              >
+                Edit Order
+              </Button>
+              <Button
                 variant="outline"
                 size="sm"
                 onClick={handleViewProject}
-                className="ml-auto"
               >
                 <ExternalLink className="w-4 h-4" />
                 View Full Project
@@ -693,16 +700,15 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                           const Icon = stage.icon;
                           const isCompleted = ((order as any).stagesCompleted || ['sales-booked']).includes(stage.id);
                           const isCurrent = (order as any).currentStage === stage.id && !isCompleted;
-                          
+
                           return (
                             <div key={stage.id} className="flex items-center gap-3">
-                              <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${
-                                isCompleted 
-                                  ? 'bg-green-100 border-green-500' 
-                                  : isCurrent 
-                                  ? 'bg-blue-100 border-blue-500' 
+                              <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${isCompleted
+                                ? 'bg-green-100 border-green-500'
+                                : isCurrent
+                                  ? 'bg-blue-100 border-blue-500'
                                   : 'bg-gray-100 border-gray-300'
-                              }`}>
+                                }`}>
                                 {isCompleted ? (
                                   <CheckCircle className="w-4 h-4 text-green-600" />
                                 ) : (
@@ -710,9 +716,8 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                                 )}
                               </div>
                               <div className="flex-1">
-                                <p className={`text-sm font-medium ${
-                                  isCompleted ? 'text-green-700' : isCurrent ? 'text-blue-700' : 'text-gray-600'
-                                }`}>
+                                <p className={`text-sm font-medium ${isCompleted ? 'text-green-700' : isCurrent ? 'text-blue-700' : 'text-gray-600'
+                                  }`}>
                                   {stage.name}
                                 </p>
                               </div>
@@ -751,21 +756,6 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                     </div>
                   </CardContent>
                 </Card>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-3 mt-6">
-                <Button variant="default" className="flex-1" onClick={handleViewProject}>
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  View Full Project
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setIsEditModalOpen(true)}
-                >
-                  Edit Order
-                </Button>
               </div>
             </TabsContent>
 

@@ -1,15 +1,14 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -17,66 +16,55 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { apiRequest } from "@/lib/queryClient";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
-import { 
-  Settings as SettingsIcon, 
-  User, 
-  Bell, 
-  Palette, 
-  Shield, 
-  Database,
-  Slack,
-  Mail,
-  Globe,
-  Upload,
-  Save,
-  Plus,
-  FileText,
-  FileSpreadsheet,
-  FileImage,
-  Brain,
-  CheckCircle,
   AlertCircle,
+  BarChart3,
+  Bell,
+  Brain,
+  Calendar,
+  CheckCircle,
   Clock,
-  Trash2,
-  Lightbulb,
   Eye,
   EyeOff,
-  Package,
-  ShoppingCart,
-  BarChart3,
-  Users,
-  Settings2,
-  Lock,
-  Unlock,
-  ToggleLeft,
-  Zap,
-  Search,
-  MessageSquare,
-  Calculator,
-  Truck,
-  X,
-  List,
+  FileSpreadsheet,
+  Globe,
   Image,
-  ToggleRight,
+  Lightbulb,
+  List,
+  Lock,
+  Mail,
+  Package,
+  Palette,
+  Plus,
+  Save,
+  Settings2,
+  Settings as SettingsIcon,
+  Shield,
+  ShoppingCart,
+  Slack,
   Star,
   Target,
+  ToggleRight,
+  Trash2,
   TrendingUp,
-  Calendar
+  Upload,
+  User,
+  Users,
+  Zap
 } from "lucide-react";
+import { useState, useEffect } from "react";
 
 interface FeatureToggle {
   id: string;
@@ -107,6 +95,12 @@ export default function Settings() {
   const { data: adminSettings, isLoading: settingsLoading } = useQuery({
     queryKey: ['/api/admin/settings'],
     enabled: user?.role === 'admin'
+  });
+
+  // Load integration settings
+  const { data: integrationSettings } = useQuery({
+    queryKey: ['/api/settings/integrations'],
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
 
   // Feature toggle mutation
@@ -292,8 +286,8 @@ export default function Settings() {
 
   // Integration Settings
   const [integrations, setIntegrations] = useState({
-    ssActivewearAccount: "52733",
-    ssActivewearApiKey: "1812622b-59cd-4863-8a9f-ad64eee5cd22",
+    ssActivewearAccount: "",
+    ssActivewearApiKey: "",
     hubspotApiKey: "",
     slackBotToken: "",
     slackChannelId: "",
@@ -301,6 +295,29 @@ export default function Settings() {
     stripeConnected: false,
     shipmateConnected: false
   });
+
+  // Visibility state for sensitive fields
+  const [showFields, setShowFields] = useState({
+    ssActivewearApiKey: false,
+    slackBotToken: false,
+    hubspotApiKey: false
+  });
+
+  // Update integrations when data is loaded
+  useEffect(() => {
+    if (integrationSettings) {
+      setIntegrations({
+        ssActivewearAccount: integrationSettings.ssActivewearAccount || "",
+        ssActivewearApiKey: integrationSettings.ssActivewearApiKey || "",
+        hubspotApiKey: integrationSettings.hubspotApiKey || "",
+        slackBotToken: integrationSettings.slackBotToken || "",
+        slackChannelId: integrationSettings.slackChannelId || "",
+        quickbooksConnected: integrationSettings.quickbooksConnected || false,
+        stripeConnected: integrationSettings.stripeConnected || false,
+        shipmateConnected: integrationSettings.shipmateConnected || false
+      });
+    }
+  }, [integrationSettings]);
 
   // Custom integrations that can be added dynamically
   const [customIntegrations, setCustomIntegrations] = useState([
@@ -442,12 +459,24 @@ export default function Settings() {
     });
   };
 
-  const saveSettings = (section: string) => {
-    // In production, this would save to backend
-    toast({
-      title: "Settings Saved",
-      description: `${section} settings have been saved successfully.`,
-    });
+  const saveSettings = async (section: string) => {
+    try {
+      if (section === 'Integration') {
+        await apiRequest('POST', '/api/settings/integrations', integrations);
+        queryClient.invalidateQueries({ queryKey: ['/api/settings/integrations'] });
+      }
+      
+      toast({
+        title: "Settings Saved",
+        description: `${section} settings have been saved successfully.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save settings. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const addIntegration = (integrationType: any, config: any) => {
@@ -1200,12 +1229,28 @@ export default function Settings() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="ssApiKey">API Key</Label>
-                      <Input
-                        id="ssApiKey"
-                        type="password"
-                        value={integrations.ssActivewearApiKey}
-                        onChange={(e) => setIntegrations(prev => ({ ...prev, ssActivewearApiKey: e.target.value }))}
-                      />
+                      <div className="relative">
+                        <Input
+                          id="ssApiKey"
+                          type={showFields.ssActivewearApiKey ? "text" : "password"}
+                          value={integrations.ssActivewearApiKey}
+                          onChange={(e) => setIntegrations(prev => ({ ...prev, ssActivewearApiKey: e.target.value }))}
+                          className="pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                          onClick={() => setShowFields(prev => ({ ...prev, ssActivewearApiKey: !prev.ssActivewearApiKey }))}
+                        >
+                          {showFields.ssActivewearApiKey ? (
+                            <EyeOff className="h-4 w-4 text-gray-500" />
+                          ) : (
+                            <Eye className="h-4 w-4 text-gray-500" />
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1222,12 +1267,28 @@ export default function Settings() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="slackToken">Bot Token</Label>
-                      <Input
-                        id="slackToken"
-                        type="password"
-                        value={integrations.slackBotToken}
-                        onChange={(e) => setIntegrations(prev => ({ ...prev, slackBotToken: e.target.value }))}
-                      />
+                      <div className="relative">
+                        <Input
+                          id="slackToken"
+                          type={showFields.slackBotToken ? "text" : "password"}
+                          value={integrations.slackBotToken}
+                          onChange={(e) => setIntegrations(prev => ({ ...prev, slackBotToken: e.target.value }))}
+                          className="pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                          onClick={() => setShowFields(prev => ({ ...prev, slackBotToken: !prev.slackBotToken }))}
+                        >
+                          {showFields.slackBotToken ? (
+                            <EyeOff className="h-4 w-4 text-gray-500" />
+                          ) : (
+                            <Eye className="h-4 w-4 text-gray-500" />
+                          )}
+                        </Button>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="slackChannel">Channel ID</Label>
@@ -1251,13 +1312,29 @@ export default function Settings() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="hubspotApi">API Key</Label>
-                    <Input
-                      id="hubspotApi"
-                      type="password"
-                      placeholder="Enter HubSpot API key"
-                      value={integrations.hubspotApiKey}
-                      onChange={(e) => setIntegrations(prev => ({ ...prev, hubspotApiKey: e.target.value }))}
-                    />
+                    <div className="relative">
+                      <Input
+                        id="hubspotApi"
+                        type={showFields.hubspotApiKey ? "text" : "password"}
+                        placeholder="Enter HubSpot API key"
+                        value={integrations.hubspotApiKey}
+                        onChange={(e) => setIntegrations(prev => ({ ...prev, hubspotApiKey: e.target.value }))}
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                        onClick={() => setShowFields(prev => ({ ...prev, hubspotApiKey: !prev.hubspotApiKey }))}
+                      >
+                        {showFields.hubspotApiKey ? (
+                          <EyeOff className="h-4 w-4 text-gray-500" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-gray-500" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

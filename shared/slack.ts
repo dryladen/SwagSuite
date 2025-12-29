@@ -1,21 +1,26 @@
 import { type ChatPostMessageArguments, WebClient } from "@slack/web-api"
 
-// Slack configuration is optional - will return null if not configured
-const slack = process.env.SLACK_BOT_TOKEN 
-  ? new WebClient(process.env.SLACK_BOT_TOKEN)
-  : null;
+// Helper to get Slack client with credentials
+function getSlackClient(botToken?: string): WebClient | null {
+  const token = botToken || process.env.SLACK_BOT_TOKEN;
+  return token ? new WebClient(token) : null;
+}
 
 /**
  * Sends a structured message to a Slack channel using the Slack Web API
  * Prefer using Channel ID to Channel names because they don't change when the
  * channel is renamed.
  * @param message - Structured message to send
+ * @param botToken - Optional bot token (will use env var if not provided)
  * @returns Promise resolving to the sent message's timestamp
  */
 export async function sendSlackMessage(
-  message: ChatPostMessageArguments
+  message: ChatPostMessageArguments,
+  botToken?: string
 ): Promise<string | undefined> {
-  if (!slack || !process.env.SLACK_BOT_TOKEN) {
+  const slack = getSlackClient(botToken);
+  
+  if (!slack) {
     console.warn('Slack is not configured. Skipping message send.');
     return undefined;
   }
@@ -36,13 +41,18 @@ export async function sendSlackMessage(
 /**
  * Reads the history of a channel
  * @param channel_id - Channel ID to read message history from
+ * @param messageLimit - Number of messages to fetch
+ * @param botToken - Optional bot token (will use env var if not provided)
  * @returns Promise resolving to the messages
  */
 export async function readSlackHistory(
   channel_id: string,
   messageLimit: number = 100,
+  botToken?: string
 ) {
-  if (!slack || !process.env.SLACK_BOT_TOKEN) {
+  const slack = getSlackClient(botToken);
+  
+  if (!slack) {
     console.warn('Slack is not configured. Cannot read history.');
     return { messages: [] };
   }
@@ -62,10 +72,13 @@ export async function readSlackHistory(
 /**
  * Gets user information from Slack
  * @param user_id - User ID to fetch information for
+ * @param botToken - Optional bot token (will use env var if not provided)
  * @returns Promise resolving to user info
  */
-export async function getSlackUserInfo(user_id: string) {
-  if (!slack || !process.env.SLACK_BOT_TOKEN) {
+export async function getSlackUserInfo(user_id: string, botToken?: string) {
+  const slack = getSlackClient(botToken);
+  
+  if (!slack) {
     console.warn('Slack is not configured. Cannot get user info.');
     return null;
   }
@@ -96,10 +109,13 @@ export async function getSlackUserInfo(user_id: string) {
  * Gets all replies in a thread
  * @param channel_id - Channel ID where the thread is
  * @param thread_ts - Thread timestamp (parent message timestamp)
+ * @param botToken - Optional bot token (will use env var if not provided)
  * @returns Promise resolving to the thread messages
  */
-export async function getSlackThreadReplies(channel_id: string, thread_ts: string) {
-  if (!slack || !process.env.SLACK_BOT_TOKEN) {
+export async function getSlackThreadReplies(channel_id: string, thread_ts: string, botToken?: string) {
+  const slack = getSlackClient(botToken);
+  
+  if (!slack) {
     console.warn('Slack is not configured. Cannot get thread replies.');
     return { messages: [] };
   }

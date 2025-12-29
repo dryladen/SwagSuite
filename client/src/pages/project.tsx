@@ -159,7 +159,15 @@ export default function ProjectPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
-
+  const statusList: Record<string, string> = {
+    'quote' : 'Quote',
+    'pending_approval' : 'Pending Approval',
+    'approved' : 'Approved',
+    'in_production' : 'In Production',
+    'shipped' : 'Shipped',
+    'delivered' : 'Delivered',
+    'cancelled' : 'Cancelled',
+  };
   // Fetch order details
   const { data: order, isLoading: orderLoading } = useQuery<Order>({
     queryKey: [`/api/orders/${orderId}`],
@@ -370,7 +378,7 @@ export default function ProjectPage() {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('orderId', orderId!);
-      
+
       const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
@@ -522,8 +530,8 @@ export default function ProjectPage() {
             </p>
           </div>
         </div>
-        <Badge variant="outline" className="text-sm">
-          {order.status}
+        <Badge variant="outline" className="text-lg">
+          {statusList[order.status] || order.status}
         </Badge>
       </div>
 
@@ -590,9 +598,9 @@ export default function ProjectPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 className="w-full justify-start"
                 onClick={() => {
                   setNewStatus(order?.status || "");
@@ -602,18 +610,18 @@ export default function ProjectPage() {
                 <Settings className="w-4 h-4 mr-2" />
                 Update Status
               </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 className="w-full justify-start"
                 onClick={() => setIsUploadFileDialogOpen(true)}
               >
                 <Upload className="w-4 h-4 mr-2" />
                 Upload File
               </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 className="w-full justify-start"
                 onClick={() => {
                   setAssignedUserId(order?.assignedUserId || "");
@@ -1041,7 +1049,7 @@ export default function ProjectPage() {
             <DialogTitle>Update Order Status</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
+            <div className="flex flex-col gap-2">
               <Label htmlFor="status">Select New Status</Label>
               <Select value={newStatus} onValueChange={setNewStatus}>
                 <SelectTrigger>
@@ -1062,7 +1070,7 @@ export default function ProjectPage() {
               <Button variant="outline" onClick={() => setIsUpdateStatusDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={() => updateOrderStatusMutation.mutate(newStatus)}
                 disabled={!newStatus || updateOrderStatusMutation.isPending}
               >
@@ -1099,7 +1107,7 @@ export default function ProjectPage() {
               <Button variant="outline" onClick={() => setIsReassignDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={() => reassignOrderMutation.mutate(assignedUserId)}
                 disabled={!assignedUserId || reassignOrderMutation.isPending}
               >
@@ -1119,7 +1127,7 @@ export default function ProjectPage() {
           <div className="space-y-4">
             <div>
               <Label htmlFor="file">Select File</Label>
-              <Input 
+              <Input
                 id="file"
                 type="file"
                 onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
@@ -1138,7 +1146,7 @@ export default function ProjectPage() {
               }}>
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={() => uploadFile && uploadFileMutation.mutate(uploadFile)}
                 disabled={!uploadFile || uploadFileMutation.isPending}
               >

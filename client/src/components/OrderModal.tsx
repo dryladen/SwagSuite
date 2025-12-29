@@ -40,7 +40,13 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
     notes: "",
     shippingAddress: "",
     billingAddress: "",
+    trackingNumber: "",
+    supplierId: "",
+    tax: "0",
+    shipping: "0",
   });
+  const [orderItems, setOrderItems] = useState<any[]>([]);
+  const [productSearch, setProductSearch] = useState("");
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -57,6 +63,10 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
           notes: order.notes || "",
           shippingAddress: (order as any).shippingAddress || "",
           billingAddress: (order as any).billingAddress || "",
+          trackingNumber: (order as any).trackingNumber || "",
+          supplierId: (order as any).supplierId || "",
+          tax: (order as any).tax || "0",
+          shipping: (order as any).shipping || "0",
         });
       } else {
         setFormData({
@@ -67,7 +77,12 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
           notes: "",
           shippingAddress: "",
           billingAddress: "",
+          trackingNumber: "",
+          supplierId: "",
+          tax: "0",
+          shipping: "0",
         });
+        setOrderItems([]);
       }
     }
   }, [open, order, initialCompanyId]); // depend on open, order, and initialCompanyId
@@ -81,6 +96,75 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
     queryKey: ["/api/companies"],
     enabled: open,
   });
+
+  const { data: suppliers = [] } = useQuery<any[]>({
+    queryKey: ["/api/suppliers"],
+    enabled: open,
+  });
+
+  const { data: products = [] } = useQuery<any[]>({
+    queryKey: ["/api/products"],
+    enabled: open,
+  });
+
+  // Filter products based on search
+  const filteredProducts = products.filter((product: any) =>
+    product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+    (product.sku && product.sku.toLowerCase().includes(productSearch.toLowerCase()))
+  );
+
+  // Add product to order items
+  const addProduct = (product: any) => {
+    const existingItem = orderItems.find(item => item.productId === product.id);
+    if (existingItem) {
+      updateItemQuantity(existingItem.id, existingItem.quantity + 1);
+    } else {
+      const newItem = {
+        id: `temp-${Date.now()}`,
+        productId: product.id,
+        productName: product.name,
+        sku: product.sku,
+        quantity: 1,
+        unitPrice: parseFloat(product.basePrice || "0"),
+        totalPrice: parseFloat(product.basePrice || "0"),
+      };
+      setOrderItems([...orderItems, newItem]);
+    }
+    setProductSearch("");
+  };
+
+  // Update item quantity
+  const updateItemQuantity = (itemId: string, quantity: number) => {
+    setOrderItems(items =>
+      items.map(item =>
+        item.id === itemId
+          ? { ...item, quantity, totalPrice: item.unitPrice * quantity }
+          : item
+      )
+    );
+  };
+
+  // Update item unit price
+  const updateItemPrice = (itemId: string, unitPrice: number) => {
+    setOrderItems(items =>
+      items.map(item =>
+        item.id === itemId
+          ? { ...item, unitPrice, totalPrice: unitPrice * item.quantity }
+          : item
+      )
+    );
+  };
+
+  // Remove item
+  const removeItem = (itemId: string) => {
+    setOrderItems(items => items.filter(item => item.id !== itemId));
+  };
+
+  // Calculate totals
+  const subtotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
+  const taxAmount = parseFloat(formData.tax || "0");
+  const shippingAmount = parseFloat(formData.shipping || "0");
+  const total = subtotal + taxAmount + shippingAmount;
 
   const createOrderMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -175,6 +259,8 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
 
     const payload: any = {
       ...formData,
+      subtotal: subtotal.toFixed(2),
+      total: total.toFixed(2),
     };
     
     // Convert date strings to Date objects or null
@@ -193,7 +279,16 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
     if (order) {
       updateOrderMutation.mutate(payload);
     } else {
-      createOrderMutation.mutate(payload);
+      // Create order with items
+      createOrderMutation.mutate({
+        ...payload,
+        items: orderItems.map(item => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice.toFixed(2),
+          totalPrice: item.totalPrice.toFixed(2),
+        })),
+      });
     }
   };
 
@@ -206,7 +301,7 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Customer and Order Type */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <Label htmlFor="customer">Customer</Label>
               <Select
@@ -241,12 +336,160 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label htmlFor="supplier">Vendor/Supplier</Label>
+              <Select
+                value={formData.supplierId}
+                onValueChange={(value) => handleFieldChange("supplierId", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select vendor..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {suppliers?.map((supplier) => (
+                    <SelectItem key={supplier.id} value={supplier.id}>
+                      {supplier.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+
+          {/* Product Selection */}
+          <div>
+            <Label>Add Products</Label>
+            <div className="relative">
+              <Input
+                placeholder="Search products by name or SKU..."
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+                className="pr-10"
+              />
+              {productSearch && filteredProducts.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  {filteredProducts.slice(0, 10).map((product: any) => (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => addProduct(product)}
+                      className="w-full px-4 py-2 text-left hover:bg-gray-100 flex justify-between items-center"
+                    >
+                      <div>
+                        <div className="font-medium">{product.name}</div>
+                        <div className="text-sm text-gray-500">{product.sku || 'No SKU'}</div>
+                      </div>
+                      <div className="text-swag-primary font-semibold">
+                        ${parseFloat(product.basePrice || "0").toFixed(2)}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Order Items Table */}
+          {orderItems.length > 0 && (
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">SKU</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Unit Price</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
+                    <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {orderItems.map((item) => (
+                    <tr key={item.id}>
+                      <td className="px-4 py-3 text-sm">{item.productName}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{item.sku || '-'}</td>
+                      <td className="px-4 py-3 text-right">
+                        <Input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => updateItemQuantity(item.id, parseInt(e.target.value) || 1)}
+                          className="w-20 text-right"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={item.unitPrice}
+                          onChange={(e) => updateItemPrice(item.id, parseFloat(e.target.value) || 0)}
+                          className="w-28 text-right"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium">
+                        ${item.totalPrice.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeItem(item.id)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          Remove
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Pricing Summary */}
+              <div className="bg-gray-50 px-4 py-4 space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Subtotal:</span>
+                  <span className="font-medium">${subtotal.toFixed(2)}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="tax" className="text-xs">Tax Amount</Label>
+                    <Input
+                      id="tax"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.tax}
+                      onChange={(e) => handleFieldChange("tax", e.target.value)}
+                      className="text-right"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="shipping" className="text-xs">Shipping Amount</Label>
+                    <Input
+                      id="shipping"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.shipping}
+                      onChange={(e) => handleFieldChange("shipping", e.target.value)}
+                      className="text-right"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-between text-lg font-bold border-t pt-3">
+                  <span>Total:</span>
+                  <span className="text-swag-primary">${total.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           
 
           {/* Order Details */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <Label htmlFor="inHandsDate">In-Hands Date</Label>
               <Input
@@ -263,6 +506,16 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
                 type="date"
                 value={formData.eventDate}
                 onChange={(e) => handleFieldChange("eventDate", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="trackingNumber">Tracking Number</Label>
+              <Input
+                id="trackingNumber"
+                type="text"
+                placeholder="Enter tracking number..."
+                value={formData.trackingNumber}
+                onChange={(e) => handleFieldChange("trackingNumber", e.target.value)}
               />
             </div>
           </div>

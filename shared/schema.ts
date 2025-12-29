@@ -202,6 +202,7 @@ export const orders = pgTable("orders", {
   companyId: varchar("company_id").references(() => companies.id),
   contactId: varchar("contact_id").references(() => contacts.id),
   assignedUserId: varchar("assigned_user_id").references(() => users.id),
+  supplierId: varchar("supplier_id").references(() => suppliers.id),
   status: orderStatusEnum("status").default("quote"),
   orderType: varchar("order_type").default("quote"), // quote, sales_order, rush_order
   subtotal: decimal("subtotal", { precision: 12, scale: 2 }).default("0"),
@@ -656,6 +657,40 @@ export const insertErrorSchema = createInsertSchema(errors).omit({
   createdAt: true,
   updatedAt: true,
   resolvedAt: true,
+});
+
+// Integration Settings table
+export const integrationSettings = pgTable("integration_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // S&S Activewear Integration
+  ssActivewearAccount: varchar("ss_activewear_account"),
+  ssActivewearApiKey: text("ss_activewear_api_key"),
+  // Slack Integration
+  slackBotToken: text("slack_bot_token"),
+  slackChannelId: varchar("slack_channel_id"),
+  // HubSpot Integration
+  hubspotApiKey: text("hubspot_api_key"),
+  // Connection status flags
+  quickbooksConnected: boolean("quickbooks_connected").default(false),
+  stripeConnected: boolean("stripe_connected").default(false),
+  shipmateConnected: boolean("shipmate_connected").default(false),
+  // Metadata
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const integrationSettingsRelations = relations(integrationSettings, ({ one }) => ({
+  updatedByUser: one(users, {
+    fields: [integrationSettings.updatedBy],
+    references: [users.id],
+  }),
+}));
+
+export const insertIntegrationSettingsSchema = createInsertSchema(integrationSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 // KPI Tracking
@@ -1461,3 +1496,7 @@ export type InsertNewsletterCampaign = z.infer<typeof insertNewsletterCampaignSc
 export type InsertNewsletterAnalytics = z.infer<typeof insertNewsletterAnalyticsSchema>;
 export type InsertNewsletterForm = z.infer<typeof insertNewsletterFormSchema>;
 export type InsertNewsletterAutomation = z.infer<typeof insertNewsletterAutomationSchema>;
+
+// Integration Settings Types
+export type IntegrationSettings = typeof integrationSettings.$inferSelect;
+export type InsertIntegrationSettings = z.infer<typeof insertIntegrationSettingsSchema>;

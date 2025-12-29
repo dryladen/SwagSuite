@@ -31,6 +31,17 @@ import Anthropic from '@anthropic-ai/sdk';
 import { sendSlackMessage } from "../shared/slack";
 import { SsActivewearService } from "./ssActivewearService";
 
+// Helper function to get S&S Activewear credentials
+async function getSsActivewearCredentials() {
+  // Try to get from database first
+  const dbSettings = await storage.getIntegrationSettings();
+  
+  return {
+    accountNumber: dbSettings?.ssActivewearAccount || process.env.SS_ACTIVEWEAR_ACCOUNT || '',
+    apiKey: dbSettings?.ssActivewearApiKey || process.env.SS_ACTIVEWEAR_API_KEY || ''
+  };
+}
+
 // Type definitions
 interface SocialMediaPost {
   platform: string;
@@ -755,6 +766,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch('/api/products/:id', isAuthenticated, async (req, res) => {
+    try {
+      const product = await storage.updateProduct(req.params.id, req.body);
+      res.json(product);
+    } catch (error) {
+      console.error("Error updating product:", error);
+      res.status(500).json({ message: "Failed to update product" });
+    }
+  });
+
   app.delete('/api/products/:id', isAuthenticated, async (req, res) => {
     try {
       await storage.deleteProduct(req.params.id);
@@ -988,8 +1009,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/orders', isAuthenticated, async (req, res) => {
     try {
+      const { items, ...orderData } = req.body;
+      
       const dataToValidate = {
-        ...req.body,
+        ...orderData,
         assignedUserId: (req.user as any)?.claims?.sub,
       };
 
@@ -1010,6 +1033,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const order = await storage.createOrder(validatedData);
 
+      // Create order items if provided
+      if (items && Array.isArray(items) && items.length > 0) {
+        for (const item of items) {
+          await storage.createOrderItem({
+            orderId: order.id,
+            productId: item.productId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+          });
+        }
+      }
+
       // Log activity
       await storage.createActivity({
         userId: (req.user as any)?.claims?.sub,
@@ -1028,7 +1064,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch('/api/orders/:id', isAuthenticated, async (req, res) => {
     try {
-      const validatedData = insertOrderSchema.partial().parse(req.body);
+      const dataToValidate = { ...req.body };
+      
+      // Convert date strings to Date objects for validation
+      if (dataToValidate.inHandsDate) {
+        dataToValidate.inHandsDate = new Date(dataToValidate.inHandsDate);
+      }
+      if (dataToValidate.eventDate) {
+        dataToValidate.eventDate = new Date(dataToValidate.eventDate);
+      }
+      if (dataToValidate.supplierInHandsDate) {
+        dataToValidate.supplierInHandsDate = new Date(dataToValidate.supplierInHandsDate);
+      }
+      
+      const validatedData = insertOrderSchema.partial().parse(dataToValidate);
       const order = await storage.updateOrder(req.params.id, validatedData);
 
       // Log activity
@@ -4239,9 +4288,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Fetch messages from Slack channel and sync with database
   app.get('/api/slack/sync-messages', isAuthenticated, async (req, res) => {
     try {
-      if (!process.env.SLACK_BOT_TOKEN || !process.env.SLACK_CHANNEL_ID) {
+      // Get Slack credentials from database or env vars
+      const credentials = await storage.getIntegrationSettings();
+      const botToken = credentials?.slackBotToken || process.env.SLACK_BOT_TOKEN;
+      const channelId = credentials?.slackChannelId || process.env.SLACK_CHANNEL_ID;
+
+      if (!botToken || !channelId) {
         return res.status(503).json({ 
-          message: "Slack is not configured. Please add SLACK_BOT_TOKEN and SLACK_CHANNEL_ID to your environment variables." 
+          message: "Slack is not configured. Please configure Slack integration in Settings." 
         });
       }
 
@@ -4249,7 +4303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { readSlackHistory, getSlackUserInfo } = await import('@shared/slack');
       
       // Fetch messages from Slack
-      const history = await readSlackHistory(process.env.SLACK_CHANNEL_ID, 50);
+      const history = await readSlackHistory(channelId, 50, botToken);
       
       if (!history || !history.messages) {
         return res.status(503).json({ 
@@ -4266,7 +4320,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userInfoMap = new Map();
       await Promise.all(
         userIds.map(async (userId: string) => {
-          const userInfo = await getSlackUserInfo(userId);
+          const userInfo = await getSlackUserInfo(userId, botToken);
           if (userInfo) {
             userInfoMap.set(userId, userInfo);
           }
@@ -4285,7 +4339,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           return {
             id: msg.ts,
-            channelId: process.env.SLACK_CHANNEL_ID!,
+            channelId: channelId,
             messageId: msg.ts,
             userId: msg.user || 'bot',
             content: msg.text || '',
@@ -4320,7 +4374,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { threadTs } = req.params;
       
-      if (!process.env.SLACK_BOT_TOKEN || !process.env.SLACK_CHANNEL_ID) {
+      // Get Slack credentials from database or env vars
+      const credentials = await storage.getIntegrationSettings();
+      const botToken = credentials?.slackBotToken || process.env.SLACK_BOT_TOKEN;
+      const channelId = credentials?.slackChannelId || process.env.SLACK_CHANNEL_ID;
+
+      if (!botToken || !channelId) {
         return res.status(503).json({ 
           message: "Slack is not configured." 
         });
@@ -4329,7 +4388,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { getSlackThreadReplies, getSlackUserInfo } = await import('@shared/slack');
       
       // Fetch thread replies
-      const threadData = await getSlackThreadReplies(process.env.SLACK_CHANNEL_ID, threadTs);
+      const threadData = await getSlackThreadReplies(channelId, threadTs, botToken);
       
       if (!threadData || !threadData.messages) {
         return res.json({ replies: [] });
@@ -4345,7 +4404,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await Promise.all(
         userIds.map(async (userId: string) => {
           try {
-            const userInfo = await getSlackUserInfo(userId);
+            const userInfo = await getSlackUserInfo(userId, botToken);
             if (userInfo) {
               userInfoMap.set(userId, userInfo);
             }
@@ -4390,19 +4449,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Message content is required" });
       }
 
-      if (!process.env.SLACK_BOT_TOKEN || !process.env.SLACK_CHANNEL_ID) {
+      // Get Slack credentials from database or env vars
+      const credentials = await storage.getIntegrationSettings();
+      const botToken = credentials?.slackBotToken || process.env.SLACK_BOT_TOKEN;
+      const channelId = credentials?.slackChannelId || process.env.SLACK_CHANNEL_ID;
+
+      if (!botToken || !channelId) {
         return res.status(503).json({ 
-          message: "Slack is not configured. Please add SLACK_BOT_TOKEN and SLACK_CHANNEL_ID to your environment variables." 
+          message: "Slack is not configured. Please configure Slack integration in Settings." 
         });
       }
 
       // Send message to Slack
       const messageResponse = await sendSlackMessage({
-        channel: process.env.SLACK_CHANNEL_ID!,
+        channel: channelId,
         text: content.trim(),
         username: 'SwagSuite',
         icon_emoji: ':briefcase:'
-      });
+      }, botToken);
 
       if (!messageResponse) {
         return res.status(503).json({ 
@@ -4412,7 +4476,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Store message in database
       const message = await storage.createSlackMessage({
-        channelId: process.env.SLACK_CHANNEL_ID!,
+        channelId: channelId,
         messageId: messageResponse || 'sent',
         userId: req.user!.claims.sub,
         content: content.trim()
@@ -4482,10 +4546,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/ss-activewear/product/:sku', isAuthenticated, async (req, res) => {
     try {
       const { sku } = req.params;
-      const service = new SsActivewearService({
-        accountNumber: '52733',
-        apiKey: '1812622b-59cd-4863-8a9f-ad64eee5cd22'
-      });
+      const credentials = await getSsActivewearCredentials();
+      const service = new SsActivewearService(credentials);
       const product = await service.getProductBySku(sku);
 
       if (!product) {
@@ -4508,10 +4570,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Search query is required' });
       }
 
-      const service = new SsActivewearService({
-        accountNumber: '52733',
-        apiKey: '1812622b-59cd-4863-8a9f-ad64eee5cd22'
-      });
+      const credentials = await getSsActivewearCredentials();
+      const service = new SsActivewearService(credentials);
       const products = await service.searchProducts(query);
 
       res.json(products);
@@ -4614,6 +4674,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error updating feature:', error);
       res.status(500).json({ error: 'Failed to update feature' });
+    }
+  });
+
+  // Integration Settings endpoints
+  app.get('/api/settings/integrations', isAuthenticated, async (req, res) => {
+    try {
+      // Fetch from database
+      const dbSettings = await storage.getIntegrationSettings();
+      
+      // If no settings in DB, return environment variables or defaults
+      const settings = dbSettings || {
+        ssActivewearAccount: process.env.SS_ACTIVEWEAR_ACCOUNT || "",
+        ssActivewearApiKey: process.env.SS_ACTIVEWEAR_API_KEY || "",
+        hubspotApiKey: process.env.HUBSPOT_API_KEY || "",
+        slackBotToken: process.env.SLACK_BOT_TOKEN || "",
+        slackChannelId: process.env.SLACK_CHANNEL_ID || "",
+        quickbooksConnected: false,
+        stripeConnected: false,
+        shipmateConnected: false
+      };
+      
+      res.json(settings);
+    } catch (error) {
+      console.error('Error fetching integration settings:', error);
+      res.status(500).json({ error: 'Failed to fetch integration settings' });
+    }
+  });
+
+  app.post('/api/settings/integrations', isAuthenticated, async (req, res) => {
+    try {
+      const settings = req.body;
+      const userId = (req.user as any)?.id;
+      
+      // Log masked values for security
+      console.log('Saving integration settings:', {
+        ssActivewearAccount: settings.ssActivewearAccount ? '***' : '',
+        ssActivewearApiKey: settings.ssActivewearApiKey ? '***' : '',
+        hubspotApiKey: settings.hubspotApiKey ? '***' : '',
+        slackBotToken: settings.slackBotToken ? '***' : '',
+        slackChannelId: settings.slackChannelId || '',
+        updatedBy: userId
+      });
+      
+      // Save to database
+      const savedSettings = await storage.upsertIntegrationSettings(settings, userId);
+      
+      res.json({ 
+        success: true, 
+        message: 'Integration settings saved successfully',
+        settings: savedSettings
+      });
+    } catch (error) {
+      console.error('Error saving integration settings:', error);
+      res.status(500).json({ error: 'Failed to save integration settings' });
     }
   });
 

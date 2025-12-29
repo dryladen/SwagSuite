@@ -26,7 +26,9 @@ interface ProductDetailModalProps {
     name: string;
     description?: string;
     sku?: string;
+    supplierSku?: string;
     supplierId?: string;
+    categoryId?: string;
     basePrice?: number;
     minimumQuantity?: number;
     colors?: string[];
@@ -34,6 +36,9 @@ interface ProductDetailModalProps {
     imprintMethods?: string[];
     leadTime?: number;
     imageUrl?: string;
+    productType?: string;
+    createdAt?: string;
+    updatedAt?: string;
   } | null;
   supplierName?: string;
 }
@@ -75,6 +80,114 @@ export function ProductDetailModal({ open, onOpenChange, product, supplierName }
         </DialogHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Product Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Product Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* SKU Information */}
+              <div className="space-y-2 p-3 bg-gray-50 rounded-lg">
+                {product.sku && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-600">SKU:</span>
+                    <Badge variant="outline" className="font-mono">{product.sku}</Badge>
+                  </div>
+                )}
+                {product.supplierSku && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-600">Supplier SKU:</span>
+                    <Badge variant="outline" className="font-mono">{product.supplierSku}</Badge>
+                  </div>
+                )}
+                {product.productType && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-600">Type:</span>
+                    <Badge variant="secondary" className="capitalize">{product.productType}</Badge>
+                  </div>
+                )}
+              </div>
+
+              {product.description && (
+                <div>
+                  <p className="text-sm font-medium text-gray-500 mb-1">Description</p>
+                  <p className="text-sm text-gray-700">{product.description}</p>
+                </div>
+              )}
+
+              {supplierName && (
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm font-medium">Supplier:</span>
+                  <Badge variant="outline">{supplierName}</Badge>
+                </div>
+              )}
+
+              <Separator />
+
+              {/* Pricing & Quantities */}
+              <div className="space-y-3">
+                {product.basePrice && (
+                  <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium">Base Price:</span>
+                    </div>
+                    <span className="text-lg font-bold text-green-700">
+                      ${Number(product.basePrice).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                {product.minimumQuantity && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Package className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm font-medium">Min Quantity:</span>
+                    </div>
+                    <Badge>{product.minimumQuantity} pcs</Badge>
+                  </div>
+                )}
+
+                {product.leadTime && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm font-medium">Lead Time:</span>
+                    </div>
+                    <Badge variant="outline">{product.leadTime} days</Badge>
+                  </div>
+                )}
+              </div>
+
+              {/* Timestamps */}
+              {(product.createdAt || product.updatedAt) && (
+                <>
+                  <Separator />
+                  <div className="space-y-1 text-xs text-gray-500">
+                    {product.createdAt && (
+                      <p>Added: {new Date(product.createdAt).toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric' 
+                      })}</p>
+                    )}
+                    {product.updatedAt && (
+                      <p>Last Updated: {new Date(product.updatedAt).toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}</p>
+                    )}
+                    <p className="font-mono text-[10px] text-gray-400 mt-2">ID: {product.id}</p>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Product Image */}
           {product.imageUrl ? (
             <Card>
@@ -87,68 +200,12 @@ export function ProductDetailModal({ open, onOpenChange, product, supplierName }
               </CardContent>
             </Card>
           ) : (
-            <Card>
+            <Card className="h-fit">
               <CardContent className="p-4 flex items-center justify-center h-64 bg-gray-50">
                 <Box className="w-16 h-16 text-gray-300" />
               </CardContent>
             </Card>
           )}
-
-          {/* Product Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Product Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {product.description && (
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Description</p>
-                  <p className="text-sm text-gray-700">{product.description}</p>
-                </div>
-              )}
-
-              {supplierName && (
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-gray-500" />
-                  <span className="text-sm font-medium">Supplier:</span>
-                  <span className="text-sm">{supplierName}</span>
-                </div>
-              )}
-
-              <Separator />
-
-              <div className="space-y-2">
-                {product.basePrice && (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <DollarSign className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm font-medium">Base Price:</span>
-                    </div>
-                    <Badge className="bg-green-100 text-green-800 text-base">
-                      ${product.basePrice}
-                    </Badge>
-                  </div>
-                )}
-
-                {product.minimumQuantity && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Min Quantity:</span>
-                    <span className="text-sm">{product.minimumQuantity} pcs</span>
-                  </div>
-                )}
-
-                {product.leadTime && (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm font-medium">Lead Time:</span>
-                    </div>
-                    <span className="text-sm">{product.leadTime} days</span>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
 
           {/* Colors */}
           {product.colors && product.colors.length > 0 && (
@@ -156,13 +213,13 @@ export function ProductDetailModal({ open, onOpenChange, product, supplierName }
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Palette className="w-5 h-5" />
-                  Available Colors
+                  Available Colors ({product.colors.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
                   {product.colors.map((color, index) => (
-                    <Badge key={index} variant="secondary" className="text-sm">
+                    <Badge key={index} variant="secondary" className="text-sm px-3 py-1">
                       {color}
                     </Badge>
                   ))}
@@ -177,13 +234,13 @@ export function ProductDetailModal({ open, onOpenChange, product, supplierName }
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Ruler className="w-5 h-5" />
-                  Available Sizes
+                  Available Sizes ({product.sizes.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
                   {product.sizes.map((size, index) => (
-                    <Badge key={index} variant="outline" className="text-sm">
+                    <Badge key={index} variant="outline" className="text-sm px-3 py-1">
                       {size}
                     </Badge>
                   ))}
@@ -198,13 +255,13 @@ export function ProductDetailModal({ open, onOpenChange, product, supplierName }
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <TrendingUp className="w-5 h-5" />
-                  Imprint Methods
+                  Imprint Methods ({product.imprintMethods.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
                   {product.imprintMethods.map((method, index) => (
-                    <Badge key={index} variant="outline" className="text-sm">
+                    <Badge key={index} variant="outline" className="text-sm px-3 py-1">
                       {method}
                     </Badge>
                   ))}

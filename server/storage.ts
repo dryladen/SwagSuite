@@ -92,6 +92,9 @@ import {
   type InsertNewsletterCampaign,
   type NewsletterTemplate,
   type InsertNewsletterTemplate,
+  integrationSettings,
+  type IntegrationSettings,
+  type InsertIntegrationSettings,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, like, and, gte, lte, sql, or, ilike } from "drizzle-orm";
@@ -192,6 +195,10 @@ export interface IStorage {
   // Search functionality
   searchCompanies(query: string): Promise<Company[]>;
   searchProducts(query: string): Promise<Product[]>;
+
+  // Integration Settings operations
+  getIntegrationSettings(): Promise<IntegrationSettings | undefined>;
+  upsertIntegrationSettings(settings: Partial<InsertIntegrationSettings>, userId?: string): Promise<IntegrationSettings>;
 
   // AI Presentation Builder operations
   getPresentations(userId: string): Promise<Presentation[]>;
@@ -2022,6 +2029,39 @@ export class DatabaseStorage implements IStorage {
   async createNewsletterTemplate(template: InsertNewsletterTemplate): Promise<NewsletterTemplate> {
     const [newTemplate] = await db.insert(newsletterTemplates).values(template).returning();
     return newTemplate;
+  }
+
+  // Integration Settings operations
+  async getIntegrationSettings(): Promise<IntegrationSettings | undefined> {
+    const [settings] = await db.select().from(integrationSettings).limit(1);
+    return settings;
+  }
+
+  async upsertIntegrationSettings(settings: Partial<InsertIntegrationSettings>, userId?: string): Promise<IntegrationSettings> {
+    const existing = await this.getIntegrationSettings();
+    
+    const settingsData = {
+      ...settings,
+      updatedBy: userId,
+      updatedAt: new Date(),
+    };
+
+    if (existing) {
+      // Update existing settings
+      const [updated] = await db
+        .update(integrationSettings)
+        .set(settingsData)
+        .where(eq(integrationSettings.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      // Create new settings
+      const [created] = await db
+        .insert(integrationSettings)
+        .values(settingsData as any)
+        .returning();
+      return created;
+    }
   }
 }
 

@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Box, Search, Plus, DollarSign, Package, Database, ShoppingCart, Trash2, TrendingUp, Eye } from "lucide-react";
+import { Box, Search, Plus, DollarSign, Package, Database, ShoppingCart, Trash2, TrendingUp, Eye, Edit } from "lucide-react";
 import ProductModal from "@/components/ProductModal";
 import { ProductIntegrations } from "@/components/integrations/ProductIntegrations";
 import { SsActivewearIntegration } from "@/components/integrations/SsActivewearIntegration";
@@ -44,6 +44,7 @@ export default function Products() {
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [activeTab, setActiveTab] = useState("my-catalog");
 
   const { toast } = useToast();
@@ -110,7 +111,7 @@ export default function Products() {
             Manage your product catalog and S&S Activewear integration
           </p>
         </div>
-        <Button 
+        <Button
           className="bg-swag-primary hover:bg-swag-primary/90"
           onClick={() => setIsProductModalOpen(true)}
         >
@@ -118,10 +119,16 @@ export default function Products() {
           Add Product
         </Button>
       </div>
-        
-      <ProductModal 
-        open={isProductModalOpen} 
-        onOpenChange={setIsProductModalOpen} 
+
+      <ProductModal
+        open={isProductModalOpen || !!editingProduct}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsProductModalOpen(false);
+            setEditingProduct(null);
+          }
+        }}
+        product={editingProduct}
       />
 
       <ProductDetailModal
@@ -190,9 +197,9 @@ export default function Products() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredProducts.map((product: Product) => {
                 const supplier = suppliers.find((s: Supplier) => s.id === product.supplierId);
-                
+
                 return (
-                  <Card key={product.id} className="hover:shadow-lg transition-shadow">
+                  <Card key={product.id} className="hover:shadow-lg flex flex-col justify-between transition-shadow">
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -211,8 +218,18 @@ export default function Products() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => setEditingProduct(product)}
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            title="Edit product"
+                          >
+                            <Edit size={14} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleDeleteProduct(product.id)}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Delete product"
                           >
                             <Trash2 size={14} />
                           </Button>
@@ -220,47 +237,49 @@ export default function Products() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {product.description && (
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {product.description}
-                        </p>
-                      )}
-                      
-                      {supplier && (
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline">{supplier.name}</Badge>
-                        </div>
-                      )}
+                      <div>
+                        {product.description && (
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {product.description}
+                          </p>
+                        )}
 
-                      {product.colors && product.colors.length > 0 && (
-                        <div className="space-y-1">
-                          <span className="text-xs font-medium text-muted-foreground">Colors:</span>
-                          <div className="flex flex-wrap gap-1">
-                            {product.colors.map((color, index) => (
-                              <Badge key={index} variant="secondary" className="text-xs">
-                                {color}
-                              </Badge>
-                            ))}
+                        {supplier && (
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{supplier.name}</Badge>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {product.imprintMethods && product.imprintMethods.length > 0 && (
-                        <div className="space-y-1">
-                          <span className="text-xs font-medium text-muted-foreground">Imprint Methods:</span>
-                          <div className="flex flex-wrap gap-1">
-                            {product.imprintMethods.map((method, index) => (
-                              <Badge key={index} variant="outline" className="text-xs">
-                                {method}
-                              </Badge>
-                            ))}
+                        {product.colors && product.colors.length > 0 && (
+                          <div className="space-y-1">
+                            <span className="text-xs font-medium text-muted-foreground">Colors:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {product.colors.map((color, index) => (
+                                <Badge key={index} variant="secondary" className="text-xs">
+                                  {color}
+                                </Badge>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      <div className="flex items-center justify-between pt-2 gap-2">
-                        <Button 
-                          variant="ghost" 
+                        {product.imprintMethods && product.imprintMethods.length > 0 && (
+                          <div className="space-y-1">
+                            <span className="text-xs font-medium text-muted-foreground">Imprint Methods:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {product.imprintMethods.map((method, index) => (
+                                <Badge key={index} variant="outline" className="text-xs">
+                                  {method}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between pt-2 gap-2">
+                        <Button
+                          variant="default"
                           size="sm"
                           onClick={() => {
                             setSelectedProduct(product);
@@ -270,10 +289,6 @@ export default function Products() {
                         >
                           <Eye size={12} className="mr-1" />
                           View Details
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          <ShoppingCart size={12} className="mr-1" />
-                          Add to Quote
                         </Button>
                       </div>
                     </CardContent>
@@ -289,7 +304,7 @@ export default function Products() {
                   No products found
                 </h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  {searchQuery 
+                  {searchQuery
                     ? "Try adjusting your search terms or create a new product."
                     : "Get started by adding your first product using S&S Activewear lookup."
                   }

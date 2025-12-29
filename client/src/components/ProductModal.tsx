@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -21,6 +21,7 @@ import type { Supplier } from "@shared/schema";
 interface ProductModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  product?: any;
 }
 
 interface SsActivewearProduct {
@@ -47,7 +48,7 @@ interface SsActivewearProduct {
   countryOfOrigin: string;
 }
 
-export default function ProductModal({ open, onOpenChange }: ProductModalProps) {
+export default function ProductModal({ open, onOpenChange, product }: ProductModalProps) {
   const [formData, setFormData] = useState({
     sku: "",
     name: "",
@@ -73,6 +74,46 @@ export default function ProductModal({ open, onOpenChange }: ProductModalProps) 
     queryKey: ["/api/suppliers"],
     enabled: open,
   });
+
+  // Populate form when editing existing product
+  useEffect(() => {
+    if (product && open) {
+      setFormData({
+        sku: product.sku || "",
+        name: product.name || "",
+        description: product.description || "",
+        price: product.basePrice?.toString() || "",
+        supplierId: product.supplierId || "",
+        category: "",
+        brand: "",
+        style: "",
+        color: product.colors?.[0] || "",
+        size: product.sizes?.[0] || "",
+      });
+      setSelectedProductImage(product.imageUrl || "");
+    } else if (!product && open) {
+      resetForm();
+    }
+  }, [product, open]);
+
+  const resetForm = () => {
+    setFormData({
+      sku: "",
+      name: "",
+      description: "",
+      price: "",
+      supplierId: "",
+      category: "",
+      brand: "",
+      style: "",
+      color: "",
+      size: "",
+    });
+    setSelectedProductImage("");
+    setSearchQuery("");
+    setSearchResults([]);
+    setSearchError("");
+  };
 
   const searchProductMutation = useMutation({
     mutationFn: async (query: string) => {
@@ -180,24 +221,39 @@ export default function ProductModal({ open, onOpenChange }: ProductModalProps) 
     },
   });
 
-  const resetForm = () => {
-    setFormData({
-      sku: "",
-      name: "",
-      description: "",
-      price: "",
-      supplierId: "",
-      category: "",
-      brand: "",
-      style: "",
-      color: "",
-      size: "",
-    });
-    setSearchError("");
-    setSelectedProductImage("");
-    setSearchResults([]);
-    setSearchQuery("");
-  };
+  const updateProductMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await apiRequest("PATCH", `/api/products/${product?.id}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Product updated successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      onOpenChange(false);
+      resetForm();
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: "Failed to update product",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleSearch = () => {
     if (!searchQuery.trim()) {
@@ -251,29 +307,37 @@ export default function ProductModal({ open, onOpenChange }: ProductModalProps) 
       return;
     }
 
-    createProductMutation.mutate({
+    const productData = {
       sku: formData.sku,
       name: formData.name,
       description: formData.description,
       basePrice: (parseFloat(formData.price) || 0).toString(),
       supplierId: finalSupplierId,
-      // Note: categoryId would need a real ID, but for now we might leave it null 
-      // since the form is sending a string name for category
-    });
+    };
+
+    if (product) {
+      updateProductMutation.mutate(productData);
+    } else {
+      createProductMutation.mutate(productData);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add New Product</DialogTitle>
+          <DialogTitle>{product ? 'Edit Product' : 'Add New Product'}</DialogTitle>
           <DialogDescription>
-            Enter a product number/SKU to automatically fetch details from S&S Activewear, or add product information manually.
+            {product 
+              ? 'Update product information below.'
+              : 'Enter a product number/SKU to automatically fetch details from S&S Activewear, or add product information manually.'
+            }
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Product Search Section */}
+          {/* Product Search Section - Only show when creating new product */}
+          {!product && (
           <div className="space-y-4 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border">
             <h3 className="font-medium text-blue-900 dark:text-blue-100">
               S&S Activewear Product Lookup
@@ -364,6 +428,7 @@ export default function ProductModal({ open, onOpenChange }: ProductModalProps) 
               </div>
             )}
           </div>
+          )}
 
           {/* Selected Product Image */}
           {selectedProductImage && (
@@ -392,6 +457,16 @@ export default function ProductModal({ open, onOpenChange }: ProductModalProps) 
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="Product name"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="sku">SKU</Label>
+              <Input
+                id="sku"
+                value={formData.sku}
+                onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                placeholder="Product SKU"
               />
             </div>
 
@@ -501,15 +576,15 @@ export default function ProductModal({ open, onOpenChange }: ProductModalProps) 
             </Button>
             <Button
               type="submit"
-              disabled={createProductMutation.isPending}
+              disabled={createProductMutation.isPending || updateProductMutation.isPending}
             >
-              {createProductMutation.isPending ? (
+              {(createProductMutation.isPending || updateProductMutation.isPending) ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Adding...
+                  {product ? 'Updating...' : 'Adding...'}
                 </>
               ) : (
-                "Add Product"
+                product ? 'Update Product' : 'Add Product'
               )}
             </Button>
           </div>
