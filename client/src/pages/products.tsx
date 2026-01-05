@@ -39,6 +39,26 @@ interface Supplier {
   contactPerson?: string;
 }
 
+// Helper function to parse array fields that might be stored as strings or JSON
+const parseArrayField = (field: any): string[] => {
+  if (!field) return [];
+  if (Array.isArray(field)) return field.filter(item => item && typeof item === 'string');
+  if (typeof field === 'string') {
+    try {
+      const parsed = JSON.parse(field);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(item => item && typeof item === 'string');
+      }
+      // If parsed is an object or other type, return empty
+      return [];
+    } catch {
+      // If not valid JSON, treat as single value
+      return field.trim() ? [field.trim()] : [];
+    }
+  }
+  return [];
+};
+
 export default function Products() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -250,31 +270,37 @@ export default function Products() {
                           </div>
                         )}
 
-                        {product.colors && product.colors.length > 0 && (
-                          <div className="space-y-1">
-                            <span className="text-xs font-medium text-muted-foreground">Colors:</span>
-                            <div className="flex flex-wrap gap-1">
-                              {product.colors.map((color, index) => (
-                                <Badge key={index} variant="secondary" className="text-xs">
-                                  {color}
-                                </Badge>
-                              ))}
+                        {(() => {
+                          const colors = parseArrayField(product.colors);
+                          return colors.length > 0 && (
+                            <div className="space-y-1">
+                              <span className="text-xs font-medium text-muted-foreground">Colors:</span>
+                              <div className="flex flex-wrap gap-1">
+                                {colors.map((color, index) => (
+                                  <Badge key={index} variant="secondary" className="text-xs">
+                                    {color}
+                                  </Badge>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
 
-                        {product.imprintMethods && product.imprintMethods.length > 0 && (
-                          <div className="space-y-1">
-                            <span className="text-xs font-medium text-muted-foreground">Imprint Methods:</span>
-                            <div className="flex flex-wrap gap-1">
-                              {product.imprintMethods.map((method, index) => (
-                                <Badge key={index} variant="outline" className="text-xs">
-                                  {method}
-                                </Badge>
-                              ))}
+                        {(() => {
+                          const imprintMethods = parseArrayField(product.imprintMethods);
+                          return imprintMethods.length > 0 && (
+                            <div className="space-y-1">
+                              <span className="text-xs font-medium text-muted-foreground">Imprint Methods:</span>
+                              <div className="flex flex-wrap gap-1">
+                                {imprintMethods.map((method, index) => (
+                                  <Badge key={index} variant="outline" className="text-xs">
+                                    {method}
+                                  </Badge>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
                       </div>
 
                       <div className="flex flex-wrap items-center justify-between pt-2 gap-2">

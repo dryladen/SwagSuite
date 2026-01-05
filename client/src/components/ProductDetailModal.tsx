@@ -43,6 +43,26 @@ interface ProductDetailModalProps {
   supplierName?: string;
 }
 
+// Helper function to parse array fields that might be stored as strings or JSON
+const parseArrayField = (field: any): string[] => {
+  if (!field) return [];
+  if (Array.isArray(field)) return field.filter(item => item && typeof item === 'string');
+  if (typeof field === 'string') {
+    try {
+      const parsed = JSON.parse(field);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(item => item && typeof item === 'string');
+      }
+      // If parsed is an object or other type, return empty
+      return [];
+    } catch {
+      // If not valid JSON, treat as single value
+      return field.trim() ? [field.trim()] : [];
+    }
+  }
+  return [];
+};
+
 export function ProductDetailModal({ open, onOpenChange, product, supplierName }: ProductDetailModalProps) {
   const [, setLocation] = useLocation();
 
@@ -208,67 +228,76 @@ export function ProductDetailModal({ open, onOpenChange, product, supplierName }
           )}
 
           {/* Colors */}
-          {product.colors && product.colors.length > 0 && (
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Palette className="w-5 h-5" />
-                  Available Colors ({product.colors.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {product.colors.map((color, index) => (
-                    <Badge key={index} variant="secondary" className="text-sm px-3 py-1">
-                      {color}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {(() => {
+            const colors = parseArrayField(product.colors);
+            return colors.length > 0 && (
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Palette className="w-5 h-5" />
+                    Available Colors ({colors.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {colors.map((color, index) => (
+                      <Badge key={index} variant="secondary" className="text-sm px-3 py-1">
+                        {color}
+                      </Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Sizes */}
-          {product.sizes && product.sizes.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Ruler className="w-5 h-5" />
-                  Available Sizes ({product.sizes.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {product.sizes.map((size, index) => (
-                    <Badge key={index} variant="outline" className="text-sm px-3 py-1">
-                      {size}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {(() => {
+            const sizes = parseArrayField(product.sizes);
+            return sizes.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Ruler className="w-5 h-5" />
+                    Available Sizes ({sizes.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {sizes.map((size, index) => (
+                      <Badge key={index} variant="outline" className="text-sm px-3 py-1">
+                        {size}
+                      </Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Imprint Methods */}
-          {product.imprintMethods && product.imprintMethods.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <TrendingUp className="w-5 h-5" />
-                  Imprint Methods ({product.imprintMethods.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {product.imprintMethods.map((method, index) => (
-                    <Badge key={index} variant="outline" className="text-sm px-3 py-1">
-                      {method}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {(() => {
+            const imprintMethods = parseArrayField(product.imprintMethods);
+            return imprintMethods.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <TrendingUp className="w-5 h-5" />
+                    Imprint Methods ({imprintMethods.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {imprintMethods.map((method, index) => (
+                      <Badge key={index} variant="outline" className="text-sm px-3 py-1">
+                        {method}
+                      </Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Orders Using This Product */}
           <Card className="md:col-span-2">

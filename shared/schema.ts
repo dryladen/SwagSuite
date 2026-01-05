@@ -139,6 +139,7 @@ export const suppliers = pgTable("suppliers", {
   // Enhanced vendor management
   ytdSpend: decimal("ytd_spend", { precision: 12, scale: 2 }).default("0"),
   lastYearSpend: decimal("last_year_spend", { precision: 12, scale: 2 }).default("0"),
+  productCount: integer("product_count").default(0),
   preferredBenefits: jsonb("preferred_benefits"), // EQP, rebates, self-promos, etc.
   vendorOffers: jsonb("vendor_offers"), // Current offers and programs
   autoNotifications: boolean("auto_notifications").default(true),

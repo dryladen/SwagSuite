@@ -78,6 +78,34 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
   // Populate form when editing existing product
   useEffect(() => {
     if (product && open) {
+      // Helper to parse colors/sizes from database (might be string or array)
+      const parseToString = (field: any): string => {
+        if (!field) return '';
+        
+        // If already array, join it
+        if (Array.isArray(field)) {
+          return field.join(', ');
+        }
+        
+        // If string, try to parse as JSON first
+        if (typeof field === 'string') {
+          try {
+            const parsed = JSON.parse(field);
+            if (Array.isArray(parsed)) {
+              return parsed.join(', ');
+            }
+          } catch {
+            // If not valid JSON, return as is
+          }
+          return field;
+        }
+        
+        return '';
+      };
+
+      const colorsString = parseToString(product.colors);
+      const sizesString = parseToString(product.sizes);
+
       setFormData({
         sku: product.sku || "",
         name: product.name || "",
@@ -87,8 +115,8 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
         category: "",
         brand: "",
         style: "",
-        color: product.colors?.[0] || "",
-        size: product.sizes?.[0] || "",
+        color: colorsString,
+        size: sizesString,
       });
       setSelectedProductImage(product.imageUrl || "");
     } else if (!product && open) {
@@ -231,6 +259,7 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
         title: "Success",
         description: "Product updated successfully",
       });
+      // Invalidate all product-related queries (including vendor products)
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       onOpenChange(false);
       resetForm();
@@ -307,12 +336,19 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
       return;
     }
 
+    // Build colors and sizes arrays from comma-separated strings
+    const colorsArray = formData.color ? formData.color.split(',').map(c => c.trim()).filter(c => c) : [];
+    const sizesArray = formData.size ? formData.size.split(',').map(s => s.trim()).filter(s => s) : [];
+
     const productData = {
       sku: formData.sku,
       name: formData.name,
       description: formData.description,
       basePrice: (parseFloat(formData.price) || 0).toString(),
       supplierId: finalSupplierId,
+      colors: colorsArray.length > 0 ? colorsArray : null,
+      sizes: sizesArray.length > 0 ? sizesArray : null,
+      imageUrl: selectedProductImage || undefined,
     };
 
     if (product) {
@@ -503,23 +539,25 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
             </div>
 
             <div>
-              <Label htmlFor="color">Color</Label>
+              <Label htmlFor="color">Colors</Label>
               <Input
                 id="color"
                 value={formData.color}
                 onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                placeholder="Color"
+                placeholder="e.g. Red, Blue, Green (comma-separated)"
               />
+              <p className="text-xs text-muted-foreground mt-1">Separate multiple colors with commas</p>
             </div>
 
             <div>
-              <Label htmlFor="size">Size</Label>
+              <Label htmlFor="size">Sizes</Label>
               <Input
                 id="size"
                 value={formData.size}
                 onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                placeholder="Size"
+                placeholder="e.g. S, M, L, XL (comma-separated)"
               />
+              <p className="text-xs text-muted-foreground mt-1">Separate multiple sizes with commas</p>
             </div>
 
             <div>

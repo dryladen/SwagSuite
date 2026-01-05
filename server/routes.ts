@@ -1,34 +1,31 @@
-import type { Express } from "express";
-import { createServer, type Server } from "http";
-import { storage } from "./storage";
-import multer from "multer";
-import path from "path";
-import fs from "fs";
-import { setupAuth, isAuthenticated } from "./replitAuth";
-import { 
-  insertCompanySchema, 
-  insertContactSchema, 
-  insertClientSchema,
-  insertSupplierSchema,
-  insertProductSchema,
-  insertOrderSchema,
-  insertOrderItemSchema,
-  insertArtworkFileSchema,
-  insertActivitySchema,
-  insertArtworkColumnSchema,
+import Anthropic from '@anthropic-ai/sdk';
+import {
   insertArtworkCardSchema,
+  insertClientSchema,
+  insertCompanySchema,
+  insertContactSchema,
+  insertErrorSchema,
+  insertNewsletterCampaignSchema,
+  insertNewsletterSubscriberSchema,
+  insertNewsletterTemplateSchema,
+  insertOrderItemSchema,
+  insertOrderSchema,
+  insertProductSchema,
+  insertSequenceAnalyticsSchema,
+  insertSequenceEnrollmentSchema,
   insertSequenceSchema,
   insertSequenceStepSchema,
-  insertSequenceEnrollmentSchema,
-  insertSequenceAnalyticsSchema,
-  insertErrorSchema,
-  insertNewsletterSubscriberSchema,
-  insertNewsletterCampaignSchema,
-  insertNewsletterTemplateSchema
+  insertSupplierSchema
 } from "@shared/schema";
-import Anthropic from '@anthropic-ai/sdk';
+import type { Express } from "express";
+import fs from "fs";
+import { createServer, type Server } from "http";
+import multer from "multer";
+import path from "path";
 import { sendSlackMessage } from "../shared/slack";
+import { isAuthenticated, setupAuth } from "./replitAuth";
 import { SsActivewearService } from "./ssActivewearService";
+import { storage } from "./storage";
 
 // Helper function to get S&S Activewear credentials
 async function getSsActivewearCredentials() {
@@ -111,6 +108,103 @@ const presentationUpload = multer({
 const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 }) : null;
+
+// Helper function to update YTD spending for a company
+async function updateCompanyYtdSpending(companyId: string) {
+  try {
+    const { db } = await import("./db");
+    const { companies, orders } = await import("@shared/schema");
+    const { eq, and, gte, sql } = await import("drizzle-orm");
+
+    const currentYear = new Date().getFullYear();
+    const yearStart = new Date(currentYear, 0, 1);
+
+    // Calculate YTD spend from orders
+    const [ytdResult] = await db
+      .select({ total: sql<string>`COALESCE(SUM(${orders.total}), 0)` })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.companyId, companyId),
+          gte(orders.createdAt, yearStart)
+        )
+      );
+
+    const ytdSpend = ytdResult?.total ? parseFloat(ytdResult.total) : 0;
+
+    // Update company's YTD spend
+    await db
+      .update(companies)
+      .set({ ytdSpend: ytdSpend.toFixed(2) })
+      .where(eq(companies.id, companyId));
+
+    console.log(`Updated YTD spending for company ${companyId}: $${ytdSpend.toFixed(2)}`);
+  } catch (error) {
+    console.error(`Error updating YTD spending for company ${companyId}:`, error);
+  }
+}
+
+// Helper function to update YTD spending for a supplier
+async function updateSupplierYtdSpending(supplierId: string) {
+  try {
+    const { db } = await import("./db");
+    const { suppliers, orders } = await import("@shared/schema");
+    const { eq, and, gte, sql } = await import("drizzle-orm");
+
+    const currentYear = new Date().getFullYear();
+    const yearStart = new Date(currentYear, 0, 1);
+
+    // Calculate YTD spend from orders
+    const [ytdResult] = await db
+      .select({ total: sql<string>`COALESCE(SUM(${orders.total}), 0)` })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.supplierId, supplierId),
+          gte(orders.createdAt, yearStart)
+        )
+      );
+
+    const ytdSpend = ytdResult?.total ? parseFloat(ytdResult.total) : 0;
+
+    // Update supplier's YTD spend
+    await db
+      .update(suppliers)
+      .set({ ytdSpend: ytdSpend.toFixed(2) })
+      .where(eq(suppliers.id, supplierId));
+
+    console.log(`Updated YTD spending for supplier ${supplierId}: $${ytdSpend.toFixed(2)}`);
+  } catch (error) {
+    console.error(`Error updating YTD spending for supplier ${supplierId}:`, error);
+  }
+}
+
+// Helper function to update product count for a supplier
+async function updateSupplierProductCount(supplierId: string) {
+  try {
+    const { db } = await import("./db");
+    const { suppliers, products } = await import("@shared/schema");
+    const { eq, sql } = await import("drizzle-orm");
+
+    // Count products for this supplier
+    const [countResult] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(products)
+      .where(eq(products.supplierId, supplierId));
+
+    const productCount = countResult?.count || 0;
+
+    // Update supplier's product count
+    await db
+      .update(suppliers)
+      .set({ productCount })
+      .where(eq(suppliers.id, supplierId));
+
+    console.log(`Updated product count for supplier ${supplierId}: ${productCount} products`);
+  } catch (error) {
+    console.error(`Error updating product count for supplier ${supplierId}:`, error);
+  }
+}
 
 // AI Processing Function for Presentation Generation
 async function generatePresentationWithAI(presentationId: string, dealNotes: string) {
@@ -592,8 +686,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Company/Customer routes
   app.get('/api/companies', isAuthenticated, async (req, res) => {
     try {
-      const companies = await storage.getCompanies();
-      res.json(companies);
+      const { db } = await import("./db");
+      const { companies, orders } = await import("@shared/schema");
+      const { eq, and, gte, sql } = await import("drizzle-orm");
+      
+      // Get all companies
+      const allCompanies = await storage.getCompanies();
+      
+      // Calculate YTD spending for each company
+      const currentYear = new Date().getFullYear();
+      const yearStart = new Date(currentYear, 0, 1);
+      
+      const companiesWithYtd = await Promise.all(
+        allCompanies.map(async (company) => {
+          // Calculate YTD spend from orders
+          const [ytdResult] = await db
+            .select({ total: sql<string>`COALESCE(SUM(${orders.total}), 0)` })
+            .from(orders)
+            .where(
+              and(
+                eq(orders.companyId, company.id),
+                gte(orders.createdAt, yearStart)
+              )
+            );
+          
+          const ytdSpend = ytdResult?.total ? parseFloat(ytdResult.total) : 0;
+          
+          // Update company's YTD spend if it has changed
+          if (ytdSpend !== parseFloat(company.ytdSpend || '0')) {
+            await db
+              .update(companies)
+              .set({ ytdSpend: ytdSpend.toFixed(2) })
+              .where(eq(companies.id, company.id));
+          }
+          
+          return {
+            ...company,
+            ytdSpend: ytdSpend.toFixed(2)
+          };
+        })
+      );
+      
+      res.json(companiesWithYtd);
     } catch (error) {
       console.error("Error fetching companies:", error);
       res.status(500).json({ message: "Failed to fetch companies" });
@@ -747,8 +881,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Supplier routes
   app.get('/api/suppliers', isAuthenticated, async (req, res) => {
     try {
-      const suppliers = await storage.getSuppliers();
-      res.json(suppliers);
+      const { db } = await import("./db");
+      const { suppliers, orders, products } = await import("@shared/schema");
+      const { eq, and, gte, sql } = await import("drizzle-orm");
+      
+      // Get all suppliers
+      const allSuppliers = await storage.getSuppliers();
+      
+      // Calculate YTD spending and product count for each supplier
+      const currentYear = new Date().getFullYear();
+      const yearStart = new Date(currentYear, 0, 1);
+      
+      const suppliersWithData = await Promise.all(
+        allSuppliers.map(async (supplier) => {
+          // Calculate YTD spend from orders where this supplier is referenced
+          const [ytdResult] = await db
+            .select({ total: sql<string>`COALESCE(SUM(${orders.total}), 0)` })
+            .from(orders)
+            .where(
+              and(
+                eq(orders.supplierId, supplier.id),
+                gte(orders.createdAt, yearStart)
+              )
+            );
+          
+          const ytdSpend = ytdResult?.total ? parseFloat(ytdResult.total) : 0;
+          
+          // Count products for this supplier
+          const [countResult] = await db
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(products)
+            .where(eq(products.supplierId, supplier.id));
+          
+          const productCount = countResult?.count || 0;
+          
+          // Update supplier's YTD spend and product count if they have changed
+          const needsUpdate = 
+            ytdSpend !== parseFloat(supplier.ytdSpend || '0') ||
+            productCount !== (supplier.productCount || 0);
+          
+          if (needsUpdate) {
+            await db
+              .update(suppliers)
+              .set({ 
+                ytdSpend: ytdSpend.toFixed(2),
+                productCount 
+              })
+              .where(eq(suppliers.id, supplier.id));
+          }
+          
+          return {
+            ...supplier,
+            ytdSpend: ytdSpend.toFixed(2),
+            productCount
+          };
+        })
+      );
+      
+      res.json(suppliersWithData);
     } catch (error) {
       console.error("Error fetching suppliers:", error);
       res.status(500).json({ message: "Failed to fetch suppliers" });
@@ -768,12 +958,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch('/api/suppliers/:id', isAuthenticated, async (req, res) => {
     try {
-      const validatedData = insertSupplierSchema.partial().parse(req.body);
-      const supplier = await storage.updateSupplier(req.params.id, validatedData);
+      // Don't validate with schema if only updating simple fields
+      const updateData = req.body;
+      const supplier = await storage.updateSupplier(req.params.id, updateData);
       res.json(supplier);
     } catch (error) {
       console.error("Error updating supplier:", error);
-      res.status(500).json({ message: "Failed to update supplier" });
+      res.status(500).json({ 
+        message: "Failed to update supplier",
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 
@@ -790,8 +984,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Product routes
   app.get('/api/products', isAuthenticated, async (req, res) => {
     try {
-      const products = await storage.getProducts();
-      res.json(products);
+      const supplierId = req.query.supplierId as string;
+      
+      console.log('GET /api/products - supplierId:', supplierId);
+      
+      if (supplierId) {
+        // Filter products by supplier
+        const { db } = await import("./db");
+        const { products } = await import("@shared/schema");
+        const { eq } = await import("drizzle-orm");
+        
+        const filteredProducts = await db
+          .select()
+          .from(products)
+          .where(eq(products.supplierId, supplierId));
+        
+        console.log(`Found ${filteredProducts.length} products for supplier ${supplierId}`);
+        res.json(filteredProducts);
+      } else {
+        // Get all products
+        const allProducts = await storage.getProducts();
+        console.log(`Returning all ${allProducts.length} products`);
+        res.json(allProducts);
+      }
     } catch (error) {
       console.error("Error fetching products:", error);
       res.status(500).json({ message: "Failed to fetch products" });
@@ -814,7 +1029,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/products', isAuthenticated, async (req, res) => {
     try {
-      const validatedData = insertProductSchema.parse(req.body);
+      console.log('Creating product with data:', req.body);
+      
+      // Normalize colors and sizes before validation
+      const productData = { ...req.body };
+      
+      // Normalize colors
+      if (productData.colors !== undefined) {
+        if (Array.isArray(productData.colors)) {
+          // Already an array, just filter and stringify
+          const filtered = productData.colors.filter((c: any) => c && typeof c === 'string').map((c: string) => c.trim());
+          productData.colors = filtered.length > 0 ? JSON.stringify(filtered) : null;
+        } else if (typeof productData.colors === 'string') {
+          try {
+            // Try to parse as JSON first
+            const parsed = JSON.parse(productData.colors);
+            if (Array.isArray(parsed)) {
+              const filtered = parsed.filter((c: any) => c && typeof c === 'string').map((c: string) => c.trim());
+              productData.colors = filtered.length > 0 ? JSON.stringify(filtered) : null;
+            } else {
+              productData.colors = null;
+            }
+          } catch (e) {
+            const trimmed = productData.colors.trim();
+            productData.colors = trimmed ? JSON.stringify([trimmed]) : null;
+          }
+        } else {
+          productData.colors = null;
+        }
+      }
+      
+      // Normalize sizes
+      if (productData.sizes !== undefined) {
+        if (Array.isArray(productData.sizes)) {
+          // Already an array, just filter and stringify
+          const filtered = productData.sizes.filter((s: any) => s && typeof s === 'string').map((s: string) => s.trim());
+          productData.sizes = filtered.length > 0 ? JSON.stringify(filtered) : null;
+        } else if (typeof productData.sizes === 'string') {
+          try {
+            // Try to parse as JSON first
+            const parsed = JSON.parse(productData.sizes);
+            if (Array.isArray(parsed)) {
+              const filtered = parsed.filter((s: any) => s && typeof s === 'string').map((s: string) => s.trim());
+              productData.sizes = filtered.length > 0 ? JSON.stringify(filtered) : null;
+            } else {
+              productData.sizes = null;
+            }
+          } catch (e) {
+            const trimmed = productData.sizes.trim();
+            productData.sizes = trimmed ? JSON.stringify([trimmed]) : null;
+          }
+        } else {
+          productData.sizes = null;
+        }
+      }
+      
+      console.log('Normalized product data:', productData);
+      const validatedData = insertProductSchema.parse(productData);
       const product = await storage.createProduct(validatedData);
       res.status(201).json(product);
     } catch (error) {
@@ -825,7 +1096,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch('/api/products/:id', isAuthenticated, async (req, res) => {
     try {
-      const product = await storage.updateProduct(req.params.id, req.body);
+      console.log('Updating product:', req.params.id, 'with data:', req.body);
+      
+      // Normalize colors and sizes - ensure they are stored as JSON strings
+      const updateData = { ...req.body };
+      
+      // Normalize colors
+      if (updateData.colors !== undefined) {
+        if (Array.isArray(updateData.colors)) {
+          // Already an array, just filter and stringify
+          const filteredColors: string[] = updateData.colors.filter((c: any): c is string => c && typeof c === 'string').map((c: string) => c.trim());
+          updateData.colors = filteredColors.length > 0 ? JSON.stringify(filteredColors) : null;
+        } else if (typeof updateData.colors === 'string') {
+          try {
+            // Try to parse as JSON first
+            const parsed = JSON.parse(updateData.colors);
+            if (Array.isArray(parsed)) {
+              const filteredColors = parsed.filter((c: any) => c && typeof c === 'string').map((c: string) => c.trim());
+              updateData.colors = filteredColors.length > 0 ? JSON.stringify(filteredColors) : null;
+            } else {
+              updateData.colors = null;
+            }
+          } catch (e) {
+            // Not valid JSON, treat as single color
+            const trimmed = updateData.colors.trim();
+            updateData.colors = trimmed ? JSON.stringify([trimmed]) : null;
+          }
+        } else {
+          updateData.colors = null;
+        }
+      }
+      
+      // Normalize sizes
+      if (updateData.sizes !== undefined) {
+        if (Array.isArray(updateData.sizes)) {
+          // Already an array, just filter and stringify
+          const filteredSizes: string[] = updateData.sizes.filter((s: any): s is string => s && typeof s === 'string').map((s: string) => s.trim());
+          updateData.sizes = filteredSizes.length > 0 ? JSON.stringify(filteredSizes) : null;
+        } else if (typeof updateData.sizes === 'string') {
+          try {
+            // Try to parse as JSON first
+            const parsed = JSON.parse(updateData.sizes);
+            if (Array.isArray(parsed)) {
+              const filtered = parsed.filter(s => s && typeof s === 'string').map(s => s.trim());
+              updateData.sizes = filtered.length > 0 ? JSON.stringify(filtered) : null;
+            } else {
+              updateData.sizes = null;
+            }
+          } catch (e) {
+            // Not valid JSON, treat as single size
+            const trimmed = updateData.sizes.trim();
+            updateData.sizes = trimmed ? JSON.stringify([trimmed]) : null;
+          }
+        } else {
+          updateData.sizes = null;
+        }
+      }
+      
+      console.log('Normalized data to save:', updateData);
+      const product = await storage.updateProduct(req.params.id, updateData);
+      console.log('Product updated successfully:', product);
       res.json(product);
     } catch (error) {
       console.error("Error updating product:", error);
@@ -925,8 +1255,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Client routes
   app.get('/api/clients', isAuthenticated, async (req, res) => {
     try {
-      const clients = await storage.getClients();
-      res.json(clients);
+      const { db } = await import("./db");
+      const { clients, companies, orders } = await import("@shared/schema");
+      const { eq, and, gte, like, or, sql } = await import("drizzle-orm");
+      
+      // Get all clients
+      const allClients = await storage.getClients();
+      
+      // Calculate YTD spending for each client based on their company name
+      const currentYear = new Date().getFullYear();
+      const yearStart = new Date(currentYear, 0, 1);
+      
+      const clientsWithYtd = await Promise.all(
+        allClients.map(async (client) => {
+          let totalSpent = 0;
+          
+          // If client has a company name, find matching orders
+          if (client.company) {
+            // Find company by name
+            const [matchingCompany] = await db
+              .select()
+              .from(companies)
+              .where(like(companies.name, `%${client.company}%`))
+              .limit(1);
+            
+            if (matchingCompany) {
+              // Calculate YTD spend from orders for this company
+              const [ytdResult] = await db
+                .select({ total: sql<string>`COALESCE(SUM(${orders.total}), 0)` })
+                .from(orders)
+                .where(
+                  and(
+                    eq(orders.companyId, matchingCompany.id),
+                    gte(orders.createdAt, yearStart)
+                  )
+                );
+              
+              totalSpent = ytdResult?.total ? parseFloat(ytdResult.total) : 0;
+            }
+          }
+          
+          return {
+            ...client,
+            totalSpent: totalSpent
+          };
+        })
+      );
+      
+      res.json(clientsWithYtd);
     } catch (error) {
       console.error("Error fetching clients:", error);
       res.status(500).json({ message: "Failed to fetch clients" });
@@ -1112,6 +1488,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Created order: ${order.orderNumber}`,
       });
 
+      // Update YTD spending for company and supplier
+      if (order.companyId) {
+        await updateCompanyYtdSpending(order.companyId);
+      }
+      if (order.supplierId) {
+        await updateSupplierYtdSpending(order.supplierId);
+      }
+
       res.status(201).json(order);
     } catch (error) {
       console.error("Error creating order:", error);
@@ -1135,6 +1519,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const validatedData = insertOrderSchema.partial().parse(dataToValidate);
+      
+      // Get old order to check if company/supplier changed
+      const oldOrder = await storage.getOrder(req.params.id);
       const order = await storage.updateOrder(req.params.id, validatedData);
 
       // Log activity
@@ -1145,6 +1532,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: 'updated',
         description: `Updated order: ${order.orderNumber}`,
       });
+
+      // Update YTD spending for current company and supplier
+      if (order.companyId) {
+        await updateCompanyYtdSpending(order.companyId);
+      }
+      if (order.supplierId) {
+        await updateSupplierYtdSpending(order.supplierId);
+      }
+      
+      // Also update old company/supplier if they changed
+      if (oldOrder?.companyId && oldOrder.companyId !== order.companyId) {
+        await updateCompanyYtdSpending(oldOrder.companyId);
+      }
+      if (oldOrder?.supplierId && oldOrder.supplierId !== order.supplierId) {
+        await updateSupplierYtdSpending(oldOrder.supplierId);
+      }
 
       res.json(order);
     } catch (error) {
@@ -1170,6 +1573,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subtotal: subtotal.toFixed(2),
         total: subtotal.toFixed(2),
       });
+
+      // Update YTD spending after total change
+      if (updatedOrder.companyId) {
+        await updateCompanyYtdSpending(updatedOrder.companyId);
+      }
+      if (updatedOrder.supplierId) {
+        await updateSupplierYtdSpending(updatedOrder.supplierId);
+      }
 
       res.json({
         message: "Order total recalculated successfully",
@@ -1220,6 +1631,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('Order updated:', updatedOrder);
 
+      // Update YTD spending after item added
+      if (updatedOrder.companyId) {
+        await updateCompanyYtdSpending(updatedOrder.companyId);
+      }
+      if (updatedOrder.supplierId) {
+        await updateSupplierYtdSpending(updatedOrder.supplierId);
+      }
+
       res.status(201).json(item);
     } catch (error) {
       console.error("Error creating order item:", error);
@@ -1238,10 +1657,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }, 0);
 
       // Update order with new totals
-      await storage.updateOrder(req.params.orderId, {
+      const updatedOrder = await storage.updateOrder(req.params.orderId, {
         subtotal: subtotal.toFixed(2),
         total: subtotal.toFixed(2), // Can add tax/shipping calculation here later
       });
+
+      // Update YTD spending after item deleted
+      if (updatedOrder.companyId) {
+        await updateCompanyYtdSpending(updatedOrder.companyId);
+      }
+      if (updatedOrder.supplierId) {
+        await updateSupplierYtdSpending(updatedOrder.supplierId);
+      }
 
       res.json({ message: "Order item deleted successfully" });
     } catch (error) {
@@ -1893,6 +2320,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch enhanced dashboard stats" });
+    }
+  });
+
+  // Manual YTD Sync Endpoint - Recalculate all YTD spending and product counts
+  app.post('/api/sync/ytd-spending', isAuthenticated, async (req, res) => {
+    try {
+      console.log('Starting YTD and product sync...');
+      const { db } = await import("./db");
+      const { companies, suppliers, orders, products } = await import("@shared/schema");
+      const { eq, and, gte, sql } = await import("drizzle-orm");
+      
+      const currentYear = new Date().getFullYear();
+      const yearStart = new Date(currentYear, 0, 1);
+      
+      let companiesUpdated = 0;
+      let suppliersUpdated = 0;
+      let productCountsUpdated = 0;
+      
+      // Get all companies
+      const allCompanies = await storage.getCompanies();
+      console.log(`Found ${allCompanies.length} companies to sync`);
+      
+      // Update YTD for each company
+      for (const company of allCompanies) {
+        try {
+          const [ytdResult] = await db
+            .select({ total: sql<string>`COALESCE(SUM(${orders.total}), 0)` })
+            .from(orders)
+            .where(
+              and(
+                eq(orders.companyId, company.id),
+                gte(orders.createdAt, yearStart)
+              )
+            );
+          
+          const ytdSpend = ytdResult?.total ? parseFloat(ytdResult.total) : 0;
+          
+          await db
+            .update(companies)
+            .set({ ytdSpend: ytdSpend.toFixed(2) })
+            .where(eq(companies.id, company.id));
+          
+          companiesUpdated++;
+          console.log(`✓ Synced company ${company.name}: $${ytdSpend.toFixed(2)}`);
+        } catch (err) {
+          console.error(`Error syncing company ${company.name}:`, err);
+        }
+      }
+      
+      // Get all suppliers
+      const allSuppliers = await storage.getSuppliers();
+      console.log(`Found ${allSuppliers.length} suppliers to sync`);
+      
+      // Update YTD and product count for each supplier
+      for (const supplier of allSuppliers) {
+        try {
+          // Calculate YTD spend
+          const [ytdResult] = await db
+            .select({ total: sql<string>`COALESCE(SUM(${orders.total}), 0)` })
+            .from(orders)
+            .where(
+              and(
+                eq(orders.supplierId, supplier.id),
+                gte(orders.createdAt, yearStart)
+              )
+            );
+          
+          const ytdSpend = ytdResult?.total ? parseFloat(ytdResult.total) : 0;
+          
+          // Count products
+          const [countResult] = await db
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(products)
+            .where(eq(products.supplierId, supplier.id));
+          
+          const productCount = countResult?.count || 0;
+          
+          await db
+            .update(suppliers)
+            .set({ 
+              ytdSpend: ytdSpend.toFixed(2),
+              productCount 
+            })
+            .where(eq(suppliers.id, supplier.id));
+          
+          suppliersUpdated++;
+          productCountsUpdated++;
+          console.log(`✓ Synced supplier ${supplier.name}: $${ytdSpend.toFixed(2)}, ${productCount} products`);
+        } catch (err) {
+          console.error(`Error syncing supplier ${supplier.name}:`, err);
+        }
+      }
+      
+      console.log(`Sync completed: ${companiesUpdated} companies, ${suppliersUpdated} suppliers, ${productCountsUpdated} product counts`);
+      
+      res.json({
+        message: 'YTD spending and product counts synced successfully',
+        companiesUpdated,
+        suppliersUpdated,
+        productCountsUpdated,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Error syncing YTD spending:', error);
+      res.status(500).json({ 
+        message: 'Failed to sync YTD spending',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 
