@@ -28,6 +28,7 @@ import AIPresentationBuilder from "@/pages/ai-presentation-builder";
 import SsActivewearPage from "@/pages/ss-activewear";
 import ErrorsPage from "@/pages/errors";
 import UsersPage from "@/pages/settings/users";
+import ProfilePage from "@/pages/profile";
 import NotFound from "@/pages/not-found";
 import { SlackSidebar } from "@/components/SlackSidebar";
 import { SidebarProvider } from "@/hooks/useSidebar";
@@ -98,6 +99,7 @@ function Router() {
             <Route path="/errors" component={ErrorsPage} />
             <Route path="/settings" component={Settings} />
             <Route path="/settings/users" component={UsersPage} />
+            <Route path="/profile" component={ProfilePage} />
             <Route component={NotFound} />
           </Switch>
         </AuthenticatedLayout>

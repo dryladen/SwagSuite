@@ -72,13 +72,16 @@ async function upsertUser(
   const userCount = await db.select({ count: sql<number>`count(*)` }).from(users);
   const isFirstUser = Number(userCount[0].count) === 0;
   
+  // Get default role from environment or use "user" as fallback
+  const defaultRole = process.env.DEFAULT_USER_ROLE || "user";
+  
   await storage.upsertUser({
     id: claims["sub"],
     email: claims["email"],
     firstName: claims["first_name"],
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
-    role: isFirstUser ? "admin" : undefined, // First user becomes admin
+    role: isFirstUser ? "admin" : defaultRole as "admin" | "manager" | "user", // First user becomes admin, others get default role
   });
 }
 

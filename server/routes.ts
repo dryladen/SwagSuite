@@ -456,7 +456,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      let user = await storage.getUser(userId);
+      
+      // If user not found in database, auto-register them
+      if (!user) {
+        const claims = req.user.claims;
+        const { db } = await import("./db");
+        const { users } = await import("@shared/schema");
+        const { count } = await import("drizzle-orm");
+        
+        // Check if this is the first user (should be admin)
+        const userCount = await db.select({ count: count() }).from(users);
+        const isFirstUser = userCount[0].count === 0;
+        
+        // Get default role from env or use 'user'
+        const defaultRole = process.env.DEFAULT_USER_ROLE || "user";
+        const role = isFirstUser ? "admin" : defaultRole;
+        
+        // Create user from auth claims
+        user = await storage.upsertUser({
+          id: userId,
+          email: claims.email || `${userId}@unknown.com`,
+          firstName: claims.given_name || claims.name?.split(' ')[0] || 'User',
+          lastName: claims.family_name || claims.name?.split(' ').slice(1).join(' ') || '',
+          profileImageUrl: claims.picture,
+          role: role,
+        });
+        
+        console.log(`Auto-registered user ${userId} with role ${role}`);
+      }
+      
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
