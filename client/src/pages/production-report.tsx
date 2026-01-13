@@ -56,15 +56,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { useLocation } from "wouter";
-
-interface ProductionStage {
-  id: string;
-  name: string;
-  order: number;
-  color: string;
-  description?: string;
-  icon: string;
-}
+import { loadStages, saveStages, resetStages, DEFAULT_STAGES, STAGE_STATUS_MAP, type ProductionStage } from "@/lib/productionStages";
 
 interface ProductionOrder {
   id: string;
@@ -74,6 +66,7 @@ interface ProductionOrder {
   quantity: number;
   currentStage: string;
   assignedTo?: string;
+  csrAssignedTo?: string;
   nextActionDate?: string;
   nextActionNotes?: string;
   stagesCompleted: string[];
@@ -88,20 +81,19 @@ interface ProductionOrder {
   customNotes?: Record<string, string>; // Custom notes per stage
 }
 
-const defaultStages: ProductionStage[] = [
-  { id: 'sales-booked', name: 'Sales Order Booked', order: 1, color: 'bg-blue-100 text-blue-800', icon: 'ShoppingCart' },
-  { id: 'po-placed', name: 'Purchase Order Placed', order: 2, color: 'bg-purple-100 text-purple-800', icon: 'FileText' },
-  { id: 'confirmation-received', name: 'Confirmation Received', order: 3, color: 'bg-indigo-100 text-indigo-800', icon: 'MessageSquare' },
-  { id: 'proof-received', name: 'Proof Received', order: 4, color: 'bg-yellow-100 text-yellow-800', icon: 'Eye' },
-  { id: 'proof-approved', name: 'Proof Approved', order: 5, color: 'bg-orange-100 text-orange-800', icon: 'ThumbsUp' },
-  { id: 'order-placed', name: 'Order Placed', order: 6, color: 'bg-teal-100 text-teal-800', icon: 'Package' },
-  { id: 'invoice-paid', name: 'Invoice Paid', order: 7, color: 'bg-green-100 text-green-800', icon: 'CreditCard' },
-  { id: 'shipping-scheduled', name: 'Shipping Scheduled', order: 8, color: 'bg-cyan-100 text-cyan-800', icon: 'Truck' },
-  { id: 'shipped', name: 'Shipped', order: 9, color: 'bg-emerald-100 text-emerald-800', icon: 'MapPin' },
-];
-
 export default function ProductionReport() {
-  const [stages, setStages] = useState<ProductionStage[]>(defaultStages);
+  const [stages, setStages] = useState<ProductionStage[]>(loadStages);
+
+  // Listen for stage updates from other components (like project page)
+  React.useEffect(() => {
+    const handleStagesUpdate = (event: CustomEvent) => {
+      setStages(event.detail);
+    };
+    window.addEventListener('stagesUpdated', handleStagesUpdate as EventListener);
+    return () => {
+      window.removeEventListener('stagesUpdated', handleStagesUpdate as EventListener);
+    };
+  }, []);
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [isStageModalOpen, setIsStageModalOpen] = useState(false);
@@ -118,6 +110,10 @@ export default function ProductionReport() {
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [nextActionDate, setNextActionDate] = useState<string>('');
   const [nextActionNotes, setNextActionNotes] = useState<string>('');
+  const [isReassignDialogOpen, setIsReassignDialogOpen] = useState(false);
+  const [reassignUserId, setReassignUserId] = useState<string>('');
+  const [isReassignCsrDialogOpen, setIsReassignCsrDialogOpen] = useState(false);
+  const [reassignCsrUserId, setReassignCsrUserId] = useState<string>('');
   const [, setLocation] = useLocation();
 
   const { toast } = useToast();
@@ -135,7 +131,94 @@ export default function ProductionReport() {
 
   // Fetch users for assigned names
   const { data: users = [] } = useQuery<any[]>({
-    queryKey: ["/api/users"],
+    queryKey: ["/api/users/team"],
+  });
+
+  // Reassign order mutation
+  const reassignOrderMutation = useMutation({
+    mutationFn: async ({ orderId, userId }: { orderId: string; userId: string }) => {
+      const response = await apiRequest("PATCH", `/api/orders/${orderId}`, { assignedUserId: userId });
+      return response.json();
+    },
+    onSuccess: async (data) => {
+      toast({
+        title: "Project Reassigned",
+        description: "Project has been reassigned successfully.",
+      });
+      
+      // Invalidate and refetch orders
+      await queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/users/team"] });
+      
+      // Update selectedOrder with new assignment
+      if (selectedOrder) {
+        const updatedOrders = await queryClient.fetchQuery({ queryKey: ["/api/orders"] });
+        const updatedOrder = (updatedOrders as any[]).find((o: any) => o.id === selectedOrder.id);
+        
+        if (updatedOrder) {
+          const company = companies.find((c: any) => c.id === updatedOrder.companyId);
+          const assignedUser = users.find((u: any) => u.id === updatedOrder.assignedUserId);
+          
+          setSelectedOrder({
+            ...selectedOrder,
+            assignedTo: assignedUser ? `${assignedUser.firstName} ${assignedUser.lastName}` : undefined,
+          });
+        }
+      }
+      
+      setIsReassignDialogOpen(false);
+      setReassignUserId("");
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to reassign project.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Reassign CSR mutation
+  const reassignCsrMutation = useMutation({
+    mutationFn: async ({ orderId, userId }: { orderId: string; userId: string }) => {
+      const response = await apiRequest("PATCH", `/api/orders/${orderId}`, { csrUserId: userId });
+      return response.json();
+    },
+    onSuccess: async (data) => {
+      toast({
+        title: "CSR Reassigned",
+        description: "CSR has been reassigned successfully.",
+      });
+      
+      // Invalidate and refetch orders
+      await queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/users/team"] });
+      
+      // Update selectedOrder with new CSR assignment
+      if (selectedOrder) {
+        const updatedOrders = await queryClient.fetchQuery({ queryKey: ["/api/orders"] });
+        const updatedOrder = (updatedOrders as any[]).find((o: any) => o.id === selectedOrder.id);
+        
+        if (updatedOrder) {
+          const csrUser = users.find((u: any) => u.id === updatedOrder.csrUserId);
+          
+          setSelectedOrder({
+            ...selectedOrder,
+            csrAssignedTo: csrUser ? `${csrUser.firstName} ${csrUser.lastName}` : undefined,
+          });
+        }
+      }
+      
+      setIsReassignCsrDialogOpen(false);
+      setReassignCsrUserId("");
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to reassign CSR.",
+        variant: "destructive",
+      });
+    },
   });
 
   // Transform orders to production format
@@ -144,6 +227,7 @@ export default function ProductionReport() {
     .map((order: any) => {
       const company = companies.find((c: any) => c.id === order.companyId);
       const assignedUser = users.find((u: any) => u.id === order.assignedUserId);
+      const csrUser = users.find((u: any) => u.id === order.csrUserId);
 
       return {
         id: order.id,
@@ -152,7 +236,8 @@ export default function ProductionReport() {
         productName: 'Order Items', // We'll enhance this later with actual product names
         quantity: 1, // Calculate from order items
         currentStage: order.currentStage || 'sales-booked',
-        assignedTo: assignedUser ? assignedUser.name : undefined,
+        assignedTo: assignedUser ? `${assignedUser.firstName} ${assignedUser.lastName}` : undefined,
+        csrAssignedTo: csrUser ? `${csrUser.firstName} ${csrUser.lastName}` : undefined,
         nextActionDate: order.stageData?.nextActionDate,
         nextActionNotes: order.customNotes?.nextAction,
         stagesCompleted: order.stagesCompleted || ['sales-booked'],
@@ -208,9 +293,10 @@ export default function ProductionReport() {
     }));
 
     setStages(updatedStages);
+    saveStages(updatedStages);
     toast({
       title: "Stages Reordered",
-      description: "Production stages have been updated successfully.",
+      description: "Production stages have been updated successfully and synced across all pages.",
     });
   };
 
@@ -290,24 +376,11 @@ export default function ProductionReport() {
   });
 
   const handleStageUpdate = (orderId: string, newStage: string) => {
-    // Basic mapping of stages to order statuses for cross-compatibility
-    const statusMap: Record<string, string> = {
-      'sales-booked': 'quote',
-      'po-placed': 'pending_approval',
-      'confirmation-received': 'pending_approval',
-      'proof-received': 'approved',
-      'proof-approved': 'approved',
-      'order-placed': 'in_production',
-      'invoice-paid': 'in_production',
-      'shipping-scheduled': 'in_production',
-      'shipped': 'shipped'
-    };
-
     updateOrderProductionMutation.mutate({
       orderId,
       data: {
         currentStage: newStage,
-        status: statusMap[newStage] || 'approved'
+        status: STAGE_STATUS_MAP[newStage] || 'approved'
       }
     });
   };
@@ -431,13 +504,15 @@ export default function ProductionReport() {
       icon: 'Package' // Default icon for custom stages
     };
 
-    setStages([...stages, stage]);
+    const updatedStages = [...stages, stage];
+    setStages(updatedStages);
+    saveStages(updatedStages);
     setNewStage({ name: '', description: '', color: 'bg-gray-100 text-gray-800' });
     setIsStageModalOpen(false);
 
     toast({
       title: "Stage Added",
-      description: "New production stage has been added successfully.",
+      description: "New production stage has been added successfully and synced across all pages.",
     });
   };
 
@@ -602,7 +677,22 @@ export default function ProductionReport() {
                       />
                     </div>
                   </div>
-                  <div className="flex justify-end mt-4">
+                  <div className="flex justify-between mt-4">
+                    <Button 
+                      variant="destructive" 
+                      onClick={() => {
+                        if (confirm('Are you sure you want to reset to default stages? This will remove all custom stages.')) {
+                          const defaultStages = resetStages();
+                          setStages(defaultStages);
+                          toast({
+                            title: "Stages Reset",
+                            description: "Production stages have been reset to defaults and synced across all pages.",
+                          });
+                        }
+                      }}
+                    >
+                      Reset to Default
+                    </Button>
                     <Button onClick={handleAddStage} className="bg-swag-primary hover:bg-swag-primary/90">
                       <Plus className="mr-2 h-4 w-4" />
                       Add Stage
@@ -1153,10 +1243,10 @@ export default function ProductionReport() {
                     <div className="flex items-center space-x-2">
                       <span className="text-sm text-gray-500">CSR:</span>
                       <UserAvatar
-                        name="Sarah Johnson"
+                        name={order.csrAssignedTo}
                         size="sm"
                       />
-                      <span className="text-sm text-gray-700">Sarah Johnson</span>
+                      <span className="text-sm text-gray-700">{order.csrAssignedTo || 'Unassigned'}</span>
                     </div>
                   </div>
                 </div>
@@ -1212,13 +1302,28 @@ export default function ProductionReport() {
                 <div>
                   <h3 className="font-medium mb-3">Production Details</h3>
                   <div className="space-y-2 text-sm">
-                    <div className="flex items-center space-x-2">
-                      <span className="font-medium">Assigned To:</span>
-                      <UserAvatar
-                        name={selectedOrder.assignedTo}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium">Assigned To:</span>
+                        <UserAvatar
+                          name={selectedOrder.assignedTo}
+                          size="sm"
+                        />
+                        <span>{selectedOrder.assignedTo || 'Unassigned'}</span>
+                      </div>
+                      <Button
+                        variant="ghost"
                         size="sm"
-                      />
-                      <span>{selectedOrder.assignedTo}</span>
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          const currentOrder = ordersData.find((o: any) => o.id === selectedOrder.id);
+                          setReassignUserId(currentOrder?.assignedUserId || "");
+                          setIsReassignDialogOpen(true);
+                        }}
+                      >
+                        <User className="w-3 h-3 mr-1" />
+                        {selectedOrder.assignedTo ? 'Reassign' : 'Assign'}
+                      </Button>
                     </div>
                     <p><span className="font-medium">Priority:</span>
                       <Badge className={`ml-2 ${getPriorityColor(selectedOrder.priority)}`}>
@@ -1226,13 +1331,28 @@ export default function ProductionReport() {
                       </Badge>
                     </p>
                     <p><span className="font-medium">Due Date:</span> {selectedOrder.dueDate ? format(new Date(selectedOrder.dueDate), 'MMM dd, yyyy') : 'TBD'}</p>
-                    <div className="flex items-center space-x-2 mt-2">
-                      <span className="font-medium">CSR:</span>
-                      <UserAvatar
-                        name="Sarah Johnson"
+                    <div className="flex items-center justify-between mt-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium">CSR:</span>
+                        <UserAvatar
+                          name={selectedOrder.csrAssignedTo}
+                          size="sm"
+                        />
+                        <span>{selectedOrder.csrAssignedTo || 'Unassigned'}</span>
+                      </div>
+                      <Button
+                        variant="ghost"
                         size="sm"
-                      />
-                      <span>Sarah Johnson</span>
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          const currentOrder = ordersData.find((o: any) => o.id === selectedOrder.id);
+                          setReassignCsrUserId(currentOrder?.csrUserId || "");
+                          setIsReassignCsrDialogOpen(true);
+                        }}
+                      >
+                        <User className="w-3 h-3 mr-1" />
+                        {selectedOrder.csrAssignedTo ? 'Reassign' : 'Assign'}
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1704,6 +1824,184 @@ export default function ProductionReport() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reassign Order Dialog */}
+      <Dialog open={isReassignDialogOpen} onOpenChange={setIsReassignDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="w-5 h-5" />
+              {selectedOrder?.assignedTo ? 'Reassign Project' : 'Assign Project'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="assignUser">Assign To Team Member</Label>
+              <Select value={reassignUserId || "unassigned"} onValueChange={setReassignUserId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select team member..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-500">Unassign (No one)</span>
+                    </div>
+                  </SelectItem>
+                  {users.map((member: any) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      <div className="flex items-center gap-2">
+                        <UserAvatar name={`${member.firstName} ${member.lastName}`} size="sm" />
+                        <div>
+                          <div className="font-medium">{member.firstName} {member.lastName}</div>
+                          <div className="text-xs text-gray-500">{member.email}</div>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500 mt-2">
+                {selectedOrder?.assignedTo 
+                  ? 'Change the team member responsible for this project'
+                  : 'Select a team member to take ownership of this project'}
+              </p>
+            </div>
+            
+            {/* Current Assignment */}
+            {selectedOrder?.assignedTo && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs font-medium text-blue-900 mb-1">Currently Assigned To:</p>
+                <div className="flex items-center gap-2">
+                  <UserAvatar 
+                    name={selectedOrder.assignedTo} 
+                    size="sm" 
+                  />
+                  <div className="text-sm">
+                    <p className="font-medium text-blue-900">
+                      {selectedOrder.assignedTo}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsReassignDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (selectedOrder) {
+                    reassignOrderMutation.mutate({
+                      orderId: selectedOrder.id,
+                      userId: reassignUserId === "unassigned" ? "" : reassignUserId
+                    });
+                  }
+                }}
+                disabled={!selectedOrder || reassignOrderMutation.isPending}
+              >
+                {reassignOrderMutation.isPending 
+                  ? "Updating..." 
+                  : reassignUserId === "unassigned" 
+                    ? "Unassign" 
+                    : selectedOrder?.assignedTo 
+                      ? "Reassign Project" 
+                      : "Assign Project"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reassign CSR Dialog */}
+      <Dialog open={isReassignCsrDialogOpen} onOpenChange={setIsReassignCsrDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="w-5 h-5" />
+              {selectedOrder?.csrAssignedTo ? 'Reassign CSR' : 'Assign CSR'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="assignCsr">Assign CSR (Customer Service Rep)</Label>
+              <Select value={reassignCsrUserId || "unassigned"} onValueChange={setReassignCsrUserId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select CSR..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-500">Unassign (No one)</span>
+                    </div>
+                  </SelectItem>
+                  {users.map((member: any) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      <div className="flex items-center gap-2">
+                        <UserAvatar name={`${member.firstName} ${member.lastName}`} size="sm" />
+                        <div>
+                          <div className="font-medium">{member.firstName} {member.lastName}</div>
+                          <div className="text-xs text-gray-500">{member.email}</div>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500 mt-2">
+                {selectedOrder?.csrAssignedTo 
+                  ? 'Change the CSR responsible for production coordination'
+                  : 'Select a CSR to handle production coordination'}
+              </p>
+            </div>
+            
+            {/* Current CSR Assignment */}
+            {selectedOrder?.csrAssignedTo && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs font-medium text-blue-900 mb-1">Currently Assigned CSR:</p>
+                <div className="flex items-center gap-2">
+                  <UserAvatar 
+                    name={selectedOrder.csrAssignedTo} 
+                    size="sm" 
+                  />
+                  <div className="text-sm">
+                    <p className="font-medium text-blue-900">
+                      {selectedOrder.csrAssignedTo}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsReassignCsrDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (selectedOrder) {
+                    reassignCsrMutation.mutate({
+                      orderId: selectedOrder.id,
+                      userId: reassignCsrUserId === "unassigned" ? "" : reassignCsrUserId
+                    });
+                  }
+                }}
+                disabled={!selectedOrder || reassignCsrMutation.isPending}
+              >
+                {reassignCsrMutation.isPending 
+                  ? "Updating..." 
+                  : reassignCsrUserId === "unassigned" 
+                    ? "Unassign CSR" 
+                    : selectedOrder?.csrAssignedTo 
+                      ? "Reassign CSR" 
+                      : "Assign CSR"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

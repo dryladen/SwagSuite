@@ -204,6 +204,7 @@ export const orders = pgTable("orders", {
   companyId: varchar("company_id").references(() => companies.id),
   contactId: varchar("contact_id").references(() => contacts.id),
   assignedUserId: varchar("assigned_user_id").references(() => users.id),
+  csrUserId: varchar("csr_user_id").references(() => users.id), // Customer Service Representative
   supplierId: varchar("supplier_id").references(() => suppliers.id),
   status: orderStatusEnum("status").default("quote"),
   orderType: varchar("order_type").default("quote"), // quote, sales_order, rush_order
@@ -682,6 +683,15 @@ export const integrationSettings = pgTable("integration_settings", {
   sageAcctId: varchar("sage_acct_id"),
   sageLoginId: varchar("sage_login_id"),
   sageApiKey: text("sage_api_key"),
+  // Email Integration
+  emailProvider: varchar("email_provider"),
+  smtpHost: varchar("smtp_host"),
+  smtpPort: integer("smtp_port"),
+  smtpUser: varchar("smtp_user"),
+  smtpPassword: text("smtp_password"),
+  emailFromAddress: varchar("email_from_address"),
+  emailFromName: varchar("email_from_name"),
+  emailReplyTo: varchar("email_reply_to"),
   // Connection status flags
   quickbooksConnected: boolean("quickbooks_connected").default(false),
   stripeConnected: boolean("stripe_connected").default(false),

@@ -197,6 +197,7 @@ export interface IStorage {
   // Integration Settings operations
   getIntegrationSettings(): Promise<IntegrationSettings | undefined>;
   upsertIntegrationSettings(settings: Partial<InsertIntegrationSettings>, userId?: string): Promise<IntegrationSettings>;
+  updateIntegrationSettings(settings: Partial<InsertIntegrationSettings>): Promise<IntegrationSettings>;
 
   // SAGE Product operations
   getSageProductBySageId(sageId: string): Promise<SageProduct | undefined>;
@@ -2146,6 +2147,33 @@ export class DatabaseStorage implements IStorage {
       const [created] = await db
         .insert(integrationSettings)
         .values(settingsData as any)
+        .returning();
+      return created;
+    }
+  }
+
+  async updateIntegrationSettings(settings: Partial<InsertIntegrationSettings>): Promise<IntegrationSettings> {
+    const existing = await this.getIntegrationSettings();
+
+    if (existing) {
+      // Update existing settings
+      const [updated] = await db
+        .update(integrationSettings)
+        .set({
+          ...settings,
+          updatedAt: new Date(),
+        })
+        .where(eq(integrationSettings.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      // Create new settings
+      const [created] = await db
+        .insert(integrationSettings)
+        .values({
+          ...settings,
+          updatedAt: new Date(),
+        } as any)
         .returning();
       return created;
     }

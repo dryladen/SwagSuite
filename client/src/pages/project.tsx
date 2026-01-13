@@ -36,8 +36,9 @@ import {
   Upload,
   User
 } from "lucide-react";
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { useLocation, useParams } from "wouter";
+import { loadStages, STAGE_STATUS_MAP, type ProductionStage } from "@/lib/productionStages";
 
 interface ProjectActivityUser {
   id: string;
@@ -65,6 +66,7 @@ interface Order {
   companyId: string | null;
   contactId: string | null;
   assignedUserId: string | null;
+  csrUserId: string | null;
   status: string;
   orderType: string;
   subtotal: string;
@@ -143,9 +145,11 @@ export default function ProjectPage() {
   const [isAddProductDialogOpen, setIsAddProductDialogOpen] = useState(false);
   const [isUpdateStatusDialogOpen, setIsUpdateStatusDialogOpen] = useState(false);
   const [isReassignDialogOpen, setIsReassignDialogOpen] = useState(false);
+  const [isReassignCsrDialogOpen, setIsReassignCsrDialogOpen] = useState(false);
   const [isUploadFileDialogOpen, setIsUploadFileDialogOpen] = useState(false);
   const [newStatus, setNewStatus] = useState("");
   const [assignedUserId, setAssignedUserId] = useState("");
+  const [reassignCsrUserId, setReassignCsrUserId] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [newProductForm, setNewProductForm] = useState({
     productId: "",
@@ -159,6 +163,21 @@ export default function ProjectPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  
+  // Load stages from shared library
+  const [stages, setStages] = useState<ProductionStage[]>(loadStages);
+  
+  // Listen for stage updates from production report
+  useEffect(() => {
+    const handleStagesUpdate = (event: CustomEvent) => {
+      setStages(event.detail);
+    };
+    window.addEventListener('stagesUpdated', handleStagesUpdate as EventListener);
+    return () => {
+      window.removeEventListener('stagesUpdated', handleStagesUpdate as EventListener);
+    };
+  }, []);
+  
   const statusList: Record<string, string> = {
     'quote' : 'Quote',
     'pending_approval' : 'Pending Approval',
@@ -374,6 +393,31 @@ export default function ProjectPage() {
     },
   });
 
+  // Reassign CSR mutation
+  const reassignCsrMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest("PATCH", `/api/orders/${orderId}`, { csrUserId: userId });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "CSR Reassigned",
+        description: "CSR has been reassigned successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${orderId}/activities`] });
+      setIsReassignCsrDialogOpen(false);
+      setReassignCsrUserId("");
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to reassign CSR.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Upload file mutation
   const uploadFileMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -499,9 +543,9 @@ export default function ProjectPage() {
           <p className="text-sm text-red-700 mb-4">
             The project you're looking for doesn't exist or you don't have permission to view it.
           </p>
-          <Button onClick={() => setLocation('/orders')}>
+          <Button onClick={() => window.history.back()}>
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Orders
+            Back
           </Button>
         </div>
       </div>
@@ -516,12 +560,12 @@ export default function ProjectPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setLocation('/orders')}
+            onClick={() => window.history.back()}
             data-testid="button-back-orders"
             className="w-fit"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Orders
+            Back
           </Button>
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-swag-navy">
@@ -579,17 +623,80 @@ export default function ProjectPage() {
                 </div>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Assigned To</p>
-                <div className="flex items-center space-x-2 mt-1">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-gray-500">Assigned To</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={() => {
+                      setAssignedUserId(order?.assignedUserId || "");
+                      setIsReassignDialogOpen(true);
+                    }}
+                  >
+                    <User className="w-3 h-3 mr-1" />
+                    {order.assignedUserId ? 'Reassign' : 'Assign'}
+                  </Button>
+                </div>
+                <div className="flex items-center space-x-2 p-2 bg-gray-50 rounded-lg">
                   {order.assignedUserId ? (
                     <>
                       <UserAvatar name={teamMembers.find(m => m.id === order.assignedUserId)?.firstName || 'Team Member'} size="sm" />
-                      <span className="text-sm">
-                        {teamMembers.find(m => m.id === order.assignedUserId)?.firstName || 'Team Member'} {teamMembers.find(m => m.id === order.assignedUserId)?.lastName || ''}
-                      </span>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">
+                          {teamMembers.find(m => m.id === order.assignedUserId)?.firstName || 'Team Member'} {teamMembers.find(m => m.id === order.assignedUserId)?.lastName || ''}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {teamMembers.find(m => m.id === order.assignedUserId)?.email || ''}
+                        </p>
+                      </div>
                     </>
                   ) : (
-                    <span className="text-sm text-gray-400">Unassigned</span>
+                    <>
+                      <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                        <User className="w-4 h-4 text-gray-400" />
+                      </div>
+                      <span className="text-sm text-gray-400">No one assigned</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-gray-500">CSR (Customer Service Rep)</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={() => {
+                      setReassignCsrUserId(order?.csrUserId || "");
+                      setIsReassignCsrDialogOpen(true);
+                    }}
+                  >
+                    <User className="w-3 h-3 mr-1" />
+                    {order.csrUserId ? 'Reassign' : 'Assign'}
+                  </Button>
+                </div>
+                <div className="flex items-center space-x-2 p-2 bg-gray-50 rounded-lg">
+                  {order.csrUserId ? (
+                    <>
+                      <UserAvatar name={teamMembers.find(m => m.id === order.csrUserId)?.firstName || 'Team Member'} size="sm" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">
+                          {teamMembers.find(m => m.id === order.csrUserId)?.firstName || 'Team Member'} {teamMembers.find(m => m.id === order.csrUserId)?.lastName || ''}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {teamMembers.find(m => m.id === order.csrUserId)?.email || ''}
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                        <User className="w-4 h-4 text-gray-400" />
+                      </div>
+                      <span className="text-sm text-gray-400">No one assigned</span>
+                    </>
                   )}
                 </div>
               </div>
@@ -639,18 +746,6 @@ export default function ProjectPage() {
               >
                 <Upload className="w-4 h-4 mr-2" />
                 Upload File
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full justify-start"
-                onClick={() => {
-                  setAssignedUserId(order?.assignedUserId || "");
-                  setIsReassignDialogOpen(true);
-                }}
-              >
-                <User className="w-4 h-4 mr-2" />
-                Reassign Project
               </Button>
             </CardContent>
           </Card>
@@ -963,43 +1058,27 @@ export default function ProjectPage() {
 
                     {/* Stages list */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {[
-                        { id: 'sales-booked', name: 'Order Booked', icon: ShoppingCart, color: 'blue' },
-                        { id: 'po-placed', name: 'PO Placed', icon: FileText, color: 'purple' },
-                        { id: 'confirmation-received', name: 'Confirmation', icon: MessageSquare, color: 'indigo' },
-                        { id: 'proof-received', name: 'Proof Received', icon: Eye, color: 'yellow' },
-                        { id: 'proof-approved', name: 'Proof Approved', icon: ThumbsUp, color: 'orange' },
-                        { id: 'order-placed', name: 'Order Placed', icon: Package, color: 'teal' },
-                        { id: 'invoice-paid', name: 'Invoice Paid', icon: CreditCard, color: 'green' },
-                        { id: 'shipping-scheduled', name: 'Ship Scheduled', icon: Truck, color: 'cyan' },
-                        { id: 'shipped', name: 'Shipped', icon: MapPin, color: 'emerald' },
-                      ].map((stage, index) => {
+                      {stages.map((stage, index) => {
                         const isCompleted = order.stagesCompleted?.includes(stage.id);
                         const isCurrent = order.currentStage === stage.id;
-                        const StageIcon = stage.icon || Package;
+                        
+                        // Map icon name to component
+                        const iconMap: Record<string, any> = {
+                          ShoppingCart, FileText, MessageSquare, Eye, ThumbsUp, 
+                          Package, CreditCard, Truck, MapPin
+                        };
+                        const StageIcon = iconMap[stage.icon] || Package;
 
                         return (
                           <div
                             key={stage.id}
-                            className={`p-4 rounded-lg border-2 transition-all cursor-pointer hover:border-swag-primary/50 ${isCurrent ? 'border-swag-primary bg-swag-primary/5 shadow-md' :
-                              isCompleted ? 'border-green-200 bg-green-50/30' : 'border-gray-100 bg-white'
+                            className={`p-4 rounded-lg border-2 transition-all cursor-pointer hover:border-swag-primary/50 ${isCompleted ? 'border-green-200 bg-green-50/30' : 'border-gray-100 bg-white'
                               }`}
                             onClick={() => {
                               if (!isCompleted) {
-                                const statusMap: Record<string, string> = {
-                                  'sales-booked': 'quote',
-                                  'po-placed': 'pending_approval',
-                                  'confirmation-received': 'pending_approval',
-                                  'proof-received': 'approved',
-                                  'proof-approved': 'approved',
-                                  'order-placed': 'in_production',
-                                  'invoice-paid': 'in_production',
-                                  'shipping-scheduled': 'in_production',
-                                  'shipped': 'shipped'
-                                };
                                 updateStageMutation.mutate({
                                   currentStage: stage.id,
-                                  status: statusMap[stage.id] || order.status
+                                  status: STAGE_STATUS_MAP[stage.id] || order.status
                                 });
                               }
                             }}
@@ -1024,20 +1103,15 @@ export default function ProjectPage() {
                               </div>
                             </div>
 
-                            {isCurrent && (
+                            {isCurrent && !isCompleted && (
                               <div className="mt-3 pt-3 border-t border-swag-primary/10">
                                 <Button
                                   size="sm"
                                   className="w-full bg-green-600 hover:bg-green-700 h-7 text-xs"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    const nextStages = [
-                                      'sales-booked', 'po-placed', 'confirmation-received',
-                                      'proof-received', 'proof-approved', 'order-placed',
-                                      'invoice-paid', 'shipping-scheduled', 'shipped'
-                                    ];
-                                    const nextIdx = nextStages.indexOf(stage.id) + 1;
-                                    const nextStage = nextIdx < nextStages.length ? nextStages[nextIdx] : stage.id;
+                                    const nextIdx = index + 1;
+                                    const nextStage = nextIdx < stages.length ? stages[nextIdx].id : stage.id;
 
                                     const updatedCompleted = Array.from(new Set([...(order.stagesCompleted || []), stage.id]));
                                     updateStageMutation.mutate({
@@ -1123,37 +1197,183 @@ export default function ProjectPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Reassign Project Dialog */}
+      {/* Assign/Reassign Project Dialog */}
       <Dialog open={isReassignDialogOpen} onOpenChange={setIsReassignDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reassign Project</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="w-5 h-5" />
+              {order?.assignedUserId ? 'Reassign Project' : 'Assign Project'}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="assignUser">Assign To</Label>
-              <Select value={assignedUserId} onValueChange={setAssignedUserId}>
+              <Label htmlFor="assignUser">Assign To Team Member</Label>
+              <Select value={assignedUserId || "unassigned"} onValueChange={setAssignedUserId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select team member..." />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="unassigned">
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-500">Unassign (No one)</span>
+                    </div>
+                  </SelectItem>
                   {teamMembers.map((member) => (
                     <SelectItem key={member.id} value={member.id}>
-                      {member.firstName} {member.lastName} ({member.email})
+                      <div className="flex items-center gap-2">
+                        <UserAvatar name={`${member.firstName} ${member.lastName}`} size="sm" />
+                        <div>
+                          <div className="font-medium">{member.firstName} {member.lastName}</div>
+                          <div className="text-xs text-gray-500">{member.email}</div>
+                        </div>
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-gray-500 mt-2">
+                {order?.assignedUserId 
+                  ? 'Change the team member responsible for this project'
+                  : 'Select a team member to take ownership of this project'}
+              </p>
             </div>
+            
+            {/* Current Assignment */}
+            {order?.assignedUserId && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs font-medium text-blue-900 mb-1">Currently Assigned To:</p>
+                <div className="flex items-center gap-2">
+                  <UserAvatar 
+                    name={teamMembers.find(m => m.id === order.assignedUserId)?.firstName || 'User'} 
+                    size="sm" 
+                  />
+                  <div className="text-sm">
+                    <p className="font-medium text-blue-900">
+                      {teamMembers.find(m => m.id === order.assignedUserId)?.firstName} {teamMembers.find(m => m.id === order.assignedUserId)?.lastName}
+                    </p>
+                    <p className="text-xs text-blue-700">
+                      {teamMembers.find(m => m.id === order.assignedUserId)?.email}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setIsReassignDialogOpen(false)}>
                 Cancel
               </Button>
               <Button
-                onClick={() => reassignOrderMutation.mutate(assignedUserId)}
-                disabled={!assignedUserId || reassignOrderMutation.isPending}
+                onClick={() => {
+                  if (assignedUserId === "unassigned") {
+                    // Unassign - send empty string to API
+                    reassignOrderMutation.mutate("");
+                  } else {
+                    reassignOrderMutation.mutate(assignedUserId);
+                  }
+                }}
+                disabled={(assignedUserId || "unassigned") === (order?.assignedUserId || "unassigned") || reassignOrderMutation.isPending}
               >
-                {reassignOrderMutation.isPending ? "Reassigning..." : "Reassign Project"}
+                {reassignOrderMutation.isPending 
+                  ? "Updating..." 
+                  : assignedUserId === "unassigned" 
+                    ? "Unassign" 
+                    : order?.assignedUserId 
+                      ? "Reassign Project" 
+                      : "Assign Project"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reassign CSR Dialog */}
+      <Dialog open={isReassignCsrDialogOpen} onOpenChange={setIsReassignCsrDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="w-5 h-5" />
+              {order?.csrUserId ? 'Reassign CSR' : 'Assign CSR'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="assignCsr">Assign CSR (Customer Service Rep)</Label>
+              <Select value={reassignCsrUserId || "unassigned"} onValueChange={setReassignCsrUserId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select CSR..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-500">Unassign (No one)</span>
+                    </div>
+                  </SelectItem>
+                  {teamMembers.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      <div className="flex items-center gap-2">
+                        <UserAvatar name={`${member.firstName} ${member.lastName}`} size="sm" />
+                        <div>
+                          <div className="font-medium">{member.firstName} {member.lastName}</div>
+                          <div className="text-xs text-gray-500">{member.email}</div>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500 mt-2">
+                {order?.csrUserId 
+                  ? 'Change the CSR responsible for production coordination'
+                  : 'Select a CSR to handle production coordination'}
+              </p>
+            </div>
+            
+            {/* Current CSR Assignment */}
+            {order?.csrUserId && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs font-medium text-blue-900 mb-1">Currently Assigned CSR:</p>
+                <div className="flex items-center gap-2">
+                  <UserAvatar 
+                    name={teamMembers.find(m => m.id === order.csrUserId)?.firstName || 'User'} 
+                    size="sm" 
+                  />
+                  <div className="text-sm">
+                    <p className="font-medium text-blue-900">
+                      {teamMembers.find(m => m.id === order.csrUserId)?.firstName} {teamMembers.find(m => m.id === order.csrUserId)?.lastName}
+                    </p>
+                    <p className="text-xs text-blue-700">
+                      {teamMembers.find(m => m.id === order.csrUserId)?.email}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsReassignCsrDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (reassignCsrUserId === "unassigned") {
+                    reassignCsrMutation.mutate("");
+                  } else {
+                    reassignCsrMutation.mutate(reassignCsrUserId);
+                  }
+                }}
+                disabled={(reassignCsrUserId || "unassigned") === (order?.csrUserId || "unassigned") || reassignCsrMutation.isPending}
+              >
+                {reassignCsrMutation.isPending 
+                  ? "Updating..." 
+                  : reassignCsrUserId === "unassigned" 
+                    ? "Unassign CSR" 
+                    : order?.csrUserId 
+                      ? "Reassign CSR" 
+                      : "Assign CSR"}
               </Button>
             </div>
           </div>

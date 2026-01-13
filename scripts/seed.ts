@@ -58,25 +58,43 @@ async function seed() {
   console.log('Starting database seeding...');
 
   try {
-    // 1. Seed Users (Sales Rep)
-    let salesRep;
-    const existingUser = await db.query.users.findFirst({
-      columns: { id: true, email: true },
-      where: (users, { eq }) => eq(users.email, 'dev@example.com')
-    });
+    // 1. Seed Users (Team Members)
+    const teamMembers = [
+      { email: 'dev@example.com', firstName: 'Developer', lastName: 'Local', role: 'admin' },
+      { email: 'sarah@swag.com', firstName: 'Sarah', lastName: 'Johnson', role: 'user' },
+      { email: 'mike@swag.com', firstName: 'Mike', lastName: 'Chen', role: 'user' },
+      { email: 'alex@swag.com', firstName: 'Alex', lastName: 'Rodriguez', role: 'manager' },
+      { email: 'emily@swag.com', firstName: 'Emily', lastName: 'Davis', role: 'user' },
+      { email: 'david@swag.com', firstName: 'David', lastName: 'Wilson', role: 'user' },
+      { email: 'lisa@swag.com', firstName: 'Lisa', lastName: 'Thompson', role: 'user' },
+    ];
 
-    if (existingUser) {
-      salesRep = existingUser;
-      console.log('✓ Sales Rep already exists:', salesRep.email);
-    } else {
-      [salesRep] = await db.insert(users).values({
-        email: 'dev@example.com',
-        firstName: 'Developer',
-        lastName: 'Local',
-        role: 'admin'
-      }).returning();
-      console.log('✓ Sales Rep seeded:', salesRep.email);
+    let salesRep;
+    const insertedUsers = [];
+    
+    for (const member of teamMembers) {
+      const existingUser = await db.query.users.findFirst({
+        columns: { id: true, email: true },
+        where: (users, { eq }) => eq(users.email, member.email)
+      });
+
+      if (existingUser) {
+        insertedUsers.push(existingUser);
+        console.log('✓ User already exists:', existingUser.email);
+        if (member.email === 'dev@example.com') {
+          salesRep = existingUser;
+        }
+      } else {
+        const [newUser] = await db.insert(users).values(member).returning();
+        insertedUsers.push(newUser);
+        console.log('✓ User seeded:', newUser.email);
+        if (member.email === 'dev@example.com') {
+          salesRep = newUser;
+        }
+      }
     }
+    
+    console.log(`✓ Total users in database: ${insertedUsers.length}`);
 
     // 2. Seed Companies
     const insertedCompanies = await db.insert(companies).values(sampleCompanies).returning();

@@ -34,10 +34,14 @@ import {
   ThumbsUp,
   CreditCard,
   ShoppingCart,
-  TrendingUp
+  TrendingUp,
+  Upload,
+  X
 } from "lucide-react";
 import type { Order } from "@shared/schema";
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
+import { useDropzone } from 'react-dropzone';
+import { RichTextEditor } from './RichTextEditor';
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import OrderModal from "./OrderModal";
@@ -120,11 +124,21 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
   const [, setLocation] = useLocation();
   const [internalNote, setInternalNote] = useState("");
   const [emailTo, setEmailTo] = useState("");
+  const [emailFrom, setEmailFrom] = useState("");
+  const [emailFromName, setEmailFromName] = useState("");
+  const [emailFromCustom, setEmailFromCustom] = useState(false);
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
+  const [emailAttachments, setEmailAttachments] = useState<File[]>([]);
   const [vendorEmailTo, setVendorEmailTo] = useState("");
+  const [vendorEmailFrom, setVendorEmailFrom] = useState("");
+  const [vendorEmailFromName, setVendorEmailFromName] = useState("");
+  const [vendorEmailFromCustom, setVendorEmailFromCustom] = useState(false);
   const [vendorEmailSubject, setVendorEmailSubject] = useState("");
   const [vendorEmailBody, setVendorEmailBody] = useState("");
+  const [vendorEmailAttachments, setVendorEmailAttachments] = useState<File[]>([]);
+  const [emailPreviewMode, setEmailPreviewMode] = useState<"compose" | "preview">("compose");
+  const [vendorEmailPreviewMode, setVendorEmailPreviewMode] = useState<"compose" | "preview">("compose");
   const [mentionQuery, setMentionQuery] = useState("");
   const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -217,9 +231,12 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
   // Mutation for sending client emails
   const sendClientEmailMutation = useMutation({
     mutationFn: async (data: {
+      fromEmail: string;
+      fromName: string;
       recipientEmail: string;
       subject: string;
       body: string;
+      attachments?: File[];
     }) => {
       const response = await fetch(`/api/orders/${currentOrder?.id}/communications`, {
         method: "POST",
@@ -227,13 +244,26 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
         body: JSON.stringify({
           communicationType: "client_email",
           direction: "sent",
+          fromEmail: data.fromEmail,
+          fromName: data.fromName,
           recipientEmail: data.recipientEmail,
           subject: data.subject,
           body: data.body,
         }),
       });
-      if (!response.ok) throw new Error("Failed to send email");
-      return response.json();
+      
+      const result = await response.json();
+      
+      // Handle partial success (207) - email saved but not sent
+      if (response.status === 207) {
+        throw new Error(result.emailError || "Email saved to database but failed to send. Please check your email configuration.");
+      }
+      
+      if (!response.ok) {
+        throw new Error(result.message || "Failed to send email");
+      }
+      
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -244,10 +274,11 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
         description: "Client email has been sent successfully.",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
+      console.error('Client email error:', error);
       toast({
-        title: "Error",
-        description: "Failed to send client email.",
+        title: "Email Error",
+        description: error.message || "Failed to send client email. Please check Settings → Email Config.",
         variant: "destructive",
       });
     },
@@ -256,9 +287,12 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
   // Mutation for sending vendor emails
   const sendVendorEmailMutation = useMutation({
     mutationFn: async (data: {
+      fromEmail: string;
+      fromName: string;
       recipientEmail: string;
       subject: string;
       body: string;
+      attachments?: File[];
     }) => {
       const response = await fetch(`/api/orders/${currentOrder?.id}/communications`, {
         method: "POST",
@@ -266,13 +300,26 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
         body: JSON.stringify({
           communicationType: "vendor_email",
           direction: "sent",
+          fromEmail: data.fromEmail,
+          fromName: data.fromName,
           recipientEmail: data.recipientEmail,
           subject: data.subject,
           body: data.body,
         }),
       });
-      if (!response.ok) throw new Error("Failed to send email");
-      return response.json();
+      
+      const result = await response.json();
+      
+      // Handle partial success (207) - email saved but not sent
+      if (response.status === 207) {
+        throw new Error(result.emailError || "Email saved to database but failed to send. Please check your email configuration.");
+      }
+      
+      if (!response.ok) {
+        throw new Error(result.message || "Failed to send email");
+      }
+      
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -283,10 +330,11 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
         description: "Vendor email has been sent successfully.",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
+      console.error('Vendor email error:', error);
       toast({
-        title: "Error",
-        description: "Failed to send vendor email.",
+        title: "Email Error",
+        description: error.message || "Failed to send vendor email. Please check Settings → Email Config.",
         variant: "destructive",
       });
     },
@@ -391,43 +439,55 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
   };
 
   const handleSendEmail = () => {
-    if (!emailTo.trim() || !emailSubject.trim() || !emailBody.trim()) {
+    if (!emailFrom.trim() || !emailTo.trim() || !emailSubject.trim() || !emailBody.trim()) {
       toast({
         title: "Missing fields",
-        description: "Please fill in all email fields.",
+        description: "Please fill in all email fields including sender.",
         variant: "destructive",
       });
       return;
     }
 
     sendClientEmailMutation.mutate({
+      fromEmail: emailFrom,
+      fromName: emailFromName || "SwagSuite",
       recipientEmail: emailTo,
       subject: emailSubject,
       body: emailBody,
+      attachments: emailAttachments,
     });
+    setEmailFrom("");
+    setEmailFromName("");
     setEmailTo("");
     setEmailSubject("");
     setEmailBody("");
+    setEmailAttachments([]);
   };
 
   const handleSendVendorEmail = () => {
-    if (!vendorEmailTo.trim() || !vendorEmailSubject.trim() || !vendorEmailBody.trim()) {
+    if (!vendorEmailFrom.trim() || !vendorEmailTo.trim() || !vendorEmailSubject.trim() || !vendorEmailBody.trim()) {
       toast({
         title: "Missing fields",
-        description: "Please fill in all email fields.",
+        description: "Please fill in all email fields including sender.",
         variant: "destructive",
       });
       return;
     }
 
     sendVendorEmailMutation.mutate({
+      fromEmail: vendorEmailFrom,
+      fromName: vendorEmailFromName || "SwagSuite",
       recipientEmail: vendorEmailTo,
       subject: vendorEmailSubject,
       body: vendorEmailBody,
+      attachments: vendorEmailAttachments,
     });
+    setVendorEmailFrom("");
+    setVendorEmailFromName("");
     setVendorEmailTo("");
     setVendorEmailSubject("");
     setVendorEmailBody("");
+    setVendorEmailAttachments([]);
   };
 
   return (
@@ -1031,6 +1091,68 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
+                      <label className="text-sm font-medium">From:</label>
+                      {emailFromCustom ? (
+                        <div className="space-y-2">
+                          <Input
+                            placeholder="your-email@company.com"
+                            value={emailFrom}
+                            onChange={(e) => setEmailFrom(e.target.value)}
+                            type="email"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEmailFromCustom(false);
+                              setEmailFrom("");
+                            }}
+                            className="w-full text-xs"
+                          >
+                            Select from team instead
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Select value={emailFrom} onValueChange={setEmailFrom}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select sender..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(teamMembers.length > 0 ? teamMembers : defaultTeamMembers).map((member: TeamMember) => (
+                                <SelectItem key={member.id} value={member.email}>
+                                  <div className="flex items-center gap-2">
+                                    <UserAvatar name={`${member.firstName} ${member.lastName}`} size="sm" />
+                                    <div>
+                                      <div className="font-medium">{member.firstName} {member.lastName}</div>
+                                      <div className="text-xs text-gray-500">{member.email}</div>
+                                    </div>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEmailFromCustom(true)}
+                            className="w-full text-xs"
+                          >
+                            Use custom email
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">From Name:</label>
+                      <Input
+                        type="text"
+                        placeholder="Your Name or Team Name"
+                        value={emailFromName}
+                        onChange={(e) => setEmailFromName(e.target.value)}
+                      />
+                    </div>
+                    <div>
                       <label className="text-sm font-medium">To:</label>
                       <Input
                         placeholder="client@company.com"
@@ -1039,32 +1161,116 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                         data-testid="input-email-to"
                       />
                     </div>
-                    <div>
-                      <label className="text-sm font-medium">Subject:</label>
-                      <Input
-                        placeholder={`Re: Order #${currentOrder.orderNumber}`}
-                        value={emailSubject}
-                        onChange={(e) => setEmailSubject(e.target.value)}
-                        data-testid="input-email-subject"
-                      />
-                    </div>
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium">Message:</label>
-                    <Textarea
-                      placeholder="Compose your message to the client..."
-                      value={emailBody}
-                      onChange={(e) => setEmailBody(e.target.value)}
-                      className="min-h-[150px] mt-1"
-                      data-testid="textarea-email-body"
+                    <label className="text-sm font-medium">Subject:</label>
+                    <Input
+                      placeholder={`Re: Order #${currentOrder.orderNumber}`}
+                      value={emailSubject}
+                      onChange={(e) => setEmailSubject(e.target.value)}
+                      data-testid="input-email-subject"
                     />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-sm font-medium">Message:</label>
+                      <div className="flex gap-2">
+                        <Button
+                          variant={emailPreviewMode === "compose" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setEmailPreviewMode("compose")}
+                        >
+                          Compose
+                        </Button>
+                        <Button
+                          variant={emailPreviewMode === "preview" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setEmailPreviewMode("preview")}
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          Preview
+                        </Button>
+                      </div>
+                    </div>
+                    {emailPreviewMode === "compose" ? (
+                      <RichTextEditor
+                        value={emailBody}
+                        onChange={setEmailBody}
+                        placeholder="Compose your message to the client..."
+                        className="mt-1"
+                      />
+                    ) : (
+                      <div className="border rounded-lg p-4 min-h-[300px] bg-gray-50">
+                        <div className="max-w-2xl mx-auto bg-white shadow-sm">
+                          <div className="bg-blue-600 p-6 text-center">
+                            <h1 className="text-white text-2xl font-bold">SwagSuite</h1>
+                          </div>
+                          <div className="p-6">
+                            <h2 className="text-gray-900 text-xl mb-4">{emailSubject || "(No subject)"}</h2>
+                            {(currentOrder?.orderNumber || companyName) && (
+                              <div className="bg-gray-100 p-4 rounded mb-4">
+                                {currentOrder?.orderNumber && <p className="text-sm my-1"><strong>Order #:</strong> {currentOrder.orderNumber}</p>}
+                                {companyName && <p className="text-sm my-1"><strong>Company:</strong> {companyName}</p>}
+                              </div>
+                            )}
+                            <div 
+                              className="text-gray-700 text-sm leading-relaxed prose prose-sm max-w-none"
+                              dangerouslySetInnerHTML={{ __html: emailBody || "<p class='text-gray-400 italic'>No content yet...</p>" }}
+                            />
+                          </div>
+                          <div className="bg-gray-50 p-4 text-center border-t">
+                            <p className="text-gray-500 text-xs">Sent from SwagSuite</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Attachments:</label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-500 transition-colors"
+                      onClick={() => document.getElementById('client-file-upload')?.click()}
+                    >
+                      <input
+                        id="client-file-upload"
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          setEmailAttachments(prev => [...prev, ...files]);
+                        }}
+                      />
+                      <div className="flex flex-col items-center gap-2">
+                        <Upload className="w-8 h-8 text-gray-400" />
+                        <p className="text-sm text-gray-600">Click to upload files</p>
+                        <p className="text-xs text-gray-400">PDF, Images, Documents</p>
+                      </div>
+                    </div>
+                    {emailAttachments.length > 0 && (
+                      <div className="mt-2 space-y-2">
+                        {emailAttachments.map((file, index) => (
+                          <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                            <span className="text-sm">{file.name}</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEmailAttachments(prev => prev.filter((_, i) => i !== index))}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex gap-2">
                     <Button
                       onClick={handleSendEmail}
-                      disabled={!emailTo || !emailSubject || !emailBody.trim()}
+                      disabled={!emailFrom || !emailTo || !emailSubject || !emailBody.trim()}
                       className="flex-1"
                       data-testid="button-send-email"
                     >
@@ -1182,7 +1388,69 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium">From:</label>
+                        {vendorEmailFromCustom ? (
+                          <div className="space-y-2">
+                            <Input
+                              placeholder="your-email@company.com"
+                              value={vendorEmailFrom}
+                              onChange={(e) => setVendorEmailFrom(e.target.value)}
+                              type="email"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setVendorEmailFromCustom(false);
+                                setVendorEmailFrom("");
+                              }}
+                              className="w-full text-xs"
+                            >
+                              Select from team instead
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <Select value={vendorEmailFrom} onValueChange={setVendorEmailFrom}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select sender..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(teamMembers.length > 0 ? teamMembers : defaultTeamMembers).map((member: TeamMember) => (
+                                  <SelectItem key={member.id} value={member.email}>
+                                    <div className="flex items-center gap-2">
+                                      <UserAvatar name={`${member.firstName} ${member.lastName}`} size="sm" />
+                                      <div>
+                                        <div className="font-medium">{member.firstName} {member.lastName}</div>
+                                        <div className="text-xs text-gray-500">{member.email}</div>
+                                      </div>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setVendorEmailFromCustom(true)}
+                              className="w-full text-xs"
+                            >
+                              Use custom email
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">From Name:</label>
+                        <Input
+                          type="text"
+                          placeholder="Your Name or Team Name"
+                          value={vendorEmailFromName}
+                          onChange={(e) => setVendorEmailFromName(e.target.value)}
+                        />
+                      </div>
                       <div>
                         <label className="text-sm font-medium">To:</label>
                         <Input
@@ -1192,32 +1460,117 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                           data-testid="input-vendor-email-to"
                         />
                       </div>
-                      <div>
-                        <label className="text-sm font-medium">Subject:</label>
-                        <Input
-                          placeholder={`Production Update - Order #${currentOrder.orderNumber}`}
-                          value={vendorEmailSubject}
-                          onChange={(e) => setVendorEmailSubject(e.target.value)}
-                          data-testid="input-vendor-email-subject"
-                        />
-                      </div>
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium">Message:</label>
-                      <Textarea
-                        placeholder="Compose your message to the vendor..."
-                        value={vendorEmailBody}
-                        onChange={(e) => setVendorEmailBody(e.target.value)}
-                        className="min-h-[150px] mt-1"
-                        data-testid="textarea-vendor-email-body"
+                      <label className="text-sm font-medium">Subject:</label>
+                      <Input
+                        placeholder={`Production Update - Order #${currentOrder.orderNumber}`}
+                        value={vendorEmailSubject}
+                        onChange={(e) => setVendorEmailSubject(e.target.value)}
+                        data-testid="input-vendor-email-subject"
                       />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-sm font-medium">Message:</label>
+                        <div className="flex gap-2">
+                          <Button
+                            variant={vendorEmailPreviewMode === "compose" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setVendorEmailPreviewMode("compose")}
+                          >
+                            Compose
+                          </Button>
+                          <Button
+                            variant={vendorEmailPreviewMode === "preview" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setVendorEmailPreviewMode("preview")}
+                          >
+                            <Eye className="w-4 h-4 mr-1" />
+                            Preview
+                          </Button>
+                        </div>
+                      </div>
+                      {vendorEmailPreviewMode === "compose" ? (
+                        <RichTextEditor
+                          value={vendorEmailBody}
+                          onChange={setVendorEmailBody}
+                          placeholder="Compose your message to the vendor..."
+                          className="mt-1"
+                        />
+                      ) : (
+                        <div className="border rounded-lg p-4 min-h-[300px] bg-gray-50">
+                          <div className="max-w-2xl mx-auto bg-white shadow-sm">
+                            <div className="bg-green-600 p-6 text-center">
+                              <h1 className="text-white text-2xl font-bold">SwagSuite</h1>
+                              <p className="text-green-100 text-sm mt-1">Vendor Communication</p>
+                            </div>
+                            <div className="p-6">
+                              <h2 className="text-gray-900 text-xl mb-4">{vendorEmailSubject || "(No subject)"}</h2>
+                              {(currentOrder?.orderNumber || supplier?.name) && (
+                                <div className="bg-gray-100 p-4 rounded mb-4">
+                                  {currentOrder?.orderNumber && <p className="text-sm my-1"><strong>PO #:</strong> {currentOrder.orderNumber}</p>}
+                                  {supplier?.name && <p className="text-sm my-1"><strong>Vendor:</strong> {supplier.name}</p>}
+                                </div>
+                              )}
+                              <div 
+                                className="text-gray-700 text-sm leading-relaxed prose prose-sm max-w-none"
+                                dangerouslySetInnerHTML={{ __html: vendorEmailBody || "<p class='text-gray-400 italic'>No content yet...</p>" }}
+                              />
+                            </div>
+                            <div className="bg-gray-50 p-4 text-center border-t">
+                              <p className="text-gray-500 text-xs">Sent from SwagSuite</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Attachments:</label>
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-500 transition-colors"
+                        onClick={() => document.getElementById('vendor-file-upload')?.click()}
+                      >
+                        <input
+                          id="vendor-file-upload"
+                          type="file"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            setVendorEmailAttachments(prev => [...prev, ...files]);
+                          }}
+                        />
+                        <div className="flex flex-col items-center gap-2">
+                          <Upload className="w-8 h-8 text-gray-400" />
+                          <p className="text-sm text-gray-600">Click to upload files</p>
+                          <p className="text-xs text-gray-400">PDF, Images, Documents</p>
+                        </div>
+                      </div>
+                      {vendorEmailAttachments.length > 0 && (
+                        <div className="mt-2 space-y-2">
+                          {vendorEmailAttachments.map((file, index) => (
+                            <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                              <span className="text-sm">{file.name}</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setVendorEmailAttachments(prev => prev.filter((_, i) => i !== index))}
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex gap-2">
                       <Button
                         onClick={handleSendVendorEmail}
-                        disabled={!vendorEmailTo || !vendorEmailSubject || !vendorEmailBody.trim()}
+                        disabled={!vendorEmailFrom || !vendorEmailTo || !vendorEmailSubject || !vendorEmailBody.trim()}
                         className="flex-1"
                         data-testid="button-send-vendor-email"
                       >

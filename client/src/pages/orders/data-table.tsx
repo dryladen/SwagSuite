@@ -49,7 +49,6 @@ export function DataTable<TData, TValue>({
   );
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
-  const [rowSelection, setRowSelection] = React.useState({});
 
   const table = useReactTable({
     data,
@@ -61,12 +60,10 @@ export function DataTable<TData, TValue>({
     onColumnFiltersChange: setColumnFilters,
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
-    onRowSelectionChange: setRowSelection,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
-      rowSelection,
     },
     meta,
   });
@@ -131,9 +128,10 @@ export function DataTable<TData, TValue>({
             <TableBody>
               {table.getRowModel().rows?.length ? (
                 table.getRowModel().rows.map((row) => (
-                  <TableRow
+                  <TableRow 
                     key={row.id}
-                    data-state={row.getIsSelected() && "selected"}
+                    onClick={() => meta?.onViewOrder?.(row.original)}
+                    className="cursor-pointer hover:bg-gray-50"
                   >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell key={cell.id}>

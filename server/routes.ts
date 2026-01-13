@@ -6116,17 +6116,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Team members API for @ mentions
+  // Team members API for @ mentions and assignments
   app.get("/api/users/team", async (req, res) => {
     try {
-      const teamMembers = [
-        { id: "user1", firstName: "Sarah", lastName: "Johnson", email: "sarah@swag.com" },
-        { id: "user2", firstName: "Mike", lastName: "Chen", email: "mike@swag.com" },
-        { id: "user3", firstName: "Alex", lastName: "Rodriguez", email: "alex@swag.com" },
-        { id: "user4", firstName: "Emily", lastName: "Davis", email: "emily@swag.com" },
-        { id: "user5", firstName: "David", lastName: "Wilson", email: "david@swag.com" },
-        { id: "user6", firstName: "Lisa", lastName: "Thompson", email: "lisa@swag.com" }
-      ];
+      const { db } = await import("./db");
+      const { users } = await import("@shared/schema");
+      
+      // Query all users from database
+      const teamMembers = await db.select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+      }).from(users);
 
       res.json(teamMembers);
     } catch (error) {
@@ -6200,6 +6202,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const {
         communicationType,
         direction,
+        fromEmail,
+        fromName,
         recipientEmail,
         recipientName,
         subject,
@@ -6212,6 +6216,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { users } = await import("@shared/schema");
       const { communications, insertCommunicationSchema } = await import("@shared/project-schema");
       const { eq } = await import("drizzle-orm");
+      const { emailService } = await import("./emailService");
 
       // Get current user ID (in production, this should come from req.user)
       const currentUserId = req.user?.claims?.sub || "system-user";
@@ -6233,6 +6238,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .insert(communications)
         .values(validatedData)
         .returning();
+
+      // Actually send the email if direction is 'sent'
+      if (direction === 'sent') {
+        console.log('📧 Attempting to send email...');
+        console.log('  Type:', communicationType);
+        console.log('  From:', fromEmail, fromName ? `(${fromName})` : '');
+        console.log('  To:', recipientEmail);
+        console.log('  Subject:', subject);
+        
+        try {
+          const order = await storage.getOrder(orderId);
+          const company = order?.companyId ? await storage.getCompany(order.companyId) : null;
+          const supplier = (order as any)?.supplierId ? await storage.getSupplier((order as any).supplierId) : null;
+          
+          if (communicationType === 'client_email') {
+            console.log('  Sending client email...');
+            await emailService.sendClientEmail({
+              from: fromEmail,
+              fromName: fromName || 'SwagSuite',
+              to: recipientEmail,
+              subject,
+              body,
+              orderNumber: order?.orderNumber,
+              companyName: company?.name,
+            });
+            console.log('✅ Client email sent successfully!');
+          } else if (communicationType === 'vendor_email') {
+            console.log('  Sending vendor email...');
+            await emailService.sendVendorEmail({
+              from: fromEmail,
+              fromName: fromName || 'SwagSuite',
+              to: recipientEmail,
+              subject,
+              body,
+              orderNumber: order?.orderNumber,
+              supplierName: supplier?.name,
+            });
+            console.log('✅ Vendor email sent successfully!');
+          }
+        } catch (emailError) {
+          console.error('❌ Failed to send email:', emailError);
+          console.error('   Error details:', emailError instanceof Error ? emailError.message : 'Unknown error');
+          // Still save to database even if email fails
+          return res.status(207).json({
+            ...newCommunication,
+            emailStatus: 'failed',
+            emailError: emailError instanceof Error ? emailError.message : 'Unknown error',
+          });
+        }
+      }
 
       // Fetch the complete communication with user info
       const [communicationWithUser] = await db
@@ -6481,6 +6536,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating newsletter template:", error);
       res.status(500).json({ message: "Failed to create newsletter template" });
+    }
+  });
+
+  // Email Settings Endpoints
+  app.get("/api/settings/integration", isAuthenticated, async (req, res) => {
+    try {
+      const settings = await storage.getIntegrationSettings();
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching integration settings:", error);
+      res.status(500).json({ message: "Failed to fetch integration settings" });
+    }
+  });
+
+  app.put("/api/settings/integration", isAuthenticated, async (req, res) => {
+    try {
+      const updates = req.body;
+      const settings = await storage.updateIntegrationSettings(updates);
+      res.json(settings);
+    } catch (error) {
+      console.error("Error updating integration settings:", error);
+      res.status(500).json({ message: "Failed to update integration settings" });
+    }
+  });
+
+  app.post("/api/settings/test-email", isAuthenticated, async (req, res) => {
+    try {
+      const { to } = req.body;
+      
+      if (!to || typeof to !== 'string' || !to.includes('@')) {
+        return res.json({ 
+          success: false, 
+          message: 'Please provide a valid email address'
+        });
+      }
+
+      const { emailService } = await import('./emailService');
+      const success = await emailService.testConnection(to);
+      res.json({ 
+        success, 
+        message: success ? `Test email sent to ${to}` : 'Failed to send test email'
+      });
+    } catch (error: any) {
+      console.error("Error testing email connection:", error);
+      res.json({ 
+        success: false, 
+        message: error.message || 'Failed to test email connection'
+      });
     }
   });
 
