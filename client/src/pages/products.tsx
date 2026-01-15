@@ -270,7 +270,7 @@ export default function Products() {
                         )}
 
                         {supplier && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 mt-2">
                             <Badge variant="outline">{supplier.name}</Badge>
                           </div>
                         )}

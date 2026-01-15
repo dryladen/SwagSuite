@@ -58,6 +58,7 @@ interface SageProduct {
     category: string;
     subcategory?: string;
     description: string;
+    colors?: string[];
     features?: string[];
     materials?: string[];
     dimensions?: string;
@@ -155,8 +156,9 @@ export class SageService {
                 maxTotalItems: options?.maxResults || 50,
                 thumbPicRes: 300,
                 endUserOnly: false,
-                // Request extra fields including supplier info
-                extraReturnFields: 'supplierName,companyName,supplierSageNum,asi'
+                // Request extra fields including supplier info, colors, and category
+                // Valid options: ITEMNUM, CATEGORY, DESCRIPTION, COLORS, THEMES, NET, SUPPID, LINE, SUPPLIER, PREFGROUPS, PRODTIME
+                extraReturnFields: 'SUPPLIER,SUPPID,CATEGORY,COLORS,DESCRIPTION,ITEMNUM'
             };
 
             // Add category if specified
@@ -192,8 +194,6 @@ export class SageService {
             }
 
             const data: any = await response.json();
-            
-            console.log('SAGE API Full Response:', JSON.stringify(data, null, 2));
 
             // Check for API errors
             if (data.ErrNum && data.ErrNum !== 0) {
@@ -209,16 +209,10 @@ export class SageService {
                 rawProducts = data.data.products || data.data.Products || data.data.items || [];
             }
 
-            console.log(`SAGE returned ${rawProducts.length} raw products`);
-            console.log('Raw product sample (first product):', JSON.stringify(rawProducts[0], null, 2));
+            console.log(`SAGE search returned ${rawProducts.length} products`);
             
             // Normalize product data to our interface
             const normalizedProducts: SageProduct[] = rawProducts.map((p: any) => {
-                // Log fields available in first product for debugging
-                if (rawProducts.indexOf(p) === 0) {
-                    console.log('Available fields in first product:', Object.keys(p));
-                }
-                
                 // Parse price range if available (e.g., "0.75 - 0.89")
                 let pricingStructure = {};
                 if (p.prc && typeof p.prc === 'string') {
@@ -232,54 +226,53 @@ export class SageService {
                     }
                 }
                 
-                // Extract supplier ID (SN) from thumbPic URL
-                // URL format: https://www.promoplace.com/ws/ws.dll/QPic?SN=50018&P=166970358&RS=300
-                let extractedSupplierId = '';
-                if (p.thumbPic) {
-                    const snMatch = p.thumbPic.match(/[?&]SN=(\d+)/);
-                    if (snMatch) {
-                        extractedSupplierId = snMatch[1];
-                        console.log(`Product ${p.name} - Extracted supplier ID: ${extractedSupplierId} from URL: ${p.thumbPic}`);
-                    } else {
-                        console.log(`Product ${p.name} - No SN parameter found in URL: ${p.thumbPic}`);
-                    }
-                }
-                
                 // Build image gallery from thumbPic
-                const imageGallery = [];
-                if (p.thumbPic) {
-                    imageGallery.push(p.thumbPic);
-                }
+                const imageGallery = p.thumbPic ? [p.thumbPic] : [];
+                
+                // Parse colors array if available
+                const colors = Array.isArray(p.colors) 
+                    ? p.colors 
+                    : typeof p.colors === 'string' 
+                        ? p.colors.split(',').map((c: string) => c.trim()).filter(Boolean)
+                        : [];
                 
                 return {
+                    // Core identifiers
                     productId: p.spc || p.SPC || p.productId || p.ProductId || p.prodEId?.toString() || '',
-                    productNumber: p.prodEId?.toString() || p.itemNum || p.ItemNum || p.productNumber || '',
+                    productNumber: p.itemNum || p.ItemNum || p.prodEId?.toString() || p.productNumber || '',
                     productName: p.name || p.itemName || p.ItemName || p.productName || p.ProductName || 'Unnamed Product',
-                    supplierName: p.supplierName || p.SupplierName || p.companyName || p.CompanyName || '',
-                    // Prioritize extracted ID from URL since search API doesn't return supplier fields
-                    supplierId: extractedSupplierId || p.supplierSageNum || p.SupplierSageNum || p.supplierId || p.SupplierId || p.SN?.toString() || '',
+                    
+                    // Supplier info (from SUPPLIER and SUPPID extraReturnFields)
+                    supplierName: p.supplier || p.Supplier || p.supplierName || p.SupplierName || p.companyName || p.CompanyName || '',
+                    supplierId: p.suppId || p.SuppId || p.supplierSageNum || p.SupplierSageNum || p.supplierId || p.SupplierId || p.SN?.toString() || '',
                     asiNumber: p.asiNumber || p.ASINumber || p.asi || '',
-                    category: p.categoryName || p.CategoryName || p.category || p.Category || 'Uncategorized',
+                    
+                    // Product details (from CATEGORY, DESCRIPTION, COLORS extraReturnFields)
+                    category: p.category || p.Category || p.categoryName || p.CategoryName || 'Uncategorized',
                     subcategory: p.subcategoryName || p.SubcategoryName || p.subcategory || p.SubCategory || '',
                     description: p.description || p.Description || p.itemDescription || p.desc || p.name || '',
+                    colors,
+                    
+                    // Physical attributes
                     features: p.features || p.Features || p.keyFeatures || [],
                     materials: p.materials || p.Materials || [],
                     dimensions: p.size || p.Size || p.dimensions || p.Dimensions || '',
                     weight: p.weight || p.Weight || undefined,
                     eqpLevel: p.eqp || p.EQP || p.eqpLevel || p.EqpLevel || '',
-                    pricingStructure: pricingStructure,
+                    
+                    // Pricing and ordering
+                    pricingStructure,
                     quantityBreaks: p.pricingDetails || p.PricingDetails || p.quantityBreaks || [],
                     setupCharges: p.setupCharges || p.SetupCharges || {},
                     decorationMethods: p.imprintMethods || p.ImprintMethods || p.decorationMethods || [],
-                    leadTimes: p.productionTime || p.ProductionTime || p.leadTimes || {},
-                    imageGallery: imageGallery,
+                    leadTimes: p.productionTime || p.ProductionTime || p.prodTime || p.leadTimes || {},
+                    
+                    // Media and compliance
+                    imageGallery,
                     technicalDrawings: p.technicalDrawings || p.drawings || [],
                     complianceCertifications: p.certifications || p.Certifications || []
                 };
             });
-            
-            console.log(`Normalized ${normalizedProducts.length} products`);
-            console.log('First product sample:', JSON.stringify(normalizedProducts[0], null, 2));
             
             return normalizedProducts;
         } catch (error) {
@@ -412,6 +405,7 @@ export class SageService {
                 subcategory: sageProduct.subcategory,
                 brand: supplierName || sageProduct.supplierName,
                 description: sageProduct.description,
+                colors: sageProduct.colors || [],
                 features: sageProduct.features || [],
                 materials: sageProduct.materials || [],
                 dimensions: sageProduct.dimensions,
@@ -447,6 +441,9 @@ export class SageService {
                 description: sageProduct.description || '',
                 basePrice: (sageProduct.pricingStructure as any)?.minPrice?.toString() || '0',
                 supplierId: supplierId,
+                brand: supplierName || sageProduct.supplierName,
+                category: sageProduct.category,
+                colors: sageProduct.colors || [],
                 imageUrl: sageProduct.imageGallery?.[0] || null,
                 productType: 'promotional', // SAGE products are promotional items
                 leadTime: 10, // Default lead time

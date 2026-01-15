@@ -71,6 +71,7 @@ class EmailService {
     body: string;
     orderNumber?: string;
     companyName?: string;
+    attachments?: Array<{ storagePath: string; originalFilename: string; mimeType?: string }>;
   }) {
     const html = `
       <!DOCTYPE html>
@@ -118,13 +119,30 @@ class EmailService {
     const fromEmail = data.from || settings?.emailFromAddress || settings?.smtpUser || 'noreply@example.com';
     const fromName = data.fromName || settings?.emailFromName || 'SwagSuite';
 
-    const info = await this.transporter.sendMail({
+    const mailOptions: any = {
       from: `"${fromName}" <${fromEmail}>`,
       to: data.to,
       subject: data.subject,
       html,
       text: data.body,
-    });
+    };
+
+    // Add attachments if provided
+    if (data.attachments && data.attachments.length > 0) {
+      const { replitStorage } = await import('./replitStorage');
+      mailOptions.attachments = await Promise.all(
+        data.attachments.map(async (att) => {
+          const buffer = await replitStorage.downloadFile(att.storagePath);
+          return {
+            filename: att.originalFilename,
+            content: buffer,
+            contentType: att.mimeType,
+          };
+        })
+      );
+    }
+
+    const info = await this.transporter.sendMail(mailOptions);
 
     console.log('✓ Email sent:', info.messageId);
     return { id: info.messageId, ...info };
@@ -138,6 +156,7 @@ class EmailService {
     body: string;
     orderNumber?: string;
     supplierName?: string;
+    attachments?: Array<{ storagePath: string; originalFilename: string; mimeType?: string }>;
   }) {
     const html = `
       <!DOCTYPE html>
@@ -186,13 +205,30 @@ class EmailService {
     const fromEmail = data.from || settings?.emailFromAddress || settings?.smtpUser || 'noreply@example.com';
     const fromName = data.fromName || settings?.emailFromName || 'SwagSuite';
 
-    const info = await this.transporter.sendMail({
+    const vendorMailOptions: any = {
       from: `"${fromName}" <${fromEmail}>`,
       to: data.to,
       subject: data.subject,
       html,
       text: data.body,
-    });
+    };
+
+    // Add attachments if provided
+    if (data.attachments && data.attachments.length > 0) {
+      const { replitStorage } = await import('./replitStorage');
+      vendorMailOptions.attachments = await Promise.all(
+        data.attachments.map(async (att) => {
+          const buffer = await replitStorage.downloadFile(att.storagePath);
+          return {
+            filename: att.originalFilename,
+            content: buffer,
+            contentType: att.mimeType,
+          };
+        })
+      );
+    }
+
+    const info = await this.transporter.sendMail(vendorMailOptions);
 
     console.log('✓ Email sent:', info.messageId);
     return { id: info.messageId, ...info };

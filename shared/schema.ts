@@ -11,6 +11,7 @@ import {
   decimal,
   boolean,
   pgEnum,
+  serial,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -176,12 +177,14 @@ export const products = pgTable("products", {
   supplierSku: varchar("supplier_sku"),
   basePrice: decimal("base_price", { precision: 10, scale: 2 }),
   minimumQuantity: integer("minimum_quantity").default(1),
-  colors: text("colors"), // JSON array of available colors
-  sizes: text("sizes"), // JSON array of available sizes
+  brand: varchar("brand"),
+  category: varchar("category"),
+  colors: text("colors").array(), // Array of available colors
+  sizes: text("sizes").array(), // Array of available sizes
   imprintMethods: text("imprint_methods"), // JSON array
   leadTime: integer("lead_time"), // days
   imageUrl: varchar("image_url"),
-  productType: varchar("product_type").default("apparel"), // apparel, hard_goods
+  productType: varchar("product_type").default("apparel"), // apparel, hard_goods, promotional
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -205,7 +208,7 @@ export const orders = pgTable("orders", {
   contactId: varchar("contact_id").references(() => contacts.id),
   assignedUserId: varchar("assigned_user_id").references(() => users.id),
   csrUserId: varchar("csr_user_id").references(() => users.id), // Customer Service Representative
-  supplierId: varchar("supplier_id").references(() => suppliers.id),
+  // Note: supplierId removed - vendors are now tracked at order_items level
   status: orderStatusEnum("status").default("quote"),
   orderType: varchar("order_type").default("quote"), // quote, sales_order, rush_order
   subtotal: decimal("subtotal", { precision: 12, scale: 2 }).default("0"),
@@ -217,6 +220,9 @@ export const orders = pgTable("orders", {
   eventDate: timestamp("event_date"),
   supplierInHandsDate: timestamp("supplier_in_hands_date"),
   isFirm: boolean("is_firm").default(false),
+  customerPo: varchar("customer_po"),
+  paymentTerms: varchar("payment_terms").default("Net 30"),
+  orderDiscount: decimal("order_discount", { precision: 12, scale: 2 }).default("0"),
   notes: text("notes"),
   customerNotes: text("customer_notes"), // visible to customer
   internalNotes: text("internal_notes"), // internal only
@@ -237,6 +243,7 @@ export const orderItems = pgTable("order_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orderId: varchar("order_id").references(() => orders.id),
   productId: varchar("product_id").references(() => products.id),
+  supplierId: varchar("supplier_id").references(() => suppliers.id), // Each product has its own vendor
   quantity: integer("quantity").notNull(),
   unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
   totalPrice: decimal("total_price", { precision: 12, scale: 2 }).notNull(),
@@ -244,8 +251,12 @@ export const orderItems = pgTable("order_items", {
   size: varchar("size"),
   imprintLocation: varchar("imprint_location"),
   imprintMethod: varchar("imprint_method"),
+  notes: text("notes"), // Product-specific notes
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Note: Vendors are now managed at order_item level (each product has its own vendor)
+// This follows the Antera Software pattern where vendors are product-specific
 
 // Artwork files
 export const artworkFiles = pgTable("artwork_files", {
@@ -262,7 +273,25 @@ export const artworkFiles = pgTable("artwork_files", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-
+// Artwork approvals
+export const artworkApprovals = pgTable("artwork_approvals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").references(() => orders.id).notNull(),
+  orderItemId: varchar("order_item_id").references(() => orderItems.id),
+  artworkFileId: varchar("artwork_file_id").references(() => artworkFiles.id),
+  approvalToken: varchar("approval_token", { length: 255 }).notNull().unique(),
+  status: varchar("status", { length: 50 }).notNull().default("pending"), // pending, approved, declined
+  clientEmail: varchar("client_email", { length: 255 }).notNull(),
+  clientName: varchar("client_name", { length: 255 }),
+  sentAt: timestamp("sent_at"),
+  approvedAt: timestamp("approved_at"),
+  declinedAt: timestamp("declined_at"),
+  declineReason: text("decline_reason"),
+  pdfPath: varchar("pdf_path", { length: 500 }),
+  reminderSentAt: timestamp("reminder_sent_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
 
 // Activity log
 export const activities = pgTable("activities", {

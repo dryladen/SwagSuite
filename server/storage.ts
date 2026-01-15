@@ -127,6 +127,7 @@ export interface IStorage {
   // Supplier operations
   getSuppliers(): Promise<Supplier[]>;
   getSupplier(id: string): Promise<Supplier | undefined>;
+  getSupplierByName(name: string): Promise<Supplier | undefined>;
   createSupplier(supplier: InsertSupplier): Promise<Supplier>;
   updateSupplier(id: string, supplier: Partial<InsertSupplier>): Promise<Supplier>;
   deleteSupplier(id: string): Promise<void>;
@@ -521,6 +522,11 @@ export class DatabaseStorage implements IStorage {
     return supplier;
   }
 
+  async getSupplierByName(name: string): Promise<Supplier | undefined> {
+    const [supplier] = await db.select().from(suppliers).where(eq(suppliers.name, name));
+    return supplier;
+  }
+
   async createSupplier(supplier: InsertSupplier): Promise<Supplier> {
     const [newSupplier] = await db.insert(suppliers).values(supplier).returning();
     return newSupplier;
@@ -665,10 +671,36 @@ export class DatabaseStorage implements IStorage {
 
   // Order item operations
   async getOrderItems(orderId: string): Promise<OrderItem[]> {
-    return await db
-      .select()
+    const items = await db
+      .select({
+        id: orderItems.id,
+        orderId: orderItems.orderId,
+        productId: orderItems.productId,
+        supplierId: orderItems.supplierId,
+        quantity: orderItems.quantity,
+        unitPrice: orderItems.unitPrice,
+        totalPrice: orderItems.totalPrice,
+        color: orderItems.color,
+        size: orderItems.size,
+        imprintLocation: orderItems.imprintLocation,
+        imprintMethod: orderItems.imprintMethod,
+        notes: orderItems.notes,
+        createdAt: orderItems.createdAt,
+        // Join product info
+        productName: products.name,
+        productSku: products.sku,
+        // Join supplier info
+        supplierName: suppliers.name,
+        supplierEmail: suppliers.email,
+        supplierPhone: suppliers.phone,
+        supplierContactPerson: suppliers.contactPerson,
+      })
       .from(orderItems)
+      .leftJoin(products, eq(orderItems.productId, products.id))
+      .leftJoin(suppliers, eq(orderItems.supplierId, suppliers.id))
       .where(eq(orderItems.orderId, orderId));
+
+    return items as any;
   }
 
   async createOrderItem(item: InsertOrderItem): Promise<OrderItem> {
@@ -1578,6 +1610,7 @@ export class DatabaseStorage implements IStorage {
         sampleOrderItems.push({
           orderId: order.id,
           productId: product?.id || 'default-product',
+          supplierId: product?.supplierId || insertedSuppliers[0]?.id, // Assign supplier from product
           quantity,
           unitPrice: unitPrice.toFixed(2),
           totalPrice: (quantity * unitPrice).toFixed(2),

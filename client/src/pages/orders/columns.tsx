@@ -40,7 +40,6 @@ const statusDisplayMap = {
 
 export type OrderWithRelations = Order & {
   companyName?: string;
-  supplierName?: string;
 };
 
 export const columns: ColumnDef<OrderWithRelations>[] = [
@@ -69,22 +68,6 @@ export const columns: ColumnDef<OrderWithRelations>[] = [
     },
     filterFn: (row, id, value) => {
       return value.includes(row.getValue(id));
-    },
-  },
-  {
-    accessorKey: "supplierName",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Vendor" />
-    ),
-    cell: ({ row }) => {
-      const supplier = row.getValue("supplierName") as string | undefined;
-      return supplier ? (
-        <Badge variant="secondary" className="text-xs">
-          {supplier}
-        </Badge>
-      ) : (
-        <span className="text-gray-400 text-sm">-</span>
-      );
     },
   },
   {

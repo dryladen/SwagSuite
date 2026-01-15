@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import * as React from "react";
 import {
   Dialog,
   DialogContent,
@@ -48,22 +49,20 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
   const [, setLocation] = useLocation();
   const [formData, setFormData] = useState({
     companyId: "",
+    contactId: "",
+    assignedUserId: "",
     orderType: "quote",
+    customerPo: "",
+    paymentTerms: "Net 30",
     inHandsDate: "",
     eventDate: "",
     notes: "",
-    shippingAddress: "",
-    billingAddress: "",
-    trackingNumber: "",
-    shippingMethod: "",
-    supplierId: "",
-    tax: "0",
-    shipping: "0",
+    orderDiscount: "0",
   });
   const [orderItems, setOrderItems] = useState<any[]>([]);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [openCustomerCombo, setOpenCustomerCombo] = useState(false);
-  const [openSupplierCombo, setOpenSupplierCombo] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -74,32 +73,28 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
       if (order) {
         setFormData({
           companyId: order.companyId || "",
+          contactId: (order as any).contactId || "",
+          assignedUserId: (order as any).assignedUserId || "",
           orderType: order.orderType || "quote",
+          customerPo: (order as any).customerPo || "",
+          paymentTerms: (order as any).paymentTerms || "Net 30",
           inHandsDate: order.inHandsDate ? new Date(order.inHandsDate).toISOString().split('T')[0] : "",
           eventDate: order.eventDate ? new Date(order.eventDate).toISOString().split('T')[0] : "",
           notes: order.notes || "",
-          shippingAddress: (order as any).shippingAddress || "",
-          billingAddress: (order as any).billingAddress || "",
-          trackingNumber: (order as any).trackingNumber || "",
-          shippingMethod: (order as any).shippingMethod || "",
-          supplierId: (order as any).supplierId || "",
-          tax: (order as any).tax || "0",
-          shipping: (order as any).shipping || "0",
+          orderDiscount: (order as any).orderDiscount || "0",
         });
       } else {
         setFormData({
           companyId: initialCompanyId || "",
+          contactId: "",
+          assignedUserId: "",
           orderType: "quote",
+          customerPo: "",
+          paymentTerms: "Net 30",
           inHandsDate: "",
           eventDate: "",
           notes: "",
-          shippingAddress: "",
-          billingAddress: "",
-          trackingNumber: "",
-          shippingMethod: "",
-          supplierId: "",
-          tax: "0",
-          shipping: "0",
+          orderDiscount: "0",
         });
         setOrderItems([]);
       }
@@ -116,6 +111,16 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
     enabled: open,
   });
 
+  const { data: contacts = [] } = useQuery<any[]>({
+    queryKey: ["/api/contacts"],
+    enabled: open && !!formData.companyId,
+  });
+
+  const { data: users = [] } = useQuery<any[]>({
+    queryKey: ["/api/users/team"],
+    enabled: open,
+  });
+
   const { data: suppliers = [] } = useQuery<any[]>({
     queryKey: ["/api/suppliers"],
     enabled: open,
@@ -126,6 +131,57 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
     enabled: open,
   });
 
+  // Fetch existing order items when editing
+  const { data: existingOrderItems = [] } = useQuery<any[]>({
+    queryKey: [`/api/orders/${order?.id}/items`],
+    enabled: open && !!order?.id,
+  });
+
+  // Populate order items when editing
+  useEffect(() => {
+    if (open && order && existingOrderItems.length > 0) {
+      const formattedItems = existingOrderItems.map((item: any) => ({
+        id: item.id,
+        productId: item.productId,
+        productName: item.productName,
+        sku: item.productSku,
+        quantity: item.quantity,
+        unitPrice: parseFloat(item.unitPrice || "0"),
+        discount: 0, // Calculate from prices if needed
+        totalPrice: parseFloat(item.totalPrice || "0"),
+        supplierId: item.supplierId,
+        color: item.color || "",
+        size: item.size || "",
+        imprintLocation: item.imprintLocation || "",
+        imprintMethod: item.imprintMethod || "",
+        notes: item.notes || "",
+      }));
+      setOrderItems(formattedItems);
+    }
+  }, [open, order, existingOrderItems]);
+
+  // Reset items only when modal first opens for new order
+  useEffect(() => {
+    if (open && !order) {
+      setOrderItems([]);
+    }
+  }, [open, order?.id]); // Only depend on open and order.id, not order object
+
+  // Helper to ensure array format
+  const ensureArray = (value: any): string[] => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
   // Filter products based on search
   const filteredProducts = products.filter((product: any) =>
     product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
@@ -134,21 +190,35 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
 
   // Add product to order items
   const addProduct = (product: any) => {
-    const existingItem = orderItems.find(item => item.productId === product.id);
-    if (existingItem) {
-      updateItemQuantity(existingItem.id, existingItem.quantity + 1);
-    } else {
-      const newItem = {
-        id: `temp-${Date.now()}`,
-        productId: product.id,
-        productName: product.name,
-        sku: product.sku,
-        quantity: 1,
-        unitPrice: parseFloat(product.basePrice || "0"),
-        totalPrice: parseFloat(product.basePrice || "0"),
-      };
-      setOrderItems([...orderItems, newItem]);
-    }
+    // Get first color and size from arrays if available
+    const colorsArray = ensureArray(product.colors);
+    const sizesArray = ensureArray(product.sizes);
+    
+    const firstColor = colorsArray.length > 0 ? colorsArray[0] : "";
+    const firstSize = sizesArray.length > 0 ? sizesArray[0] : "";
+    
+    const newItem = {
+      id: `temp-${Date.now()}`,
+      productId: product.id,
+      productName: product.name,
+      sku: product.sku,
+      quantity: 1,
+      unitPrice: parseFloat(product.basePrice || "0"),
+      discount: 0,
+      totalPrice: parseFloat(product.basePrice || "0"),
+      supplierId: product.supplierId,
+      color: firstColor,
+      size: firstSize,
+      imprintLocation: "",
+      imprintMethod: "",
+      notes: "",
+      // Store available colors/sizes for selection
+      availableColors: colorsArray,
+      availableSizes: sizesArray,
+    };
+    
+    setOrderItems(prev => [...prev, newItem]);
+    setEditingItemId(newItem.id);
     setProductSearch("");
   };
 
@@ -166,10 +236,36 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
   // Update item unit price
   const updateItemPrice = (itemId: string, unitPrice: number) => {
     setOrderItems(items =>
+      items.map(item => {
+        if (item.id === itemId) {
+          const discountAmount = (unitPrice * item.quantity * item.discount) / 100;
+          const totalPrice = (unitPrice * item.quantity) - discountAmount;
+          return { ...item, unitPrice, totalPrice };
+        }
+        return item;
+      })
+    );
+  };
+
+  // Update item discount
+  const updateItemDiscount = (itemId: string, discount: number) => {
+    setOrderItems(items =>
+      items.map(item => {
+        if (item.id === itemId) {
+          const discountAmount = (item.unitPrice * item.quantity * discount) / 100;
+          const totalPrice = (item.unitPrice * item.quantity) - discountAmount;
+          return { ...item, discount, totalPrice };
+        }
+        return item;
+      })
+    );
+  };
+
+  // Update item variant field
+  const updateItemVariant = (itemId: string, field: string, value: string) => {
+    setOrderItems(items =>
       items.map(item =>
-        item.id === itemId
-          ? { ...item, unitPrice, totalPrice: unitPrice * item.quantity }
-          : item
+        item.id === itemId ? { ...item, [field]: value } : item
       )
     );
   };
@@ -181,9 +277,13 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
 
   // Calculate totals
   const subtotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
-  const taxAmount = parseFloat(formData.tax || "0");
-  const shippingAmount = parseFloat(formData.shipping || "0");
-  const total = subtotal + taxAmount + shippingAmount;
+  const orderDiscountAmount = (subtotal * parseFloat(formData.orderDiscount || "0")) / 100;
+  const total = subtotal - orderDiscountAmount;
+  
+  // Calculate margin (assuming 30% cost for now - should be from product cost)
+  const estimatedCost = subtotal * 0.70; // 70% of selling price
+  const profit = total - estimatedCost;
+  const marginPercent = total > 0 ? (profit / total) * 100 : 0;
 
   const createOrderMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -296,19 +396,24 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
       payload.eventDate = null;
     }
 
+    // Add items to payload (both create and update)
+    payload.items = orderItems.map(item => ({
+      productId: item.productId,
+      supplierId: item.supplierId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice.toFixed(2),
+      totalPrice: item.totalPrice.toFixed(2),
+      color: item.color || null,
+      size: item.size || null,
+      imprintLocation: item.imprintLocation || null,
+      imprintMethod: item.imprintMethod || null,
+      notes: item.notes || null,
+    }));
+
     if (order) {
       updateOrderMutation.mutate(payload);
     } else {
-      // Create order with items
-      createOrderMutation.mutate({
-        ...payload,
-        items: orderItems.map(item => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice.toFixed(2),
-          totalPrice: item.totalPrice.toFixed(2),
-        })),
-      });
+      createOrderMutation.mutate(payload);
     }
   };
 
@@ -320,10 +425,10 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Customer and Order Type */}
+          {/* Customer, Contact, and Order Type Row */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <Label htmlFor="customer">Customer</Label>
+              <Label htmlFor="customer">Customer *</Label>
               <Popover open={openCustomerCombo} onOpenChange={setOpenCustomerCombo}>
                 <PopoverTrigger asChild>
                   <Button
@@ -366,6 +471,30 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
                 </PopoverContent>
               </Popover>
             </div>
+            
+            <div>
+              <Label htmlFor="contactId">Contact Person</Label>
+              <Select
+                value={formData.contactId}
+                onValueChange={(value) => handleFieldChange("contactId", value)}
+                disabled={!formData.companyId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select contact..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {contacts
+                    .filter((c: any) => c.companyId === formData.companyId)
+                    .map((contact: any) => (
+                      <SelectItem key={contact.id} value={contact.id}>
+                        {contact.firstName} {contact.lastName}
+                        {contact.isPrimary && " (Primary)"}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div>
               <Label htmlFor="orderType">Order Type</Label>
               <Select
@@ -382,49 +511,57 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Sales Rep, Customer PO, Payment Terms Row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <Label htmlFor="supplier">Vendor/Supplier</Label>
-              <Popover open={openSupplierCombo} onOpenChange={setOpenSupplierCombo}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={openSupplierCombo}
-                    className="w-full justify-between"
-                  >
-                    {formData.supplierId
-                      ? suppliers?.find((supplier) => supplier.id === formData.supplierId)?.name
-                      : "Select vendor..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[400px] p-0">
-                  <Command>
-                    <CommandInput placeholder="Search vendor..." />
-                    <CommandEmpty>No vendor found.</CommandEmpty>
-                    <CommandGroup className="max-h-64 overflow-auto">
-                      {suppliers?.map((supplier) => (
-                        <CommandItem
-                          key={supplier.id}
-                          value={supplier.name}
-                          onSelect={() => {
-                            handleFieldChange("supplierId", supplier.id);
-                            setOpenSupplierCombo(false);
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              formData.supplierId === supplier.id ? "opacity-100" : "opacity-0"
-                            )}
-                          />
-                          {supplier.name}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+              <Label htmlFor="assignedUserId">Sales Rep / Owner</Label>
+              <Select
+                value={formData.assignedUserId}
+                onValueChange={(value) => handleFieldChange("assignedUserId", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select sales rep..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map((user: any) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.firstName} {user.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="customerPo">Customer PO#</Label>
+              <Input
+                id="customerPo"
+                placeholder="Customer purchase order number..."
+                value={formData.customerPo}
+                onChange={(e) => handleFieldChange("customerPo", e.target.value)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="paymentTerms">Payment Terms</Label>
+              <Select
+                value={formData.paymentTerms}
+                onValueChange={(value) => handleFieldChange("paymentTerms", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Net 30">Net 30</SelectItem>
+                  <SelectItem value="Net 60">Net 60</SelectItem>
+                  <SelectItem value="Net 90">Net 90</SelectItem>
+                  <SelectItem value="COD">COD (Cash on Delivery)</SelectItem>
+                  <SelectItem value="Due on Receipt">Due on Receipt</SelectItem>
+                  <SelectItem value="Prepaid">Prepaid</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -439,23 +576,43 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
                 className="pr-10"
               />
               {productSearch && filteredProducts.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                  {filteredProducts.slice(0, 10).map((product: any) => (
-                    <button
-                      key={product.id}
-                      type="button"
-                      onClick={() => addProduct(product)}
-                      className="w-full px-4 py-2 text-left hover:bg-gray-100 flex justify-between items-center"
-                    >
-                      <div>
-                        <div className="font-medium">{product.name}</div>
-                        <div className="text-sm text-gray-500">{product.sku || 'No SKU'}</div>
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  {filteredProducts.slice(0, 10).map((product: any) => {
+                    const colorsArray = ensureArray(product.colors);
+                    const sizesArray = ensureArray(product.sizes);
+                    
+                    return (
+                      <div
+                        key={product.id}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          addProduct(product);
+                        }}
+                        className="w-full px-4 py-2 text-left hover:bg-gray-100 flex justify-between items-start border-b last:border-b-0 cursor-pointer"
+                      >
+                        <div className="flex-1">
+                          <div className="font-medium">{product.name}</div>
+                          <div className="text-sm text-gray-500">{product.sku || 'No SKU'}</div>
+                          <div className="text-xs text-gray-400 mt-1 space-x-2">
+                            {colorsArray.length > 0 && (
+                              <span>Colors: {colorsArray.slice(0, 3).join(', ')}{colorsArray.length > 3 ? '...' : ''}</span>
+                            )}
+                            {sizesArray.length > 0 && (
+                              <span>• Sizes: {sizesArray.slice(0, 3).join(', ')}{sizesArray.length > 3 ? '...' : ''}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-swag-primary font-semibold ml-4">
+                          ${parseFloat(product.basePrice || "0").toFixed(2)}
+                        </div>
                       </div>
-                      <div className="text-swag-primary font-semibold">
-                        ${parseFloat(product.basePrice || "0").toFixed(2)}
-                      </div>
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -464,59 +621,194 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
           {/* Order Items Table */}
           {orderItems.length > 0 && (
             <div className="border rounded-lg overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">SKU</th>
-                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
-                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
-                    <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {orderItems.map((item) => (
-                    <tr key={item.id}>
-                      <td className="px-4 py-3 text-sm">{item.productName}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500">{item.sku || '-'}</td>
-                      <td className="px-4 py-3 text-right">
-                        <Input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => updateItemQuantity(item.id, parseInt(e.target.value) || 1)}
-                          className="w-20 text-right"
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={item.unitPrice}
-                          onChange={(e) => updateItemPrice(item.id, parseFloat(e.target.value) || 0)}
-                          className="w-28 text-right"
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium">
-                        ${item.totalPrice.toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeItem(item.id)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          Remove
-                        </Button>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Vendor</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase w-20">Qty</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase w-28">Price</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase w-20">Disc%</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase w-28">Total</th>
+                      <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase w-20">Edit</th>
+                      <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase w-20"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {orderItems.map((item) => {
+                      const itemSupplier = suppliers.find((s: any) => s.id === item.supplierId);
+                      const isEditing = editingItemId === item.id;
+                      
+                      return (
+                        <React.Fragment key={item.id}>
+                          <tr className={isEditing ? "bg-blue-50" : ""}>
+                            <td className="px-3 py-3">
+                              <div className="text-sm font-medium">{item.productName}</div>
+                              <div className="text-xs text-gray-500">{item.sku || '-'}</div>
+                            </td>
+                            <td className="px-3 py-3 text-sm text-gray-600">
+                              {itemSupplier ? itemSupplier.name : 'No vendor'}
+                            </td>
+                            <td className="px-3 py-3 text-right">
+                              <Input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(e) => updateItemQuantity(item.id, parseInt(e.target.value) || 1)}
+                                className="w-20 text-right text-sm h-8"
+                              />
+                            </td>
+                            <td className="px-3 py-3 text-right">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={item.unitPrice}
+                                onChange={(e) => updateItemPrice(item.id, parseFloat(e.target.value) || 0)}
+                                className="w-28 text-right text-sm h-8"
+                              />
+                            </td>
+                            <td className="px-3 py-3 text-right">
+                              <Input
+                                type="number"
+                                step="0.1"
+                                min="0"
+                                max="100"
+                                value={item.discount}
+                                onChange={(e) => updateItemDiscount(item.id, parseFloat(e.target.value) || 0)}
+                                className="w-20 text-right text-sm h-8"
+                              />
+                            </td>
+                            <td className="px-3 py-3 text-right font-medium text-sm">
+                              ${item.totalPrice.toFixed(2)}
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setEditingItemId(isEditing ? null : item.id)}
+                                className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              >
+                                {isEditing ? "Done" : "Details"}
+                              </Button>
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeItem(item.id)}
+                                className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                Remove
+                              </Button>
+                            </td>
+                          </tr>
+                          
+                          {/* Item Details Row (collapsed/expanded) */}
+                          {isEditing && (
+                            <tr className="bg-blue-50">
+                              <td colSpan={8} className="px-3 py-4">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                  <div>
+                                    <Label htmlFor={`color-${item.id}`} className="text-xs">Color</Label>
+                                    {item.availableColors && item.availableColors.length > 0 ? (
+                                      <Select
+                                        value={item.color}
+                                        onValueChange={(value) => updateItemVariant(item.id, "color", value)}
+                                      >
+                                        <SelectTrigger className="h-8 text-sm">
+                                          <SelectValue placeholder="Select color" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {item.availableColors.map((color: string) => (
+                                            <SelectItem key={color} value={color}>
+                                              {color}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    ) : (
+                                      <Input
+                                        id={`color-${item.id}`}
+                                        placeholder="Navy, Red, etc."
+                                        value={item.color}
+                                        onChange={(e) => updateItemVariant(item.id, "color", e.target.value)}
+                                        className="text-sm h-8"
+                                      />
+                                    )}
+                                  </div>
+                                  <div>
+                                    <Label htmlFor={`size-${item.id}`} className="text-xs">Size</Label>
+                                    {item.availableSizes && item.availableSizes.length > 0 ? (
+                                      <Select
+                                        value={item.size}
+                                        onValueChange={(value) => updateItemVariant(item.id, "size", value)}
+                                      >
+                                        <SelectTrigger className="h-8 text-sm">
+                                          <SelectValue placeholder="Select size" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {item.availableSizes.map((size: string) => (
+                                            <SelectItem key={size} value={size}>
+                                              {size}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    ) : (
+                                      <Input
+                                        id={`size-${item.id}`}
+                                        placeholder="S, M, L, XL, etc."
+                                        value={item.size}
+                                        onChange={(e) => updateItemVariant(item.id, "size", e.target.value)}
+                                        className="text-sm h-8"
+                                      />
+                                    )}
+                                  </div>
+                                  <div>
+                                    <Label htmlFor={`imprintLocation-${item.id}`} className="text-xs">Imprint Location</Label>
+                                    <Input
+                                      id={`imprintLocation-${item.id}`}
+                                      placeholder="Front, Back, Left Chest..."
+                                      value={item.imprintLocation}
+                                      onChange={(e) => updateItemVariant(item.id, "imprintLocation", e.target.value)}
+                                      className="text-sm h-8"
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label htmlFor={`imprintMethod-${item.id}`} className="text-xs">Imprint Method</Label>
+                                    <Input
+                                      id={`imprintMethod-${item.id}`}
+                                      placeholder="Screen Print, Embroidery..."
+                                      value={item.imprintMethod}
+                                      onChange={(e) => updateItemVariant(item.id, "imprintMethod", e.target.value)}
+                                      className="text-sm h-8"
+                                    />
+                                  </div>
+                                  <div className="col-span-2 md:col-span-4">
+                                    <Label htmlFor={`notes-${item.id}`} className="text-xs">Item Notes</Label>
+                                    <Textarea
+                                      id={`notes-${item.id}`}
+                                      placeholder="Special instructions for this item..."
+                                      value={item.notes}
+                                      onChange={(e) => updateItemVariant(item.id, "notes", e.target.value)}
+                                      className="text-sm"
+                                      rows={2}
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
               {/* Pricing Summary */}
               <div className="bg-gray-50 px-4 py-4 space-y-3">
@@ -524,35 +816,34 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
                   <span className="text-gray-600">Subtotal:</span>
                   <span className="font-medium">${subtotal.toFixed(2)}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="tax" className="text-xs">Tax Amount</Label>
-                    <Input
-                      id="tax"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.tax}
-                      onChange={(e) => handleFieldChange("tax", e.target.value)}
-                      className="text-right"
-                    />
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label htmlFor="orderDiscount" className="text-xs">Order Discount (%)</Label>
+                    <span className="text-sm text-gray-500">-${orderDiscountAmount.toFixed(2)}</span>
                   </div>
-                  <div>
-                    <Label htmlFor="shipping" className="text-xs">Shipping Amount</Label>
-                    <Input
-                      id="shipping"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.shipping}
-                      onChange={(e) => handleFieldChange("shipping", e.target.value)}
-                      className="text-right"
-                    />
-                  </div>
+                  <Input
+                    id="orderDiscount"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    value={formData.orderDiscount}
+                    onChange={(e) => handleFieldChange("orderDiscount", e.target.value)}
+                    className="text-right h-8"
+                  />
                 </div>
                 <div className="flex justify-between text-lg font-bold border-t pt-3">
                   <span>Total:</span>
                   <span className="text-swag-primary">${total.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-gray-600 pt-2 border-t">
+                  <span>Estimated Margin:</span>
+                  <span className={cn(
+                    "font-semibold",
+                    marginPercent >= 30 ? "text-green-600" : marginPercent >= 20 ? "text-yellow-600" : "text-red-600"
+                  )}>
+                    {marginPercent.toFixed(1)}%
+                  </span>
                 </div>
               </div>
             </div>
@@ -560,7 +851,7 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
 
 
 
-          {/* Order Details */}
+          {/* Dates Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <Label htmlFor="inHandsDate">In-Hands Date</Label>
@@ -581,67 +872,13 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
               />
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <Label htmlFor="shippingMethod">Shipping Method</Label>
-              <Select
-                value={formData.shippingMethod}
-                onValueChange={(value) => handleFieldChange("shippingMethod", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select shipping method..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="UPS">UPS</SelectItem>
-                  <SelectItem value="FedEx">FedEx</SelectItem>
-                  <SelectItem value="USPS">USPS</SelectItem>
-                  <SelectItem value="DHL">DHL</SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="trackingNumber">Tracking Number</Label>
-              <Input
-                id="trackingNumber"
-                type="text"
-                placeholder="Enter tracking number..."
-                value={formData.trackingNumber}
-                onChange={(e) => handleFieldChange("trackingNumber", e.target.value)}
-              />
-            </div>
-            </div>
-
-          {/* Addresses */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <Label htmlFor="shippingAddress">Shipping Address</Label>
-              <Textarea
-                id="shippingAddress"
-                placeholder="Enter shipping address..."
-                value={formData.shippingAddress}
-                onChange={(e) => handleFieldChange("shippingAddress", e.target.value)}
-                rows={3}
-              />
-            </div>
-            <div>
-              <Label htmlFor="billingAddress">Billing Address</Label>
-              <Textarea
-                id="billingAddress"
-                placeholder="Enter billing address..."
-                value={formData.billingAddress}
-                onChange={(e) => handleFieldChange("billingAddress", e.target.value)}
-                rows={3}
-              />
-            </div>
-          </div>
 
           {/* Notes */}
           <div>
-            <Label htmlFor="notes">Notes</Label>
+            <Label htmlFor="notes">Order Notes</Label>
             <Textarea
               id="notes"
-              placeholder="Additional order information..."
+              placeholder="Additional order information, special instructions..."
               value={formData.notes}
               onChange={(e) => handleFieldChange("notes", e.target.value)}
               rows={3}

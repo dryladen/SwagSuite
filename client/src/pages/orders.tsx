@@ -2,8 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useLocation } from "wouter";
 
-import { OrderDetailsModal } from "@/components/OrderDetailsModal";
 import OrderModal from "@/components/OrderModal";
+import OrderDetailsModal from "@/components/OrderDetailsModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Order } from "@shared/schema";
@@ -13,7 +13,8 @@ import { DataTable } from "./orders/data-table";
 
 export default function Orders() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [, setLocation] = useLocation();
 
   const { data: orders = [], isLoading } = useQuery<Order[]>({
@@ -24,26 +25,15 @@ export default function Orders() {
     queryKey: ["/api/companies"],
   });
 
-  const { data: suppliers = [] } = useQuery<any[]>({
-    queryKey: ["/api/suppliers"],
-  });
-
   const getCompanyName = (companyId: string) => {
     const company = companies?.find((c: any) => c.id === companyId);
     return company?.name || "Unknown Company";
-  };
-
-  const getSupplierName = (supplierId: string | undefined) => {
-    if (!supplierId) return undefined;
-    const supplier = suppliers?.find((s: any) => s.id === supplierId);
-    return supplier?.name || "Unknown Vendor";
   };
 
   // Prepare data with relations for the table
   const ordersWithRelations: OrderWithRelations[] = orders.map((order) => ({
     ...order,
     companyName: getCompanyName(order.companyId!),
-    supplierName: getSupplierName((order as any).supplierId),
   }));
 
   return (
@@ -155,7 +145,10 @@ export default function Orders() {
           columns={columns}
           data={ordersWithRelations}
           meta={{
-            onViewOrder: (order: Order) => setSelectedOrder(order),
+            onViewOrder: (order: Order) => {
+              setSelectedOrderId(order.id);
+              setIsDetailsModalOpen(true);
+            },
             onViewProject: (orderId: string) => setLocation(`/project/${orderId}`),
           }}
         />
@@ -166,12 +159,10 @@ export default function Orders() {
         open={isCreateModalOpen}
         onOpenChange={setIsCreateModalOpen}
       />
-
       <OrderDetailsModal
-        open={!!selectedOrder}
-        onOpenChange={(open) => !open && setSelectedOrder(null)}
-        order={selectedOrder}
-        companyName={selectedOrder ? getCompanyName(selectedOrder.companyId!) : ""}
+        open={isDetailsModalOpen}
+        onOpenChange={setIsDetailsModalOpen}
+        orderId={selectedOrderId}
       />
     </div>
   );

@@ -60,6 +60,11 @@ interface SageProduct {
   imageUrl?: string;
   brand?: string;
   category?: string;
+  supplierName?: string;
+  supplierId?: string;
+  asiNumber?: string;
+  colors?: string[];
+  sizes?: string[];
 }
 
 export default function ProductModal({ open, onOpenChange, product }: ProductModalProps) {
@@ -84,6 +89,13 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
   const [sageSearchResults, setSageSearchResults] = useState<SageProduct[]>([]);
   const [selectedProductImage, setSelectedProductImage] = useState<string>("");
   const [dataSource, setDataSource] = useState<"manual" | "ss-activewear" | "sage">("manual");
+  const [isCreatingSupplier, setIsCreatingSupplier] = useState(false);
+  const [newSupplierData, setNewSupplierData] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    website: "",
+  });
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -130,8 +142,8 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
         description: product.description || "",
         price: product.basePrice?.toString() || "",
         supplierId: product.supplierId || "",
-        category: "",
-        brand: "",
+        category: product.category || "",
+        brand: product.brand || "",
         style: "",
         color: colorsString,
         size: sizesString,
@@ -274,6 +286,10 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
         imageUrl: p.imageGallery?.[0] || p.thumbPic,
         brand: p.supplierName || p.brand,
         category: p.category,
+        supplierName: p.supplierName || '',
+        supplierId: p.supplierId || '',
+        asiNumber: p.asiNumber || '',
+        colors: p.colors || [],
       })) as SageProduct[];
     },
     onSuccess: (products) => {
@@ -335,6 +351,41 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
       toast({
         title: "Product Not Found",
         description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const createSupplierMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await apiRequest("POST", "/api/suppliers", data);
+      return response.json();
+    },
+    onSuccess: (newSupplier) => {
+      toast({
+        title: "Success",
+        description: `Supplier "${newSupplier.name}" created successfully`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
+      setFormData({ ...formData, supplierId: newSupplier.id });
+      setIsCreatingSupplier(false);
+      setNewSupplierData({ name: "", email: "", phone: "", website: "" });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Error",
+        description: "Failed to create supplier",
         variant: "destructive",
       });
     },
@@ -434,67 +485,202 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
   };
 
   const selectProduct = (product: SsActivewearProduct) => {
-    const ssSupplier = suppliers.find(s => s.name.toLowerCase().includes("s&s activewear") || s.name.toLowerCase().includes("ss activewear"));
+    let ssSupplier = suppliers.find(s => 
+      s.name.toLowerCase().includes("s&s activewear") || 
+      s.name.toLowerCase().includes("ss activewear")
+    );
+
+    if (!ssSupplier) {
+      toast({
+        title: "Supplier Not Found",
+        description: "S&S Activewear supplier not found. Creating one...",
+      });
+      
+      createSupplierMutation.mutate({
+        name: "S&S Activewear",
+        website: "https://www.ssactivewear.com",
+        email: "support@ssactivewear.com",
+        phone: "(800) 523-2155",
+      }, {
+        onSuccess: (newSupplier) => {
+          setFormData({
+            sku: product.sku,
+            name: `${product.brandName} ${product.styleName} - ${product.colorName}`,
+            description: `${product.brandName} ${product.styleName} in ${product.colorName}, Size: ${product.sizeName}`,
+            price: product.piecePrice?.toString() || "",
+            supplierId: newSupplier.id,
+            category: "",
+            brand: product.brandName,
+            style: product.styleName,
+            color: product.colorName,
+            size: product.sizeName,
+          });
+          setSelectedProductImage(product.colorFrontImage || "");
+          setSearchResults([]);
+          setSearchQuery("");
+          setDataSource("ss-activewear");
+          setActiveTab("manual");
+          toast({
+            title: "Product Imported from S&S Activewear",
+            description: `${product.brandName} ${product.styleName} - Supplier "S&S Activewear" created. All fields auto-filled.`,
+          });
+        }
+      });
+      return;
+    }
 
     setFormData({
       sku: product.sku,
       name: `${product.brandName} ${product.styleName} - ${product.colorName}`,
       description: `${product.brandName} ${product.styleName} in ${product.colorName}, Size: ${product.sizeName}`,
       price: product.piecePrice?.toString() || "",
-      supplierId: ssSupplier ? ssSupplier.id : "",
+      supplierId: ssSupplier.id,
       category: "",
       brand: product.brandName,
       style: product.styleName,
       color: product.colorName,
-      size: product.sizeName || "",
+      size: product.sizeName,
     });
     setSelectedProductImage(product.colorFrontImage || "");
     setSearchResults([]);
     setSearchQuery("");
     setDataSource("ss-activewear");
     setActiveTab("manual");
+    
     toast({
-      title: "Product Imported",
-      description: `Imported ${product.brandName} ${product.styleName} from S&S Activewear`,
+      title: "Product Imported from S&S Activewear",
+      description: `${product.brandName} ${product.styleName} - All fields auto-filled`,
     });
   };
 
   const selectSageProduct = (product: SageProduct) => {
-    const sageSupplier = suppliers.find(s => s.name.toLowerCase().includes("sage"));
+    // Try to find existing supplier by name or SAGE ID
+    let sageSupplier = suppliers.find(s => 
+      product.supplierName && s.name.toLowerCase() === product.supplierName.toLowerCase()
+    );
+
+    // If specific supplier not found, look for a generic SAGE supplier
+    if (!sageSupplier && !product.supplierName) {
+      sageSupplier = suppliers.find(s => s.name.toLowerCase().includes("sage"));
+    }
+
+    if (!sageSupplier && product.supplierName) {
+      // Create supplier with actual supplier info from SAGE
+      toast({
+        title: "Creating Supplier",
+        description: `Creating supplier: ${product.supplierName}`,
+      });
+      
+      createSupplierMutation.mutate({
+        name: product.supplierName,
+        website: "https://www.sageworld.com",
+        email: "",
+        // Store SAGE-specific info in notes or custom field if available
+      }, {
+        onSuccess: (newSupplier) => {
+          setFormData({
+            sku: product.sku,
+            name: product.name,
+            description: product.description || "",
+            price: product.price?.toString() || "",
+            supplierId: newSupplier.id,
+            category: product.category || "",
+            brand: product.brand || product.supplierName || "",
+            style: "",
+            color: product.colors?.join(", ") || "",
+            size: product.sizes?.join(", ") || "",
+          });
+          setSelectedProductImage(product.imageUrl || "");
+          setSageSearchResults([]);
+          setSageSearchQuery("");
+          setDataSource("sage");
+          setActiveTab("manual");
+          toast({
+            title: "Product Imported",
+            description: `Imported from SAGE - Supplier "${newSupplier.name}" created. All fields auto-filled.`,
+          });
+        }
+      });
+      return;
+    } else if (!sageSupplier) {
+      // No supplier name from SAGE, create generic SAGE supplier
+      toast({
+        title: "Creating Supplier",
+        description: "Creating generic SAGE supplier",
+      });
+      
+      createSupplierMutation.mutate({
+        name: "SAGE",
+        website: "https://www.sageworld.com",
+        email: "support@sageworld.com",
+      }, {
+        onSuccess: (newSupplier) => {
+          setFormData({
+            sku: product.sku,
+            name: product.name,
+            description: product.description || "",
+            price: product.price?.toString() || "",
+            supplierId: newSupplier.id,
+            category: product.category || "",
+            brand: product.brand || "",
+            style: "",
+            color: product.colors?.join(", ") || "",
+            size: product.sizes?.join(", ") || "",
+          });
+          setSelectedProductImage(product.imageUrl || "");
+          setSageSearchResults([]);
+          setSageSearchQuery("");
+          setDataSource("sage");
+          setActiveTab("manual");
+          toast({
+            title: "Product Imported",
+            description: `Imported from SAGE with new supplier. All fields auto-filled.`,
+          });
+        }
+      });
+      return;
+    }
 
     setFormData({
       sku: product.sku,
       name: product.name,
       description: product.description || "",
       price: product.price?.toString() || "",
-      supplierId: sageSupplier ? sageSupplier.id : "",
+      supplierId: sageSupplier.id,
       category: product.category || "",
-      brand: product.brand || "",
+      brand: product.brand || product.supplierName || "",
       style: "",
-      color: "",
-      size: "",
+      color: product.colors?.join(", ") || "",
+      size: product.sizes?.join(", ") || "",
     });
     setSelectedProductImage(product.imageUrl || "");
     setSageSearchResults([]);
     setSageSearchQuery("");
     setDataSource("sage");
     setActiveTab("manual");
+    
     toast({
-      title: "Product Imported",
-      description: `Imported ${product.name} from SAGE`,
+      title: "Product Imported from SAGE",
+      description: `${product.name} - All fields auto-filled`,
     });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Check if any suppliers exist, if not, we might need to handle it
-    const finalSupplierId = formData.supplierId || (suppliers.length > 0 ? suppliers[0].id : null);
-
-    if (!formData.name || !formData.sku || !finalSupplierId) {
+    if (!formData.name || !formData.sku) {
       toast({
         title: "Missing Information",
-        description: "Please search for a product first or enter details manually. Make sure a name, SKU, and supplier are provided.",
+        description: "Product name and SKU are required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.supplierId) {
+      toast({
+        title: "Supplier Required",
+        description: "Please select a supplier or create a new one",
         variant: "destructive",
       });
       return;
@@ -509,7 +695,9 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
       name: formData.name,
       description: formData.description,
       basePrice: (parseFloat(formData.price) || 0).toString(),
-      supplierId: finalSupplierId,
+      supplierId: formData.supplierId,
+      brand: formData.brand || null,
+      category: formData.category || null,
       colors: colorsArray.length > 0 ? colorsArray : null,
       sizes: sizesArray.length > 0 ? sizesArray : null,
       imageUrl: selectedProductImage || undefined,
@@ -758,7 +946,7 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
                                       {product.description}
                                     </div>
                                   )}
-                                  <div className="flex items-center gap-2 mt-1">
+                                  <div className="flex flex-wrap items-center gap-2 mt-1">
                                     <Badge variant="outline" className="text-xs">
                                       SKU: {product.sku}
                                     </Badge>
@@ -772,7 +960,50 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
                                         {product.brand}
                                       </Badge>
                                     )}
+                                    {product.category && (
+                                      <Badge variant="outline" className="text-xs">
+                                        {product.category}
+                                      </Badge>
+                                    )}
                                   </div>
+                                  {/* Colors display */}
+                                  {product.colors && product.colors.length > 0 && (
+                                    <div className="flex flex-wrap items-center gap-1 mt-2">
+                                      <span className="text-xs text-muted-foreground font-medium">Colors:</span>
+                                      {product.colors.slice(0, 5).map((color, idx) => (
+                                        <Badge key={idx} variant="secondary" className="text-xs">
+                                          {color}
+                                        </Badge>
+                                      ))}
+                                      {product.colors.length > 5 && (
+                                        <span className="text-xs text-muted-foreground">
+                                          +{product.colors.length - 5} more
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {/* Supplier Information */}
+                                  {(product.supplierName || product.asiNumber) && (
+                                    <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t">
+                                      {product.supplierName && (
+                                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                          <Package className="h-3 w-3" />
+                                          <span className="font-medium">Supplier:</span>
+                                          <span>{product.supplierName}</span>
+                                        </div>
+                                      )}
+                                      {product.asiNumber && (
+                                        <Badge variant="outline" className="text-xs">
+                                          ASI: {product.asiNumber}
+                                        </Badge>
+                                      )}
+                                      {product.supplierId && (
+                                        <Badge variant="outline" className="text-xs">
+                                          ID: {product.supplierId}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                                 <Button size="sm" variant="default">
                                   <CheckCircle2 className="h-4 w-4 mr-1" />
@@ -923,22 +1154,36 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
             </div>
 
             <div>
-              <Label htmlFor="supplier">Supplier</Label>
-              <Select
-                value={formData.supplierId}
-                onValueChange={(value) => setFormData({ ...formData, supplierId: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select supplier" />
-                </SelectTrigger>
-                <SelectContent>
-                  {suppliers.map((supplier) => (
-                    <SelectItem key={supplier.id} value={supplier.id}>
-                      {supplier.name}
+              <Label htmlFor="supplier">Supplier *</Label>
+              <div className="flex gap-2">
+                <Select
+                  value={formData.supplierId}
+                  onValueChange={(value) => {
+                    if (value === "create-new") {
+                      setIsCreatingSupplier(true);
+                    } else {
+                      setFormData({ ...formData, supplierId: value });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select supplier (required)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="create-new" className="text-swag-primary font-medium">
+                      + Create New Supplier
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    {suppliers.map((supplier) => (
+                      <SelectItem key={supplier.id} value={supplier.id}>
+                        {supplier.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {!formData.supplierId && (
+                <p className="text-xs text-red-500 mt-1">Supplier is required</p>
+              )}
             </div>
           </div>
 
@@ -980,6 +1225,96 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
           </div>
         </form>
       </DialogContent>
+
+      {/* Create New Supplier Dialog */}
+      <Dialog open={isCreatingSupplier} onOpenChange={setIsCreatingSupplier}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create New Supplier</DialogTitle>
+            <DialogDescription>
+              Add a new supplier to your database
+            </DialogDescription>
+          </DialogHeader>
+          
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            if (!newSupplierData.name) {
+              toast({
+                title: "Validation Error",
+                description: "Supplier name is required",
+                variant: "destructive",
+              });
+              return;
+            }
+            createSupplierMutation.mutate(newSupplierData);
+          }} className="space-y-4">
+            <div>
+              <Label htmlFor="newSupplierName">Supplier Name *</Label>
+              <Input
+                id="newSupplierName"
+                value={newSupplierData.name}
+                onChange={(e) => setNewSupplierData({ ...newSupplierData, name: e.target.value })}
+                placeholder="Enter supplier name..."
+                required
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="newSupplierEmail">Email</Label>
+              <Input
+                id="newSupplierEmail"
+                type="email"
+                value={newSupplierData.email}
+                onChange={(e) => setNewSupplierData({ ...newSupplierData, email: e.target.value })}
+                placeholder="supplier@example.com"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="newSupplierPhone">Phone</Label>
+              <Input
+                id="newSupplierPhone"
+                value={newSupplierData.phone}
+                onChange={(e) => setNewSupplierData({ ...newSupplierData, phone: e.target.value })}
+                placeholder="(555) 123-4567"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="newSupplierWebsite">Website</Label>
+              <Input
+                id="newSupplierWebsite"
+                value={newSupplierData.website}
+                onChange={(e) => setNewSupplierData({ ...newSupplierData, website: e.target.value })}
+                placeholder="https://supplier.com"
+              />
+            </div>
+            
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsCreatingSupplier(false);
+                  setNewSupplierData({ name: "", email: "", phone: "", website: "" });
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createSupplierMutation.isPending}>
+                {createSupplierMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  "Create Supplier"
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

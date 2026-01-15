@@ -7,9 +7,8 @@ import { Button } from "@/components/ui/button";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
-import { OrderDetailsModal } from "./OrderDetailsModal";
 import { ProductDetailModal } from "./ProductDetailModal";
-import type { Order, Company } from "@shared/schema";
+import OrderDetailsModal from "./OrderDetailsModal";
 
 interface SearchResult {
   id: string;
@@ -53,16 +52,10 @@ export default function GlobalSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
   
   // Modal states
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
-  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-
-  // Fetch order details when selected
-  const { data: selectedOrder } = useQuery<Order>({
-    queryKey: [`/api/orders/${selectedOrderId}`],
-    enabled: !!selectedOrderId && isOrderModalOpen,
-  });
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
 
   // Fetch all products and find selected one
   const { data: allProducts = [] } = useQuery<any[]>({
@@ -73,11 +66,6 @@ export default function GlobalSearch() {
   const selectedProduct = selectedProductId 
     ? allProducts.find(p => p.id === selectedProductId) 
     : null;
-
-  // Fetch companies for OrderDetailsModal
-  const { data: companies = [] } = useQuery<Company[]>({
-    queryKey: ["/api/companies"],
-  });
 
   // Fetch suppliers for ProductDetailModal
   const { data: suppliers = [] } = useQuery<any[]>({
@@ -263,21 +251,6 @@ export default function GlobalSearch() {
         </Card>
       )}
 
-      {/* Order Details Modal */}
-      <OrderDetailsModal
-        open={isOrderModalOpen && !!selectedOrder}
-        onOpenChange={(open: boolean) => {
-          setIsOrderModalOpen(open);
-          if (!open) {
-            setSelectedOrderId(null);
-          }
-        }}
-        order={(selectedOrder ?? null) as Order | null}
-        companyName={
-          selectedOrder && companies.find((c) => c.id === selectedOrder.companyId)?.name || "Unknown Company"
-        }
-      />
-
       {/* Product Details Modal */}
       <ProductDetailModal
         open={isProductModalOpen && !!selectedProduct}
@@ -291,6 +264,18 @@ export default function GlobalSearch() {
         supplierName={
           selectedProduct && suppliers.find((s) => s.id === selectedProduct.supplierId)?.name || "Unknown Supplier"
         }
+      />
+
+      {/* Order Details Modal */}
+      <OrderDetailsModal
+        open={isOrderModalOpen}
+        onOpenChange={(open: boolean) => {
+          setIsOrderModalOpen(open);
+          if (!open) {
+            setSelectedOrderId(null);
+          }
+        }}
+        orderId={selectedOrderId}
       />
     </div>
   );

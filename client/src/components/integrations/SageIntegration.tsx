@@ -20,6 +20,7 @@ interface SageProduct {
   category: string;
   subcategory?: string;
   description: string;
+  colors?: string[];
   eqpLevel?: string;
   pricingStructure?: any;
   quantityBreaks?: any[];
@@ -81,7 +82,7 @@ function SageIntegrationComponent() {
         const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
         throw new Error(errorData.message || "Failed to search SAGE products");
       }
-      
+      console.log('SAGE search response:', response);
       return await response.json();
     },
     onSuccess: (products: SageProduct[]) => {
@@ -285,6 +286,25 @@ function SageIntegrationComponent() {
                             <p className="text-sm text-gray-700 line-clamp-2 pl-1">
                               {product.description}
                             </p>
+                          )}
+
+                          {/* Colors */}
+                          {product.colors && product.colors.length > 0 && (
+                            <div className="text-sm pl-1">
+                              <span className="font-medium text-gray-700">Colors:</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {product.colors.slice(0, 8).map((color, idx) => (
+                                  <Badge key={idx} variant="secondary" className="text-xs">
+                                    {color}
+                                  </Badge>
+                                ))}
+                                {product.colors.length > 8 && (
+                                  <span className="text-xs text-gray-500 self-center">
+                                    +{product.colors.length - 8} more
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           )}
 
                           <div className="flex flex-wrap gap-2 pl-1">

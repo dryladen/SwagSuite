@@ -149,19 +149,22 @@ async function updateCompanyYtdSpending(companyId: string) {
 async function updateSupplierYtdSpending(supplierId: string) {
   try {
     const { db } = await import("./db");
-    const { suppliers, orders } = await import("@shared/schema");
+    const { suppliers, orders, orderItems } = await import("@shared/schema");
     const { eq, and, gte, sql } = await import("drizzle-orm");
 
     const currentYear = new Date().getFullYear();
     const yearStart = new Date(currentYear, 0, 1);
 
-    // Calculate YTD spend from orders
+    // Calculate YTD spend from order items (vendors are now at item level)
     const [ytdResult] = await db
-      .select({ total: sql<string>`COALESCE(SUM(${orders.total}), 0)` })
-      .from(orders)
+      .select({ 
+        total: sql<string>`COALESCE(SUM(${orderItems.quantity} * ${orderItems.unitPrice}), 0)` 
+      })
+      .from(orderItems)
+      .innerJoin(orders, eq(orderItems.orderId, orders.id))
       .where(
         and(
-          eq(orders.supplierId, supplierId),
+          eq(orderItems.supplierId, supplierId),
           gte(orders.createdAt, yearStart)
         )
       );
@@ -950,7 +953,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/suppliers', isAuthenticated, async (req, res) => {
     try {
       const { db } = await import("./db");
-      const { suppliers, orders, products } = await import("@shared/schema");
+      const { suppliers, orders, products, orderItems } = await import("@shared/schema");
       const { eq, and, gte, sql } = await import("drizzle-orm");
       
       // Get all suppliers
@@ -962,13 +965,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const suppliersWithData = await Promise.all(
         allSuppliers.map(async (supplier) => {
-          // Calculate YTD spend from orders where this supplier is referenced
+          // Calculate YTD spend from order items (vendors are now at item level)
           const [ytdResult] = await db
-            .select({ total: sql<string>`COALESCE(SUM(${orders.total}), 0)` })
-            .from(orders)
+            .select({ 
+              total: sql<string>`COALESCE(SUM(${orderItems.quantity} * ${orderItems.unitPrice}), 0)` 
+            })
+            .from(orderItems)
+            .innerJoin(orders, eq(orderItems.orderId, orders.id))
             .where(
               and(
-                eq(orders.supplierId, supplier.id),
+                eq(orderItems.supplierId, supplier.id),
                 gte(orders.createdAt, yearStart)
               )
             );
@@ -1102,50 +1108,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Normalize colors and sizes before validation
       const productData = { ...req.body };
       
-      // Normalize colors
+      // Normalize colors to array
       if (productData.colors !== undefined) {
         if (Array.isArray(productData.colors)) {
-          // Already an array, just filter and stringify
+          // Already an array, just filter
           const filtered = productData.colors.filter((c: any) => c && typeof c === 'string').map((c: string) => c.trim());
-          productData.colors = filtered.length > 0 ? JSON.stringify(filtered) : null;
+          productData.colors = filtered.length > 0 ? filtered : null;
         } else if (typeof productData.colors === 'string') {
           try {
             // Try to parse as JSON first
             const parsed = JSON.parse(productData.colors);
             if (Array.isArray(parsed)) {
               const filtered = parsed.filter((c: any) => c && typeof c === 'string').map((c: string) => c.trim());
-              productData.colors = filtered.length > 0 ? JSON.stringify(filtered) : null;
+              productData.colors = filtered.length > 0 ? filtered : null;
             } else {
               productData.colors = null;
             }
           } catch (e) {
             const trimmed = productData.colors.trim();
-            productData.colors = trimmed ? JSON.stringify([trimmed]) : null;
+            productData.colors = trimmed ? [trimmed] : null;
           }
         } else {
           productData.colors = null;
         }
       }
       
-      // Normalize sizes
+      // Normalize sizes to array
       if (productData.sizes !== undefined) {
         if (Array.isArray(productData.sizes)) {
-          // Already an array, just filter and stringify
+          // Already an array, just filter
           const filtered = productData.sizes.filter((s: any) => s && typeof s === 'string').map((s: string) => s.trim());
-          productData.sizes = filtered.length > 0 ? JSON.stringify(filtered) : null;
+          productData.sizes = filtered.length > 0 ? filtered : null;
         } else if (typeof productData.sizes === 'string') {
           try {
             // Try to parse as JSON first
             const parsed = JSON.parse(productData.sizes);
             if (Array.isArray(parsed)) {
               const filtered = parsed.filter((s: any) => s && typeof s === 'string').map((s: string) => s.trim());
-              productData.sizes = filtered.length > 0 ? JSON.stringify(filtered) : null;
+              productData.sizes = filtered.length > 0 ? filtered : null;
             } else {
               productData.sizes = null;
             }
           } catch (e) {
             const trimmed = productData.sizes.trim();
-            productData.sizes = trimmed ? JSON.stringify([trimmed]) : null;
+            productData.sizes = trimmed ? [trimmed] : null;
           }
         } else {
           productData.sizes = null;
@@ -1157,8 +1163,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const product = await storage.createProduct(validatedData);
       res.status(201).json(product);
     } catch (error) {
-      console.error("Error creating product:", error);
-      res.status(500).json({ message: "Failed to create product" });
+      console.error("Error creating product:", error instanceof Error ? error.message : String(error));
+      if (error instanceof Error) {
+        res.status(500).json({ message: "Failed to create product", error: error.message });
+      } else {
+        res.status(500).json({ message: "Failed to create product" });
+      }
+    }
+  });
+
+  app.get('/api/products/:id', isAuthenticated, async (req, res) => {
+    try {
+      const product = await storage.getProduct(req.params.id);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      res.json(product);
+    } catch (error) {
+      console.error("Error fetching product:", error);
+      res.status(500).json({ message: "Failed to fetch product" });
     }
   });
 
@@ -1166,55 +1189,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log('Updating product:', req.params.id, 'with data:', req.body);
       
-      // Normalize colors and sizes - ensure they are stored as JSON strings
+      // Normalize colors and sizes to arrays
       const updateData = { ...req.body };
       
-      // Normalize colors
+      // Normalize colors to array
       if (updateData.colors !== undefined) {
         if (Array.isArray(updateData.colors)) {
-          // Already an array, just filter and stringify
+          // Already an array, just filter
           const filteredColors: string[] = updateData.colors.filter((c: any): c is string => c && typeof c === 'string').map((c: string) => c.trim());
-          updateData.colors = filteredColors.length > 0 ? JSON.stringify(filteredColors) : null;
+          updateData.colors = filteredColors.length > 0 ? filteredColors : null;
         } else if (typeof updateData.colors === 'string') {
           try {
             // Try to parse as JSON first
             const parsed = JSON.parse(updateData.colors);
             if (Array.isArray(parsed)) {
               const filteredColors = parsed.filter((c: any) => c && typeof c === 'string').map((c: string) => c.trim());
-              updateData.colors = filteredColors.length > 0 ? JSON.stringify(filteredColors) : null;
+              updateData.colors = filteredColors.length > 0 ? filteredColors : null;
             } else {
               updateData.colors = null;
             }
           } catch (e) {
             // Not valid JSON, treat as single color
             const trimmed = updateData.colors.trim();
-            updateData.colors = trimmed ? JSON.stringify([trimmed]) : null;
+            updateData.colors = trimmed ? [trimmed] : null;
           }
         } else {
           updateData.colors = null;
         }
       }
       
-      // Normalize sizes
+      // Normalize sizes to array
       if (updateData.sizes !== undefined) {
         if (Array.isArray(updateData.sizes)) {
-          // Already an array, just filter and stringify
+          // Already an array, just filter
           const filteredSizes: string[] = updateData.sizes.filter((s: any): s is string => s && typeof s === 'string').map((s: string) => s.trim());
-          updateData.sizes = filteredSizes.length > 0 ? JSON.stringify(filteredSizes) : null;
+          updateData.sizes = filteredSizes.length > 0 ? filteredSizes : null;
         } else if (typeof updateData.sizes === 'string') {
           try {
             // Try to parse as JSON first
             const parsed = JSON.parse(updateData.sizes);
             if (Array.isArray(parsed)) {
               const filtered = parsed.filter(s => s && typeof s === 'string').map(s => s.trim());
-              updateData.sizes = filtered.length > 0 ? JSON.stringify(filtered) : null;
+              updateData.sizes = filtered.length > 0 ? filtered : null;
             } else {
               updateData.sizes = null;
             }
           } catch (e) {
             // Not valid JSON, treat as single size
             const trimmed = updateData.sizes.trim();
-            updateData.sizes = trimmed ? JSON.stringify([trimmed]) : null;
+            updateData.sizes = trimmed ? [trimmed] : null;
           }
         } else {
           updateData.sizes = null;
@@ -1514,7 +1537,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const dataToValidate = {
         ...orderData,
-        assignedUserId: (req.user as any)?.claims?.sub,
+        // Only set assignedUserId to current user if not provided from frontend
+        assignedUserId: orderData.assignedUserId || (req.user as any)?.claims?.sub,
       };
 
       // Manually convert date strings to Date objects for validation
@@ -5549,6 +5573,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Products array is required" });
       }
 
+      // Find or create S&S Activewear supplier
+      let ssSupplier = await storage.getSupplierByName("S&S Activewear");
+      
+      if (!ssSupplier) {
+        // Also try alternate name
+        ssSupplier = await storage.getSupplierByName("SS Activewear");
+      }
+
+      if (!ssSupplier) {
+        // Create the supplier if it doesn't exist
+        ssSupplier = await storage.createSupplier({
+          name: "S&S Activewear",
+          website: "https://www.ssactivewear.com",
+          email: "support@ssactivewear.com",
+          phone: "(800) 523-2155",
+        });
+      }
+
       let successCount = 0;
       const errors = [];
 
@@ -5573,20 +5615,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             description: descriptionParts.join(' | '),
             sku: ssProduct.sku,
             supplierSku: ssProduct.sku,
+            supplierId: ssSupplier.id,
             basePrice: ssProduct.customerPrice?.toString() || ssProduct.piecePrice?.toString() || '0',
             minimumQuantity: ssProduct.caseQty || 1,
-            colors: JSON.stringify([{
-              name: ssProduct.colorName,
-              code: ssProduct.colorCode,
-              hex: ssProduct.color1,
-              family: ssProduct.colorFamily,
-              group: ssProduct.colorGroupName
-            }]),
-            sizes: JSON.stringify([{
-              name: ssProduct.sizeName,
-              code: ssProduct.sizeCode,
-              order: ssProduct.sizeOrder
-            }]),
+            brand: ssProduct.brandName,
+            category: 'Apparel',
+            colors: [ssProduct.colorName], // Store as string array
+            sizes: [ssProduct.sizeName], // Store as string array
             imprintMethods: null, // S&S API doesn't provide this
             leadTime: null, // S&S API doesn't provide this directly
             imageUrl: ssProduct.colorFrontImage 
@@ -6209,13 +6244,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subject,
         body,
         metadata,
+        attachmentIds,
       } = req.body;
       
       // Import dependencies
       const { db } = await import("./db");
       const { users } = await import("@shared/schema");
-      const { communications, insertCommunicationSchema } = await import("@shared/project-schema");
-      const { eq } = await import("drizzle-orm");
+      const { communications, insertCommunicationSchema, attachments } = await import("@shared/project-schema");
+      const { eq, inArray } = await import("drizzle-orm");
       const { emailService } = await import("./emailService");
 
       // Get current user ID (in production, this should come from req.user)
@@ -6239,6 +6275,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .values(validatedData)
         .returning();
 
+      // Link attachments to this communication if any were provided
+      if (attachmentIds && attachmentIds.length > 0) {
+        await db
+          .update(attachments)
+          .set({ communicationId: newCommunication.id })
+          .where(inArray(attachments.id, attachmentIds));
+      }
+
+      // Fetch attachment metadata for email sending
+      let emailAttachments: Array<{storagePath: string; originalFilename: string; mimeType: string}> = [];
+      if (attachmentIds && attachmentIds.length > 0) {
+        const attachmentRecords = await db
+          .select()
+          .from(attachments)
+          .where(inArray(attachments.id, attachmentIds));
+        
+        emailAttachments = attachmentRecords.map(att => ({
+          storagePath: att.storagePath,
+          originalFilename: att.originalFilename,
+          mimeType: att.mimeType,
+        }));
+      }
+
       // Actually send the email if direction is 'sent'
       if (direction === 'sent') {
         console.log('📧 Attempting to send email...');
@@ -6246,6 +6305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('  From:', fromEmail, fromName ? `(${fromName})` : '');
         console.log('  To:', recipientEmail);
         console.log('  Subject:', subject);
+        console.log('  Attachments:', emailAttachments.length);
         
         try {
           const order = await storage.getOrder(orderId);
@@ -6262,6 +6322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               body,
               orderNumber: order?.orderNumber,
               companyName: company?.name,
+              attachments: emailAttachments,
             });
             console.log('✅ Client email sent successfully!');
           } else if (communicationType === 'vendor_email') {
@@ -6274,6 +6335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               body,
               orderNumber: order?.orderNumber,
               supplierName: supplier?.name,
+              attachments: emailAttachments,
             });
             console.log('✅ Vendor email sent successfully!');
           }
@@ -6584,6 +6646,491 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false, 
         message: error.message || 'Failed to test email connection'
       });
+    }
+  });
+
+  // Attachment API Endpoints
+  // Upload attachments to order
+  app.post("/api/orders/:orderId/attachments", 
+    isAuthenticated, 
+    upload.array('files', 10), 
+    async (req, res) => {
+      try {
+        const { orderId } = req.params;
+        const files = req.files as Express.Multer.File[];
+        const { category = 'attachment' } = req.body;
+        const userId = req.user?.claims?.sub;
+        
+        if (!files || files.length === 0) {
+          return res.status(400).json({ message: 'No files uploaded' });
+        }
+
+        const { db } = await import("./db");
+        const { attachments } = await import("@shared/project-schema");
+        const { replitStorage } = await import("./replitStorage");
+
+        const uploadedAttachments = [];
+
+        for (const file of files) {
+          // Generate storage path
+          const storagePath = replitStorage.generateStoragePath(
+            category,
+            orderId,
+            file.originalname
+          );
+
+          // Upload to Replit Storage
+          const uploadedPath = await replitStorage.uploadFile(
+            file.path,
+            storagePath
+          );
+
+          if (!uploadedPath) {
+            console.error(`Failed to upload ${file.originalname}`);
+            continue;
+          }
+
+          // Save metadata to database
+          const [attachment] = await db
+            .insert(attachments)
+            .values({
+              orderId,
+              filename: file.filename,
+              originalFilename: file.originalname,
+              storagePath: uploadedPath,
+              mimeType: file.mimetype,
+              fileSize: file.size,
+              category,
+              uploadedBy: userId,
+            })
+            .returning();
+
+          uploadedAttachments.push(attachment);
+        }
+
+        res.json({
+          success: true,
+          attachments: uploadedAttachments,
+        });
+      } catch (error) {
+        console.error('Error uploading attachments:', error);
+        res.status(500).json({ message: 'Failed to upload attachments' });
+      }
+    }
+  );
+
+  // Download attachment
+  app.get("/api/attachments/:attachmentId/download", 
+    isAuthenticated, 
+    async (req, res) => {
+      try {
+        const { attachmentId } = req.params;
+        
+        const { db } = await import("./db");
+        const { attachments } = await import("@shared/project-schema");
+        const { eq } = await import("drizzle-orm");
+        const { replitStorage } = await import("./replitStorage");
+        
+        // Get attachment metadata
+        const [attachment] = await db
+          .select()
+          .from(attachments)
+          .where(eq(attachments.id, attachmentId));
+
+        if (!attachment) {
+          return res.status(404).json({ message: 'Attachment not found' });
+        }
+
+        // Download from storage
+        const fileBuffer = await replitStorage.downloadFile(attachment.storagePath);
+
+        if (!fileBuffer) {
+          return res.status(500).json({ message: 'Failed to download file' });
+        }
+
+        // Set headers for download
+        res.setHeader('Content-Type', attachment.mimeType || 'application/octet-stream');
+        res.setHeader('Content-Disposition', `attachment; filename="${attachment.originalFilename}"`);
+        res.setHeader('Content-Length', fileBuffer.length);
+
+        res.send(fileBuffer);
+      } catch (error) {
+        console.error('Error downloading attachment:', error);
+        res.status(500).json({ message: 'Failed to download attachment' });
+      }
+    }
+  );
+
+  // Delete attachment
+  app.delete("/api/attachments/:attachmentId", 
+    isAuthenticated, 
+    async (req, res) => {
+      try {
+        const { attachmentId } = req.params;
+        
+        const { db } = await import("./db");
+        const { attachments } = await import("@shared/project-schema");
+        const { eq } = await import("drizzle-orm");
+        const { replitStorage } = await import("./replitStorage");
+        
+        // Get attachment metadata
+        const [attachment] = await db
+          .select()
+          .from(attachments)
+          .where(eq(attachments.id, attachmentId));
+
+        if (!attachment) {
+          return res.status(404).json({ message: 'Attachment not found' });
+        }
+
+        // Delete from storage
+        await replitStorage.deleteFile(attachment.storagePath);
+
+        // Delete from database
+        await db.delete(attachments).where(eq(attachments.id, attachmentId));
+
+        res.json({ success: true });
+      } catch (error) {
+        console.error('Error deleting attachment:', error);
+        res.status(500).json({ message: 'Failed to delete attachment' });
+      }
+    }
+  );
+
+  // List order attachments
+  app.get("/api/orders/:orderId/attachments", 
+    isAuthenticated, 
+    async (req, res) => {
+      try {
+        const { orderId } = req.params;
+        const { category } = req.query;
+        
+        const { db } = await import("./db");
+        const { attachments } = await import("@shared/project-schema");
+        const { eq, and } = await import("drizzle-orm");
+        
+        let conditions = [eq(attachments.orderId, orderId)];
+        
+        if (category) {
+          conditions.push(eq(attachments.category, category as string));
+        }
+
+        const orderAttachments = await db
+          .select()
+          .from(attachments)
+          .where(and(...conditions));
+
+        res.json(orderAttachments);
+      } catch (error) {
+        console.error('Error fetching attachments:', error);
+        res.status(500).json({ message: 'Failed to fetch attachments' });
+      }
+    }
+  );
+
+  // ============================================
+  // ARTWORK APPROVAL ROUTES (PUBLIC)
+  // ============================================
+
+  // Get approval details by token (PUBLIC - no auth required)
+  app.get("/api/approvals/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      
+      const { db } = await import("./db");
+      const { artworkApprovals, orders, orderItems, products, artworkFiles, companies } = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+      
+      const [approval] = await db
+        .select({
+          id: artworkApprovals.id,
+          orderId: artworkApprovals.orderId,
+          orderNumber: orders.orderNumber,
+          orderItemId: artworkApprovals.orderItemId,
+          artworkFileId: artworkApprovals.artworkFileId,
+          status: artworkApprovals.status,
+          clientEmail: artworkApprovals.clientEmail,
+          clientName: artworkApprovals.clientName,
+          sentAt: artworkApprovals.sentAt,
+          approvedAt: artworkApprovals.approvedAt,
+          declinedAt: artworkApprovals.declinedAt,
+          declineReason: artworkApprovals.declineReason,
+          pdfPath: artworkApprovals.pdfPath,
+          // Order item details
+          productName: products.name,
+          quantity: orderItems.quantity,
+          color: orderItems.color,
+          size: orderItems.size,
+          imprintLocation: orderItems.imprintLocation,
+          imprintMethod: orderItems.imprintMethod,
+          // Artwork file details
+          artworkFileName: artworkFiles.fileName,
+          artworkFilePath: artworkFiles.filePath,
+          artworkOriginalName: artworkFiles.originalName,
+          // Company details
+          companyName: companies.name,
+        })
+        .from(artworkApprovals)
+        .leftJoin(orders, eq(artworkApprovals.orderId, orders.id))
+        .leftJoin(orderItems, eq(artworkApprovals.orderItemId, orderItems.id))
+        .leftJoin(products, eq(orderItems.productId, products.id))
+        .leftJoin(artworkFiles, eq(artworkApprovals.artworkFileId, artworkFiles.id))
+        .leftJoin(companies, eq(orders.companyId, companies.id))
+        .where(eq(artworkApprovals.approvalToken, token));
+
+      if (!approval) {
+        return res.status(404).json({ message: "Approval not found" });
+      }
+
+      // Format response
+      const response = {
+        id: approval.id,
+        orderId: approval.orderId,
+        orderNumber: approval.orderNumber,
+        orderItemId: approval.orderItemId,
+        artworkFileId: approval.artworkFileId,
+        status: approval.status,
+        clientEmail: approval.clientEmail,
+        clientName: approval.clientName,
+        sentAt: approval.sentAt,
+        approvedAt: approval.approvedAt,
+        declinedAt: approval.declinedAt,
+        declineReason: approval.declineReason,
+        pdfPath: approval.pdfPath,
+        orderItem: approval.orderItemId ? {
+          productName: approval.productName,
+          quantity: approval.quantity,
+          color: approval.color,
+          size: approval.size,
+          imprintLocation: approval.imprintLocation,
+          imprintMethod: approval.imprintMethod,
+        } : null,
+        artworkFile: approval.artworkFileId ? {
+          fileName: approval.artworkFileName,
+          filePath: approval.artworkFilePath,
+          originalName: approval.artworkOriginalName,
+        } : null,
+        company: approval.companyName ? {
+          name: approval.companyName,
+        } : null,
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Error fetching approval:', error);
+      res.status(500).json({ message: 'Failed to fetch approval' });
+    }
+  });
+
+  // Approve artwork (PUBLIC - no auth required)
+  app.post("/api/approvals/:token/approve", async (req, res) => {
+    try {
+      const { token } = req.params;
+      
+      const { db } = await import("./db");
+      const { artworkApprovals, orders } = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+      
+      // Get approval
+      const [approval] = await db
+        .select()
+        .from(artworkApprovals)
+        .where(eq(artworkApprovals.approvalToken, token));
+
+      if (!approval) {
+        return res.status(404).json({ message: "Approval not found" });
+      }
+
+      if (approval.status !== "pending") {
+        return res.status(400).json({ message: "Approval already processed" });
+      }
+
+      // Update approval status
+      const [updated] = await db
+        .update(artworkApprovals)
+        .set({
+          status: "approved",
+          approvedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(artworkApprovals.approvalToken, token))
+        .returning();
+
+      // TODO: Send notification email to sales rep
+      // TODO: Generate PDF if not exists
+
+      res.json(updated);
+    } catch (error) {
+      console.error('Error approving artwork:', error);
+      res.status(500).json({ message: 'Failed to approve artwork' });
+    }
+  });
+
+  // Decline artwork (PUBLIC - no auth required)
+  app.post("/api/approvals/:token/decline", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { reason } = req.body;
+      
+      const { db } = await import("./db");
+      const { artworkApprovals } = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+      
+      // Get approval
+      const [approval] = await db
+        .select()
+        .from(artworkApprovals)
+        .where(eq(artworkApprovals.approvalToken, token));
+
+      if (!approval) {
+        return res.status(404).json({ message: "Approval not found" });
+      }
+
+      if (approval.status !== "pending") {
+        return res.status(400).json({ message: "Approval already processed" });
+      }
+
+      // Update approval status
+      const [updated] = await db
+        .update(artworkApprovals)
+        .set({
+          status: "declined",
+          declinedAt: new Date(),
+          declineReason: reason || null,
+          updatedAt: new Date(),
+        })
+        .where(eq(artworkApprovals.approvalToken, token))
+        .returning();
+
+      // TODO: Send notification email to sales rep
+      // TODO: Generate PDF if not exists
+
+      res.json(updated);
+    } catch (error) {
+      console.error('Error declining artwork:', error);
+      res.status(500).json({ message: 'Failed to decline artwork' });
+    }
+  });
+
+  // Generate approval link for order (AUTHENTICATED)
+  app.post("/api/orders/:orderId/generate-approval", isAuthenticated, async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const { orderItemId, artworkFileId, clientEmail, clientName } = req.body;
+      
+      if (!clientEmail) {
+        return res.status(400).json({ message: "Client email is required" });
+      }
+
+      const { db } = await import("./db");
+      const { artworkApprovals, orders } = await import("@shared/schema");
+      const { eq, and } = await import("drizzle-orm");
+      const crypto = await import("crypto");
+      
+      // Verify order exists
+      const [order] = await db
+        .select()
+        .from(orders)
+        .where(eq(orders.id, orderId));
+
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      // Generate unique token
+      const token = crypto.randomBytes(32).toString('hex');
+
+      // Check if approval already exists for this combination
+      let conditions = [
+        eq(artworkApprovals.orderId, orderId),
+        eq(artworkApprovals.clientEmail, clientEmail),
+      ];
+
+      if (orderItemId) {
+        conditions.push(eq(artworkApprovals.orderItemId, orderItemId));
+      }
+      
+      if (artworkFileId) {
+        conditions.push(eq(artworkApprovals.artworkFileId, artworkFileId));
+      }
+
+      const [existing] = await db
+        .select()
+        .from(artworkApprovals)
+        .where(and(...conditions));
+
+      if (existing && existing.status === "pending") {
+        // Return existing pending approval
+        return res.json({
+          ...existing,
+          approvalUrl: `${req.protocol}://${req.get('host')}/approve/${existing.approvalToken}`
+        });
+      }
+
+      // Create new approval
+      const [newApproval] = await db
+        .insert(artworkApprovals)
+        .values({
+          orderId,
+          orderItemId: orderItemId || null,
+          artworkFileId: artworkFileId || null,
+          approvalToken: token,
+          status: "pending",
+          clientEmail,
+          clientName: clientName || null,
+          sentAt: new Date(),
+        })
+        .returning();
+
+      res.json({
+        ...newApproval,
+        approvalUrl: `${req.protocol}://${req.get('host')}/approve/${token}`
+      });
+    } catch (error) {
+      console.error('Error generating approval link:', error);
+      res.status(500).json({ message: 'Failed to generate approval link' });
+    }
+  });
+
+  // List all approvals for an order (AUTHENTICATED)
+  app.get("/api/orders/:orderId/approvals", isAuthenticated, async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      
+      const { db } = await import("./db");
+      const { artworkApprovals, orderItems, products, artworkFiles } = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+      
+      const approvals = await db
+        .select({
+          id: artworkApprovals.id,
+          orderId: artworkApprovals.orderId,
+          orderItemId: artworkApprovals.orderItemId,
+          artworkFileId: artworkApprovals.artworkFileId,
+          approvalToken: artworkApprovals.approvalToken,
+          status: artworkApprovals.status,
+          clientEmail: artworkApprovals.clientEmail,
+          clientName: artworkApprovals.clientName,
+          sentAt: artworkApprovals.sentAt,
+          approvedAt: artworkApprovals.approvedAt,
+          declinedAt: artworkApprovals.declinedAt,
+          declineReason: artworkApprovals.declineReason,
+          pdfPath: artworkApprovals.pdfPath,
+          reminderSentAt: artworkApprovals.reminderSentAt,
+          productName: products.name,
+          artworkFileName: artworkFiles.fileName,
+          artworkOriginalName: artworkFiles.originalName,
+        })
+        .from(artworkApprovals)
+        .leftJoin(orderItems, eq(artworkApprovals.orderItemId, orderItems.id))
+        .leftJoin(products, eq(orderItems.productId, products.id))
+        .leftJoin(artworkFiles, eq(artworkApprovals.artworkFileId, artworkFiles.id))
+        .where(eq(artworkApprovals.orderId, orderId));
+
+      res.json(approvals);
+    } catch (error) {
+      console.error('Error fetching approvals:', error);
+      res.status(500).json({ message: 'Failed to fetch approvals' });
     }
   });
 

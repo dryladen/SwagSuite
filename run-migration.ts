@@ -15,11 +15,11 @@ async function runMigration() {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     
     try {
-        console.log("Running migration: 0007_add_csr_user.sql");
+        console.log("Running migration: 0010_add_product_fields.sql");
         const client = await pool.connect();
         
         const migrationSQL = fs.readFileSync(
-            path.join(process.cwd(), 'migrations', '0007_add_csr_user.sql'),
+            path.join(process.cwd(), 'migrations', '0010_add_product_fields.sql'),
             'utf-8'
         );
         

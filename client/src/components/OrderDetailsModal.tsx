@@ -1,4 +1,14 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { SendApprovalDialog } from "@/components/SendApprovalDialog";
 import {
   Calendar,
   DollarSign,
@@ -36,22 +47,24 @@ import {
   ShoppingCart,
   TrendingUp,
   Upload,
-  X
+  X,
+  Edit,
+  Trash2
 } from "lucide-react";
 import type { Order } from "@shared/schema";
-import { useState, useRef, useMemo, useCallback } from "react";
+import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { useDropzone } from 'react-dropzone';
 import { RichTextEditor } from './RichTextEditor';
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import OrderModal from "./OrderModal";
+import ProductModal from "./ProductModal";
 import { useToast } from "@/hooks/use-toast";
 
 interface OrderDetailsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  order: Order | null;
-  companyName: string;
+  orderId: string | null;
 }
 
 interface TeamMember {
@@ -120,7 +133,7 @@ const statusDisplayMap = {
   cancelled: "Cancelled",
 };
 
-export function OrderDetailsModal({ open, onOpenChange, order, companyName }: OrderDetailsModalProps) {
+function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalProps) {
   const [, setLocation] = useLocation();
   const [internalNote, setInternalNote] = useState("");
   const [emailTo, setEmailTo] = useState("");
@@ -142,69 +155,135 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
   const [mentionQuery, setMentionQuery] = useState("");
   const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isSendApprovalOpen, setIsSendApprovalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [deletingProduct, setDeletingProduct] = useState<any>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Fetch latest order data to keep modal in sync
-  const { data: latestOrder } = useQuery<Order>({
-    queryKey: [`/api/orders/${order?.id}`],
-    enabled: open && !!order?.id,
+  // Fetch order data
+  const { data: order, isLoading } = useQuery<Order>({
+    queryKey: [`/api/orders/${orderId}`],
+    enabled: open && !!orderId,
   });
 
-  // Use latest order data if available, fallback to prop
-  const currentOrder = latestOrder || order;
+  // Fetch companies
+  const { data: companies = [] } = useQuery<any[]>({
+    queryKey: ["/api/companies"],
+    enabled: open && !!order,
+  });
+
+  // Get company name
+  const companyName = order?.companyId 
+    ? companies.find((c: any) => c.id === order.companyId)?.name || "Unknown Company"
+    : "Individual Client";
 
   // Fetch team members for @ mentions
   const { data: teamMembers = [] } = useQuery<TeamMember[]>({
     queryKey: ["/api/users/team"],
-    enabled: open && !!currentOrder,
+    enabled: open && !!order,
   });
+
+  // Fetch order items with product and vendor info
+  const { data: orderItems = [] } = useQuery<any[]>({
+    queryKey: [`/api/orders/${orderId}/items`],
+    enabled: open && !!order,
+    staleTime: 0, // Force fresh data
+    gcTime: 0, // Don't cache (replaces cacheTime in newer versions)
+  });
+
+  // Get unique vendors from order items
+  const orderVendors = useMemo(() => {
+    const vendorsMap = new Map();
+    orderItems.forEach((item: any) => {
+      if (item.supplierId && !vendorsMap.has(item.supplierId)) {
+        vendorsMap.set(item.supplierId, {
+          id: item.supplierId,
+          name: item.supplierName,
+          email: item.supplierEmail,
+          phone: item.supplierPhone,
+          contactPerson: item.supplierContactPerson,
+          products: [],
+        });
+      }
+    });
+    
+    orderItems.forEach((item: any) => {
+      if (item.supplierId && vendorsMap.has(item.supplierId)) {
+        const vendor = vendorsMap.get(item.supplierId);
+        vendor.products.push({
+          id: item.id,
+          productName: item.productName,
+          productSku: item.productSku,
+          quantity: item.quantity,
+          color: item.color,
+          size: item.size,
+        });
+      }
+    });
+    
+    return Array.from(vendorsMap.values());
+  }, [orderItems]);
+
+  const [selectedVendor, setSelectedVendor] = useState<any>(null);
+
+  // Set first vendor as selected when vendors load
+  useEffect(() => {
+    if (orderVendors.length > 0 && !selectedVendor) {
+      setSelectedVendor(orderVendors[0]);
+      setVendorEmailTo(orderVendors[0].email || "");
+    }
+  }, [orderVendors, selectedVendor]);
 
   // Fetch suppliers data
   const { data: suppliers = [] } = useQuery<any[]>({
     queryKey: ["/api/suppliers"],
-    enabled: open && !!currentOrder,
+    enabled: open && !!order,
+    staleTime: 0, // Force fresh data
   });
 
-  // Get supplier information (memoized to update when order or suppliers change)
-  const supplier = useMemo(() => {
-    if (!currentOrder || !(currentOrder as any).supplierId) return null;
-    return suppliers.find((s: any) => s.id === (currentOrder as any).supplierId);
-  }, [currentOrder, suppliers]);
+  // Fetch all products to get current supplier info
+  const { data: allProducts = [] } = useQuery<any[]>({
+    queryKey: ["/api/products"],
+    enabled: open && !!order && orderItems.length > 0,
+    staleTime: 0,
+  });
 
   // Fetch project activities (internal notes)
   const { data: activities = [] } = useQuery<ProjectActivity[]>({
-    queryKey: [`/api/projects/${currentOrder?.id}/activities`],
-    enabled: open && !!currentOrder,
+    queryKey: [`/api/projects/${orderId}/activities`],
+    enabled: open && !!order,
   });
 
   // Fetch client communications
   const { data: clientCommunications = [] } = useQuery<Communication[]>({
-    queryKey: [`/api/orders/${currentOrder?.id}/communications`, { type: "client_email" }],
+    queryKey: [`/api/orders/${orderId}/communications`, { type: "client_email" }],
     queryFn: async () => {
-      const response = await fetch(`/api/orders/${currentOrder?.id}/communications?type=client_email`);
+      const response = await fetch(`/api/orders/${orderId}/communications?type=client_email`);
       if (!response.ok) throw new Error("Failed to fetch client communications");
       return response.json();
     },
-    enabled: open && !!currentOrder,
+    enabled: open && !!order,
   });
 
   // Fetch vendor communications
   const { data: vendorCommunications = [] } = useQuery<Communication[]>({
-    queryKey: [`/api/orders/${currentOrder?.id}/communications`, { type: "vendor_email" }],
+    queryKey: [`/api/orders/${orderId}/communications`, { type: "vendor_email" }],
     queryFn: async () => {
-      const response = await fetch(`/api/orders/${currentOrder?.id}/communications?type=vendor_email`);
+      const response = await fetch(`/api/orders/${orderId}/communications?type=vendor_email`);
       if (!response.ok) throw new Error("Failed to fetch vendor communications");
       return response.json();
     },
-    enabled: open && !!currentOrder,
+    enabled: open && !!order,
   });
 
   // Mutation for creating internal notes
   const createActivityMutation = useMutation({
     mutationFn: async (data: { activityType: string; content: string; mentionedUsers?: string[] }) => {
-      const response = await fetch(`/api/projects/${currentOrder?.id}/activities`, {
+      const response = await fetch(`/api/projects/${order?.id}/activities`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -213,7 +292,7 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/projects/${currentOrder?.id}/activities`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${order?.id}/activities`] });
       toast({
         title: "Note sent",
         description: "Internal note has been added successfully.",
@@ -237,8 +316,9 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
       subject: string;
       body: string;
       attachments?: File[];
+      attachmentIds?: string[];
     }) => {
-      const response = await fetch(`/api/orders/${currentOrder?.id}/communications`, {
+      const response = await fetch(`/api/orders/${order?.id}/communications`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -249,6 +329,7 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
           recipientEmail: data.recipientEmail,
           subject: data.subject,
           body: data.body,
+          attachmentIds: data.attachmentIds,
         }),
       });
       
@@ -267,7 +348,7 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [`/api/orders/${currentOrder?.id}/communications`, { type: "client_email" }],
+        queryKey: [`/api/orders/${order?.id}/communications`, { type: "client_email" }],
       });
       toast({
         title: "Email sent",
@@ -293,8 +374,9 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
       subject: string;
       body: string;
       attachments?: File[];
+      attachmentIds?: string[];
     }) => {
-      const response = await fetch(`/api/orders/${currentOrder?.id}/communications`, {
+      const response = await fetch(`/api/orders/${order?.id}/communications`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -305,6 +387,7 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
           recipientEmail: data.recipientEmail,
           subject: data.subject,
           body: data.body,
+          attachmentIds: data.attachmentIds,
         }),
       });
       
@@ -323,7 +406,7 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: [`/api/orders/${currentOrder?.id}/communications`, { type: "vendor_email" }],
+        queryKey: [`/api/orders/${order?.id}/communications`, { type: "vendor_email" }],
       });
       toast({
         title: "Email sent",
@@ -336,6 +419,35 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
         title: "Email Error",
         description: error.message || "Failed to send vendor email. Please check Settings → Email Config.",
         variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation to delete product
+  const deleteProductMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const response = await fetch(`/api/products/${productId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to delete product');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/products'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}/items`] });
+      setIsDeleteDialogOpen(false);
+      setDeletingProduct(null);
+      toast({ 
+        title: "Product deleted",
+        description: "Product has been removed successfully."
+      });
+    },
+    onError: () => {
+      setIsDeleteDialogOpen(false);
+      toast({ 
+        title: "Failed to delete product", 
+        description: "There was an error deleting the product. Please try again.",
+        variant: "destructive" 
       });
     },
   });
@@ -372,17 +484,17 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
     { id: "user4", firstName: "Emily", lastName: "Davis", email: "emily@swag.com" },
   ];
 
-  if (!currentOrder) return null;
+  if (!order) return null;
 
-  const statusClass = statusColorMap[currentOrder.status as keyof typeof statusColorMap] || "bg-gray-100 text-gray-800";
-  const statusLabel = statusDisplayMap[currentOrder.status as keyof typeof statusDisplayMap] || currentOrder.status;
+  const statusClass = statusColorMap[order.status as keyof typeof statusColorMap] || "bg-gray-100 text-gray-800";
+  const statusLabel = statusDisplayMap[order.status as keyof typeof statusDisplayMap] || order.status;
 
   // Check if this is a rush order based on in hands date
-  const isRushOrder = currentOrder.inHandsDate ?
-    new Date(currentOrder.inHandsDate).getTime() - new Date().getTime() < 7 * 24 * 60 * 60 * 1000 : false;
+  const isRushOrder = order.inHandsDate ?
+    new Date(order.inHandsDate).getTime() - new Date().getTime() < 7 * 24 * 60 * 60 * 1000 : false;
 
   const handleViewProject = () => {
-    setLocation(`/project/${currentOrder.id}`);
+    setLocation(`/project/${order.id}`);
     onOpenChange(false);
   };
 
@@ -438,7 +550,7 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
     setInternalNote("");
   };
 
-  const handleSendEmail = () => {
+  const handleSendEmail = async () => {
     if (!emailFrom.trim() || !emailTo.trim() || !emailSubject.trim() || !emailBody.trim()) {
       toast({
         title: "Missing fields",
@@ -448,23 +560,54 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
       return;
     }
 
-    sendClientEmailMutation.mutate({
-      fromEmail: emailFrom,
-      fromName: emailFromName || "SwagSuite",
-      recipientEmail: emailTo,
-      subject: emailSubject,
-      body: emailBody,
-      attachments: emailAttachments,
-    });
-    setEmailFrom("");
-    setEmailFromName("");
-    setEmailTo("");
-    setEmailSubject("");
-    setEmailBody("");
-    setEmailAttachments([]);
+    try {
+      // Upload attachments first if any
+      let attachmentIds: string[] = [];
+      if (emailAttachments.length > 0) {
+        const formData = new FormData();
+        emailAttachments.forEach(file => formData.append('files', file));
+        formData.append('category', 'email_attachment');
+
+        const uploadResponse = await fetch(`/api/orders/${order.id}/attachments`, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+        });
+
+        if (uploadResponse.ok) {
+          const uploadData = await uploadResponse.json();
+          attachmentIds = uploadData.attachments.map((att: any) => att.id);
+        }
+      }
+
+      // Send email with attachment references
+      sendClientEmailMutation.mutate({
+        fromEmail: emailFrom,
+        fromName: emailFromName || "SwagSuite",
+        recipientEmail: emailTo,
+        subject: emailSubject,
+        body: emailBody,
+        attachments: emailAttachments,
+        attachmentIds,
+      });
+
+      setEmailFrom("");
+      setEmailFromName("");
+      setEmailTo("");
+      setEmailSubject("");
+      setEmailBody("");
+      setEmailAttachments([]);
+    } catch (error) {
+      console.error('Error uploading attachments:', error);
+      toast({
+        title: "Upload Error",
+        description: "Failed to upload attachments. Sending email without attachments.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleSendVendorEmail = () => {
+  const handleSendVendorEmail = async () => {
     if (!vendorEmailFrom.trim() || !vendorEmailTo.trim() || !vendorEmailSubject.trim() || !vendorEmailBody.trim()) {
       toast({
         title: "Missing fields",
@@ -474,20 +617,51 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
       return;
     }
 
-    sendVendorEmailMutation.mutate({
-      fromEmail: vendorEmailFrom,
-      fromName: vendorEmailFromName || "SwagSuite",
-      recipientEmail: vendorEmailTo,
-      subject: vendorEmailSubject,
-      body: vendorEmailBody,
-      attachments: vendorEmailAttachments,
-    });
-    setVendorEmailFrom("");
-    setVendorEmailFromName("");
-    setVendorEmailTo("");
-    setVendorEmailSubject("");
-    setVendorEmailBody("");
-    setVendorEmailAttachments([]);
+    try {
+      // Upload attachments first if any
+      let attachmentIds: string[] = [];
+      if (vendorEmailAttachments.length > 0) {
+        const formData = new FormData();
+        vendorEmailAttachments.forEach(file => formData.append('files', file));
+        formData.append('category', 'email_attachment');
+
+        const uploadResponse = await fetch(`/api/orders/${order.id}/attachments`, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+        });
+
+        if (uploadResponse.ok) {
+          const uploadData = await uploadResponse.json();
+          attachmentIds = uploadData.attachments.map((att: any) => att.id);
+        }
+      }
+
+      // Send email with attachment references
+      sendVendorEmailMutation.mutate({
+        fromEmail: vendorEmailFrom,
+        fromName: vendorEmailFromName || "SwagSuite",
+        recipientEmail: vendorEmailTo,
+        subject: vendorEmailSubject,
+        body: vendorEmailBody,
+        attachments: vendorEmailAttachments,
+        attachmentIds,
+      });
+
+      setVendorEmailFrom("");
+      setVendorEmailFromName("");
+      setVendorEmailTo("");
+      setVendorEmailSubject("");
+      setVendorEmailBody("");
+      setVendorEmailAttachments([]);
+    } catch (error) {
+      console.error('Error uploading attachments:', error);
+      toast({
+        title: "Upload Error",
+        description: "Failed to upload attachments. Sending email without attachments.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -497,7 +671,7 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
           <DialogHeader>
             <DialogTitle className="flex items-center pt-6 gap-3">
               <FileText className="w-6 h-6" />
-              Order #{currentOrder.orderNumber}
+              Order #{order.orderNumber}
               <Badge className={statusClass}>
                 {statusLabel}
               </Badge>
@@ -518,6 +692,14 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => setIsSendApprovalOpen(true)}
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Send Approval
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleViewProject}
               >
                 <ExternalLink className="w-4 h-4" />
@@ -530,8 +712,9 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
           </DialogHeader>
 
           <Tabs defaultValue="details" className="w-full">
-            <TabsList className="grid w-full h-fit gap-2 grid-cols-2 md:grid-cols-4">
+            <TabsList className="grid w-full h-fit gap-2 grid-cols-3 md:grid-cols-5">
               <TabsTrigger value="details">Order Details</TabsTrigger>
+              <TabsTrigger value="products">Products ({orderItems.length})</TabsTrigger>
               <TabsTrigger value="communication">Internal Notes</TabsTrigger>
               <TabsTrigger value="email">Client Communication</TabsTrigger>
               <TabsTrigger value="vendor">Vendor Communication</TabsTrigger>
@@ -586,7 +769,7 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                       <div>
                         <p className="text-sm font-medium text-gray-500">Order Type</p>
                         <Badge variant="outline" className="mt-1">
-                          {currentOrder.orderType?.replace('_', ' ').toUpperCase() || 'QUOTE'}
+                          {order.orderType?.replace('_', ' ').toUpperCase() || 'QUOTE'}
                         </Badge>
                       </div>
                       <div>
@@ -604,15 +787,15 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                       <div className="space-y-2 bg-gray-50 p-3 rounded-lg">
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">Subtotal:</span>
-                          <span className="font-medium">${Number(currentOrder.subtotal || 0).toLocaleString()}</span>
+                          <span className="font-medium">${Number(order.subtotal || 0).toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">Tax:</span>
-                          <span className="font-medium">${Number(currentOrder.tax || 0).toLocaleString()}</span>
+                          <span className="font-medium">${Number(order.tax || 0).toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600">Shipping:</span>
-                          <span className="font-medium">${Number(currentOrder.shipping || 0).toLocaleString()}</span>
+                          <span className="font-medium">${Number(order.shipping || 0).toLocaleString()}</span>
                         </div>
                         <Separator />
                         <div className="flex justify-between items-center">
@@ -621,7 +804,7 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                             <span className="text-sm font-semibold">Total:</span>
                           </div>
                           <span className="text-lg font-bold text-green-600">
-                            ${Number(currentOrder.total || 0).toLocaleString()}
+                            ${Number(order.total || 0).toLocaleString()}
                           </span>
                         </div>
                       </div>
@@ -630,7 +813,7 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                         <CheckCircle className="w-4 h-4 text-gray-500" />
                         <span className="text-sm font-medium">Deposit (50%): </span>
                         <span className="text-sm font-semibold">
-                          ${(Number(currentOrder.total || 0) * 0.5).toLocaleString()}
+                          ${(Number(order.total || 0) * 0.5).toLocaleString()}
                         </span>
                       </div>
                     </div>
@@ -652,16 +835,16 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {currentOrder.inHandsDate ? (
+                    {order.inHandsDate ? (
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-gray-500" />
                         <span className="text-sm font-medium">In Hands Date: </span>
                         <span className={`text-sm font-medium ${isRushOrder ? 'text-red-600' : 'text-gray-900'}`}>
-                          {new Date(currentOrder.inHandsDate).toLocaleDateString()}
+                          {new Date(order.inHandsDate).toLocaleDateString()}
                         </span>
                         {isRushOrder && (
                           <Badge variant="outline" className="text-xs text-red-600 border-red-200">
-                            {Math.ceil((new Date(currentOrder.inHandsDate).getTime() - new Date().getTime()) / (24 * 60 * 60 * 1000))} days
+                            {Math.ceil((new Date(order.inHandsDate).getTime() - new Date().getTime()) / (24 * 60 * 60 * 1000))} days
                           </Badge>
                         )}
                       </div>
@@ -672,12 +855,12 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                       </div>
                     )}
 
-                    {currentOrder.createdAt && (
+                    {order.createdAt && (
                       <div className="flex items-center gap-2">
                         <Clock className="w-4 h-4 text-gray-500" />
                         <span className="text-sm font-medium">Order Created: </span>
                         <span className="text-sm">
-                          {new Date(currentOrder.createdAt).toLocaleDateString()}
+                          {new Date(order.createdAt).toLocaleDateString()}
                         </span>
                       </div>
                     )}
@@ -694,12 +877,12 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                       </div>
                     )}
 
-                    {currentOrder.eventDate && (
+                    {order.eventDate && (
                       <div className="flex items-center gap-2">
                         <Clock className="w-4 h-4 text-gray-500" />
                         <span className="text-sm font-medium">Event Date: </span>
                         <span className="text-sm">
-                          {new Date(currentOrder.eventDate).toLocaleDateString()}
+                          {new Date(order.eventDate).toLocaleDateString()}
                         </span>
                       </div>
                     )}
@@ -719,25 +902,25 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                       <div className="text-sm">
                         <p className="font-medium">Shipping Address:</p>
                         <p className="text-gray-600 whitespace-pre-line">
-                          {(currentOrder as any).shippingAddress || "No shipping address provided"}
+                          {(order as any).shippingAddress || "No shipping address provided"}
                         </p>
                       </div>
                     </div>
 
                     <div>
                       <p className="text-sm font-medium text-gray-500">Shipping Method</p>
-                      <p className="text-sm">{(currentOrder as any).shippingMethod || "Not specified"}</p>
+                      <p className="text-sm">{(order as any).shippingMethod || "Not specified"}</p>
                     </div>
 
                     <div>
                       <p className="text-sm font-medium text-gray-500">Tracking Number</p>
-                      <p className="text-sm font-mono">{(currentOrder as any).trackingNumber || "Not available"}</p>
+                      <p className="text-sm font-mono">{(order as any).trackingNumber || "Not available"}</p>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Notes & Special Instructions */}
-                {currentOrder.notes && (
+                {order.notes && (
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
@@ -746,7 +929,7 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-sm text-gray-700 whitespace-pre-line">{currentOrder.notes}</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-line">{order.notes}</p>
                     </CardContent>
                   </Card>
                 )}
@@ -765,18 +948,18 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                       <div className="text-sm">
                         <p className="font-medium">Order Created</p>
                         <p className="text-gray-500">
-                          {currentOrder.createdAt ? new Date(currentOrder.createdAt).toLocaleDateString() : 'N/A'}
+                          {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                         </p>
                       </div>
                     </div>
 
-                    {currentOrder.updatedAt && currentOrder.updatedAt !== currentOrder.createdAt && (
+                    {order.updatedAt && order.updatedAt !== order.createdAt && (
                       <div className="flex items-center gap-3">
                         <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                         <div className="text-sm">
                           <p className="font-medium">Last Updated</p>
                           <p className="text-gray-500">
-                            {new Date(currentOrder.updatedAt).toLocaleDateString()}
+                            {new Date(order.updatedAt).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
@@ -796,14 +979,14 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                     <div className="space-y-2">
                       <Label htmlFor="order-status">Current Status</Label>
                       <Select
-                        value={currentOrder.status || undefined}
-                        onValueChange={(value) => updateStatusMutation.mutate({ orderId: currentOrder.id, newStatus: value })}
+                        value={order.status || undefined}
+                        onValueChange={(value) => updateStatusMutation.mutate({ orderId: order.id, newStatus: value })}
                         disabled={updateStatusMutation.isPending}
                       >
                         <SelectTrigger id="order-status" className="w-full">
                           <SelectValue>
-                            <Badge className={statusColorMap[currentOrder.status as keyof typeof statusColorMap]}>
-                              {statusDisplayMap[currentOrder.status as keyof typeof statusDisplayMap]}
+                            <Badge className={statusColorMap[order.status as keyof typeof statusColorMap]}>
+                              {statusDisplayMap[order.status as keyof typeof statusDisplayMap]}
                             </Badge>
                           </SelectValue>
                         </SelectTrigger>
@@ -863,14 +1046,14 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-xs">
                           <CheckCircle className="w-3 h-3 text-green-600" />
-                          <span className="text-gray-600">Created as {statusDisplayMap[currentOrder.status as keyof typeof statusDisplayMap]}</span>
-                          <span className="text-gray-400">• {new Date(currentOrder.createdAt!).toLocaleDateString()}</span>
+                          <span className="text-gray-600">Created as {statusDisplayMap[order.status as keyof typeof statusDisplayMap]}</span>
+                          <span className="text-gray-400">• {new Date(order.createdAt!).toLocaleDateString()}</span>
                         </div>
-                        {currentOrder.updatedAt && currentOrder.updatedAt !== currentOrder.createdAt && (
+                        {order.updatedAt && order.updatedAt !== order.createdAt && (
                           <div className="flex items-center gap-2 text-xs">
                             <Clock className="w-3 h-3 text-blue-600" />
                             <span className="text-gray-600">Last updated</span>
-                            <span className="text-gray-400">• {new Date(currentOrder.updatedAt).toLocaleDateString()}</span>
+                            <span className="text-gray-400">• {new Date(order.updatedAt).toLocaleDateString()}</span>
                           </div>
                         )}
                       </div>
@@ -981,6 +1164,216 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                   </CardContent>
                 </Card>
               </div>
+            </TabsContent>
+
+            <TabsContent value="products" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Package className="w-5 h-5" />
+                    Order Products ({orderItems.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {orderItems.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Package className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                      <p>No products in this order yet</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {orderItems.map((item: any) => {
+                        // Get current product to find supplier
+                        const currentProduct = allProducts.find((p: any) => p.id === item.productId);
+                        const currentSupplierId = currentProduct?.supplierId || item.supplierId;
+                        
+                        // Fallback: lookup supplier from suppliers array
+                        const itemSupplier = item.supplierName 
+                          ? { name: item.supplierName } 
+                          : currentSupplierId 
+                            ? suppliers.find((s: any) => s.id === currentSupplierId) 
+                            : null;
+
+                        return (
+                          <div key={item.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <Package className="w-5 h-5 text-blue-600" />
+                                  <div className="flex-1">
+                                    <h4 className="font-semibold text-lg">{item.productName}</h4>
+                                    {item.productSku && (
+                                      <p className="text-sm text-gray-500">SKU: {item.productSku}</p>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={async () => {
+                                        const prodId = item.productId;
+                                        
+                                        if (!prodId) {
+                                          toast({
+                                            title: "Error",
+                                            description: "Product ID not found in order item",
+                                            variant: "destructive"
+                                          });
+                                          return;
+                                        }
+
+                                        try {
+                                          const response = await fetch(`/api/products/${prodId}`, {
+                                            credentials: 'include'
+                                          });
+                                          
+                                          if (!response.ok) {
+                                            toast({
+                                              title: "Error",
+                                              description: `Failed to load product (${response.status})`,
+                                              variant: "destructive"
+                                            });
+                                            return;
+                                          }
+                                          
+                                          const product = await response.json();
+                                          setEditingProduct(product);
+                                          setIsProductModalOpen(true);
+                                        } catch (error) {
+                                          console.error('Error fetching product:', error);
+                                          toast({
+                                            title: "Error",
+                                            description: "Failed to load product",
+                                            variant: "destructive"
+                                          });
+                                        }
+                                      }}
+                                      className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                      title="Edit product"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        const prodId = item.productId;
+                                        
+                                        if (!prodId) {
+                                          toast({
+                                            title: "Error",
+                                            description: "Product ID not found in order item",
+                                            variant: "destructive"
+                                          });
+                                          return;
+                                        }
+                                        
+                                        setDeletingProduct({
+                                          ...item,
+                                          productId: prodId
+                                        });
+                                        setIsDeleteDialogOpen(true);
+                                      }}
+                                      className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      title="Delete product"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
+                                  <div>
+                                    <p className="text-xs text-gray-500 uppercase">Quantity</p>
+                                    <p className="font-semibold">{item.quantity}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500 uppercase">Unit Price</p>
+                                    <p className="font-semibold">${Number(item.unitPrice).toFixed(2)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500 uppercase">Total</p>
+                                    <p className="font-semibold text-green-600">${(item.quantity * Number(item.unitPrice)).toFixed(2)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-gray-500 uppercase">Vendor</p>
+                                    {itemSupplier ? (
+                                      <p className="font-semibold text-blue-600">{itemSupplier.name}</p>
+                                    ) : currentSupplierId ? (
+                                      <p className="text-gray-500 text-xs">ID: {currentSupplierId.substring(0, 8)}...</p>
+                                    ) : (
+                                      <p className="text-gray-400 text-xs">No vendor</p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {(item.color || item.size) && (
+                                  <div className="flex gap-4 mt-3">
+                                    {item.color && (
+                                      <div>
+                                        <p className="text-xs text-gray-500 uppercase">Color</p>
+                                        <Badge variant="outline" className="mt-1">{item.color}</Badge>
+                                      </div>
+                                    )}
+                                    {item.size && (
+                                      <div>
+                                        <p className="text-xs text-gray-500 uppercase">Size</p>
+                                        <Badge variant="outline" className="mt-1">{item.size}</Badge>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {(item.imprintLocation || item.imprintMethod) && (
+                                  <div className="mt-3 pt-3 border-t">
+                                    <p className="text-xs text-gray-500 uppercase mb-2">Decoration Details</p>
+                                    <div className="flex gap-4">
+                                      {item.imprintLocation && (
+                                        <div>
+                                          <span className="text-xs text-gray-600">Location:</span>
+                                          <span className="ml-1 text-sm font-medium">{item.imprintLocation}</span>
+                                        </div>
+                                      )}
+                                      {item.imprintMethod && (
+                                        <div>
+                                          <span className="text-xs text-gray-600">Method:</span>
+                                          <span className="ml-1 text-sm font-medium">{item.imprintMethod}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {item.notes && (
+                                  <div className="mt-3 pt-3 border-t">
+                                    <p className="text-xs text-gray-500 uppercase mb-1">Notes</p>
+                                    <p className="text-sm text-gray-700">{item.notes}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Summary */}
+                      <div className="border-t pt-4 mt-6">
+                        <div className="flex justify-between items-center">
+                          <div className="text-gray-600">
+                            <span className="font-medium">Total Items:</span> {orderItems.reduce((sum: number, item: any) => sum + item.quantity, 0)}
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm text-gray-500">Subtotal</p>
+                            <p className="text-2xl font-bold text-green-600">
+                              ${orderItems.reduce((sum: number, item: any) => sum + (item.quantity * Number(item.unitPrice)), 0).toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="communication" className="mt-6">
@@ -1166,7 +1559,7 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                   <div>
                     <label className="text-sm font-medium">Subject:</label>
                     <Input
-                      placeholder={`Re: Order #${currentOrder.orderNumber}`}
+                      placeholder={`Re: Order #${order.orderNumber}`}
                       value={emailSubject}
                       onChange={(e) => setEmailSubject(e.target.value)}
                       data-testid="input-email-subject"
@@ -1209,9 +1602,9 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                           </div>
                           <div className="p-6">
                             <h2 className="text-gray-900 text-xl mb-4">{emailSubject || "(No subject)"}</h2>
-                            {(currentOrder?.orderNumber || companyName) && (
+                            {(order?.orderNumber || companyName) && (
                               <div className="bg-gray-100 p-4 rounded mb-4">
-                                {currentOrder?.orderNumber && <p className="text-sm my-1"><strong>Order #:</strong> {currentOrder.orderNumber}</p>}
+                                {order?.orderNumber && <p className="text-sm my-1"><strong>Order #:</strong> {order.orderNumber}</p>}
                                 {companyName && <p className="text-sm my-1"><strong>Company:</strong> {companyName}</p>}
                               </div>
                             )}
@@ -1291,8 +1684,8 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          setEmailSubject(`Order Update - #${currentOrder.orderNumber}`);
-                          setEmailBody(`Hi there,\n\nI wanted to provide you with an update on your order #${currentOrder.orderNumber}.\n\nBest regards,\nYour SwagSuite Team`);
+                          setEmailSubject(`Order Update - #${order.orderNumber}`);
+                          setEmailBody(`Hi there,\n\nI wanted to provide you with an update on your order #${order.orderNumber}.\n\nBest regards,\nYour SwagSuite Team`);
                         }}
                       >
                         Order Update
@@ -1301,8 +1694,8 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          setEmailSubject(`Artwork Approval Required - #${currentOrder.orderNumber}`);
-                          setEmailBody(`Hi there,\n\nWe need your approval on the artwork for order #${currentOrder.orderNumber} before we can proceed to production.\n\nPlease review and let us know if you have any changes.\n\nBest regards,\nYour SwagSuite Team`);
+                          setEmailSubject(`Artwork Approval Required - #${order.orderNumber}`);
+                          setEmailBody(`Hi there,\n\nWe need your approval on the artwork for order #${order.orderNumber} before we can proceed to production.\n\nPlease review and let us know if you have any changes.\n\nBest regards,\nYour SwagSuite Team`);
                         }}
                       >
                         Artwork Approval
@@ -1311,8 +1704,8 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          setEmailSubject(`Order Shipped - #${currentOrder.orderNumber}`);
-                          setEmailBody(`Great news!\n\nYour order #${currentOrder.orderNumber} has been shipped and is on its way to you.\n\nTracking information will be provided separately.\n\nBest regards,\nYour SwagSuite Team`);
+                          setEmailSubject(`Order Shipped - #${order.orderNumber}`);
+                          setEmailBody(`Great news!\n\nYour order #${order.orderNumber} has been shipped and is on its way to you.\n\nTracking information will be provided separately.\n\nBest regards,\nYour SwagSuite Team`);
                         }}
                       >
                         Order Shipped
@@ -1321,8 +1714,8 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          setEmailSubject(`Invoice - #${currentOrder.orderNumber}`);
-                          setEmailBody(`Hi there,\n\nPlease find attached the invoice for order #${currentOrder.orderNumber}.\n\nPayment is due within 30 days.\n\nBest regards,\nYour SwagSuite Team`);
+                          setEmailSubject(`Invoice - #${order.orderNumber}`);
+                          setEmailBody(`Hi there,\n\nPlease find attached the invoice for order #${order.orderNumber}.\n\nPayment is due within 30 days.\n\nBest regards,\nYour SwagSuite Team`);
                         }}
                       >
                         Invoice
@@ -1454,8 +1847,8 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                       <div>
                         <label className="text-sm font-medium">To:</label>
                         <Input
-                          placeholder={supplier?.email || "vendor@supplier.com"}
-                          value={vendorEmailTo || supplier?.email || ""}
+                          placeholder={selectedVendor?.email || "vendor@selectedVendor.com"}
+                          value={vendorEmailTo || selectedVendor?.email || ""}
                           onChange={(e) => setVendorEmailTo(e.target.value)}
                           data-testid="input-vendor-email-to"
                         />
@@ -1465,7 +1858,7 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                     <div>
                       <label className="text-sm font-medium">Subject:</label>
                       <Input
-                        placeholder={`Production Update - Order #${currentOrder.orderNumber}`}
+                        placeholder={`Production Update - Order #${order.orderNumber}`}
                         value={vendorEmailSubject}
                         onChange={(e) => setVendorEmailSubject(e.target.value)}
                         data-testid="input-vendor-email-subject"
@@ -1509,10 +1902,10 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                             </div>
                             <div className="p-6">
                               <h2 className="text-gray-900 text-xl mb-4">{vendorEmailSubject || "(No subject)"}</h2>
-                              {(currentOrder?.orderNumber || supplier?.name) && (
+                              {(order?.orderNumber || selectedVendor?.name) && (
                                 <div className="bg-gray-100 p-4 rounded mb-4">
-                                  {currentOrder?.orderNumber && <p className="text-sm my-1"><strong>PO #:</strong> {currentOrder.orderNumber}</p>}
-                                  {supplier?.name && <p className="text-sm my-1"><strong>Vendor:</strong> {supplier.name}</p>}
+                                  {order?.orderNumber && <p className="text-sm my-1"><strong>PO #:</strong> {order.orderNumber}</p>}
+                                  {selectedVendor?.name && <p className="text-sm my-1"><strong>Vendor:</strong> {selectedVendor.name}</p>}
                                 </div>
                               )}
                               <div 
@@ -1591,8 +1984,8 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setVendorEmailSubject(`Production Start Request - Order #${currentOrder.orderNumber}`);
-                            setVendorEmailBody(`Hello,\n\nWe are ready to begin production for order #${currentOrder.orderNumber}.\n\nOrder Details:\n- Quantity: [QUANTITY]\n- Product: [PRODUCT]\n- In-Hands Date: ${currentOrder.inHandsDate ? new Date(currentOrder.inHandsDate).toLocaleDateString() : '[DATE]'}\n\nPlease confirm production timeline and any requirements.\n\nBest regards,\nSwagSuite Team`);
+                            setVendorEmailSubject(`Production Start Request - Order #${order.orderNumber}`);
+                            setVendorEmailBody(`Hello,\n\nWe are ready to begin production for order #${order.orderNumber}.\n\nOrder Details:\n- Quantity: [QUANTITY]\n- Product: [PRODUCT]\n- In-Hands Date: ${order.inHandsDate ? new Date(order.inHandsDate).toLocaleDateString() : '[DATE]'}\n\nPlease confirm production timeline and any requirements.\n\nBest regards,\nSwagSuite Team`);
                           }}
                         >
                           Production Start Request
@@ -1601,8 +1994,8 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setVendorEmailSubject(`Production Status Check - Order #${currentOrder.orderNumber}`);
-                            setVendorEmailBody(`Hello,\n\nCould you please provide a status update on order #${currentOrder.orderNumber}?\n\nWe need to confirm the production timeline to meet our delivery commitments.\n\nThank you for your attention to this matter.\n\nBest regards,\nSwagSuite Team`);
+                            setVendorEmailSubject(`Production Status Check - Order #${order.orderNumber}`);
+                            setVendorEmailBody(`Hello,\n\nCould you please provide a status update on order #${order.orderNumber}?\n\nWe need to confirm the production timeline to meet our delivery commitments.\n\nThank you for your attention to this matter.\n\nBest regards,\nSwagSuite Team`);
                           }}
                         >
                           Status Check
@@ -1611,8 +2004,8 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setVendorEmailSubject(`Artwork Files - Order #${currentOrder.orderNumber}`);
-                            setVendorEmailBody(`Hello,\n\nPlease find attached the final artwork files for order #${currentOrder.orderNumber}.\n\nArtwork has been approved by the client and is ready for production.\n\nPlease confirm receipt and estimated production start date.\n\nBest regards,\nSwagSuite Team`);
+                            setVendorEmailSubject(`Artwork Files - Order #${order.orderNumber}`);
+                            setVendorEmailBody(`Hello,\n\nPlease find attached the final artwork files for order #${order.orderNumber}.\n\nArtwork has been approved by the client and is ready for production.\n\nPlease confirm receipt and estimated production start date.\n\nBest regards,\nSwagSuite Team`);
                           }}
                         >
                           Send Artwork
@@ -1621,8 +2014,8 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setVendorEmailSubject(`Rush Order Request - Order #${currentOrder.orderNumber}`);
-                            setVendorEmailBody(`Hello,\n\nWe have a rush request for order #${currentOrder.orderNumber}.\n\nRequired in-hands date: ${currentOrder.inHandsDate ? new Date(currentOrder.inHandsDate).toLocaleDateString() : '[DATE]'}\n\nPlease let us know if this timeline is possible and any additional costs.\n\nThank you for your flexibility.\n\nBest regards,\nSwagSuite Team`);
+                            setVendorEmailSubject(`Rush Order Request - Order #${order.orderNumber}`);
+                            setVendorEmailBody(`Hello,\n\nWe have a rush request for order #${order.orderNumber}.\n\nRequired in-hands date: ${order.inHandsDate ? new Date(order.inHandsDate).toLocaleDateString() : '[DATE]'}\n\nPlease let us know if this timeline is possible and any additional costs.\n\nThank you for your flexibility.\n\nBest regards,\nSwagSuite Team`);
                           }}
                         >
                           Rush Request
@@ -1643,58 +2036,58 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {supplier ? (
+                      {selectedVendor ? (
                         <>
                           <div className="flex items-center space-x-3">
-                            <UserAvatar name={supplier.name} size="sm" />
+                            <UserAvatar name={selectedVendor.name} size="sm" />
                             <div>
-                              <p className="font-semibold">{supplier.name}</p>
-                              <p className="text-sm text-gray-600">{supplier.isPreferred ? 'Preferred Vendor' : 'Vendor'}</p>
+                              <p className="font-semibold">{selectedVendor.name}</p>
+                              <p className="text-sm text-gray-600">{selectedVendor.isPreferred ? 'Preferred Vendor' : 'Vendor'}</p>
                             </div>
                           </div>
 
                           <div className="space-y-2">
-                            {supplier.contactPerson && (
+                            {selectedVendor.contactPerson && (
                               <div className="flex items-center gap-2">
                                 <User className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm">Contact: {supplier.contactPerson}</span>
+                                <span className="text-sm">Contact: {selectedVendor.contactPerson}</span>
                               </div>
                             )}
 
-                            {supplier.email && (
+                            {selectedVendor.email && (
                               <div className="flex items-center gap-2">
                                 <Mail className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm">{supplier.email}</span>
+                                <span className="text-sm">{selectedVendor.email}</span>
                               </div>
                             )}
 
-                            {supplier.phone && (
+                            {selectedVendor.phone && (
                               <div className="flex items-center gap-2">
                                 <Phone className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm">{supplier.phone}</span>
+                                <span className="text-sm">{selectedVendor.phone}</span>
                               </div>
                             )}
 
-                            {supplier.website && (
+                            {selectedVendor.website && (
                               <div className="flex items-center gap-2">
                                 <ExternalLink className="w-4 h-4 text-gray-500" />
-                                <a href={supplier.website} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
-                                  {supplier.website}
+                                <a href={selectedVendor.website} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
+                                  {selectedVendor.website}
                                 </a>
                               </div>
                             )}
 
-                            {supplier.address && (
+                            {selectedVendor.address && (
                               <div className="flex items-center gap-2">
                                 <MapPin className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm">{supplier.address}</span>
+                                <span className="text-sm">{selectedVendor.address}</span>
                               </div>
                             )}
 
-                            {supplier.paymentTerms && (
+                            {selectedVendor.paymentTerms && (
                               <div className="flex items-center gap-2">
                                 <CreditCard className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm">Terms: {supplier.paymentTerms}</span>
+                                <span className="text-sm">Terms: {selectedVendor.paymentTerms}</span>
                               </div>
                             )}
                           </div>
@@ -1785,6 +2178,77 @@ export function OrderDetailsModal({ open, onOpenChange, order, companyName }: Or
         onOpenChange={setIsEditModalOpen}
         order={order}
       />
+      <ProductModal
+        open={isProductModalOpen}
+        onOpenChange={(open) => {
+          setIsProductModalOpen(open);
+          if (!open) {
+            setEditingProduct(null);
+            // Force refresh orderItems to get updated supplier info
+            queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}/items`] });
+          }
+        }}
+        product={editingProduct}
+      />
+      <SendApprovalDialog
+        open={isSendApprovalOpen}
+        onOpenChange={setIsSendApprovalOpen}
+        orderId={orderId}
+        orderNumber={order.orderNumber}
+        orderItems={orderItems}
+        defaultClientEmail={order?.companyId ? companies.find((c: any) => c.id === order.companyId)?.email : ""}
+        defaultClientName={order?.companyId ? companies.find((c: any) => c.id === order.companyId)?.name : ""}
+      />
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              Delete Product?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{deletingProduct?.productName}</strong>?
+              {deletingProduct?.productSku && (
+                <span className="block mt-1 text-xs text-gray-500">SKU: {deletingProduct.productSku}</span>
+              )}
+              <span className="block mt-2 text-red-600 font-medium">
+                This action cannot be undone. The product will be permanently removed from the system.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setDeletingProduct(null);
+              setIsDeleteDialogOpen(false);
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deletingProduct) {
+                  deleteProductMutation.mutate(deletingProduct.productId);
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              disabled={deleteProductMutation.isPending}
+            >
+              {deleteProductMutation.isPending ? (
+                <>
+                  <span className="animate-spin mr-2">⏳</span>
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Product
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
+
+export default OrderDetailsModal;
