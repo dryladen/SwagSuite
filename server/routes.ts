@@ -870,6 +870,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/companies/:id', isAuthenticated, async (req, res) => {
     try {
+      // This will cascade delete all related contacts and orders
       await storage.deleteCompany(req.params.id);
 
       // Log activity
@@ -941,6 +942,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/contacts/:id', isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
+      // This will cascade delete all related orders and order items
       await storage.deleteContact(id);
       res.status(204).send();
     } catch (error) {
@@ -1580,12 +1582,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Created order: ${order.orderNumber}`,
       });
 
-      // Update YTD spending for company and supplier
+      // Update YTD spending for company
       if (order.companyId) {
         await updateCompanyYtdSpending(order.companyId);
       }
-      if (order.supplierId) {
-        await updateSupplierYtdSpending(order.supplierId);
+      // Update YTD spending for suppliers from order items
+      if (items && items.length > 0) {
+        const supplierIds = Array.from(new Set(items.map((item: any) => item.supplierId).filter(Boolean)));
+        for (const supplierId of supplierIds) {
+          if (supplierId) {
+            await updateSupplierYtdSpending(supplierId as string);
+          }
+        }
       }
 
       res.status(201).json(order);
@@ -1625,20 +1633,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Updated order: ${order.orderNumber}`,
       });
 
-      // Update YTD spending for current company and supplier
+      // Update YTD spending for current company
       if (order.companyId) {
         await updateCompanyYtdSpending(order.companyId);
       }
-      if (order.supplierId) {
-        await updateSupplierYtdSpending(order.supplierId);
+      
+      // Update YTD spending for all suppliers from order items
+      const currentItems = await storage.getOrderItems(order.id);
+      const currentSupplierIds = Array.from(new Set(currentItems.map(item => item.supplierId).filter(Boolean)));
+      for (const supplierId of currentSupplierIds) {
+        if (supplierId) {
+          await updateSupplierYtdSpending(supplierId as string);
+        }
       }
       
-      // Also update old company/supplier if they changed
+      // Also update old company if it changed
       if (oldOrder?.companyId && oldOrder.companyId !== order.companyId) {
         await updateCompanyYtdSpending(oldOrder.companyId);
-      }
-      if (oldOrder?.supplierId && oldOrder.supplierId !== order.supplierId) {
-        await updateSupplierYtdSpending(oldOrder.supplierId);
       }
 
       res.json(order);
@@ -1670,9 +1681,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (updatedOrder.companyId) {
         await updateCompanyYtdSpending(updatedOrder.companyId);
       }
-      if (updatedOrder.supplierId) {
-        await updateSupplierYtdSpending(updatedOrder.supplierId);
+      const orderItems = await storage.getOrderItems(updatedOrder.id);
+      const supplierIds = Array.from(new Set(orderItems.map(item => item.supplierId).filter(Boolean)));
+      for (const supplierId of supplierIds) {
+        if (supplierId) {
+          await updateSupplierYtdSpending(supplierId as string);
+        }
       }
+
+      res.json(updatedOrder);
 
       res.json({
         message: "Order total recalculated successfully",
@@ -1727,9 +1744,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (updatedOrder.companyId) {
         await updateCompanyYtdSpending(updatedOrder.companyId);
       }
-      if (updatedOrder.supplierId) {
-        await updateSupplierYtdSpending(updatedOrder.supplierId);
+      const orderItems2 = await storage.getOrderItems(updatedOrder.id);
+      const supplierIds2 = Array.from(new Set(orderItems2.map(item => item.supplierId).filter(Boolean)));
+      for (const supplierId of supplierIds2) {
+        if (supplierId) {
+          await updateSupplierYtdSpending(supplierId as string);
+        }
       }
+
+      res.status(201).json(item);
 
       res.status(201).json(item);
     } catch (error) {
@@ -1758,8 +1781,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (updatedOrder.companyId) {
         await updateCompanyYtdSpending(updatedOrder.companyId);
       }
-      if (updatedOrder.supplierId) {
-        await updateSupplierYtdSpending(updatedOrder.supplierId);
+      const orderItems3 = await storage.getOrderItems(updatedOrder.id);
+      const supplierIds3 = Array.from(new Set(orderItems3.map(item => item.supplierId).filter(Boolean)));
+      for (const supplierId of supplierIds3) {
+        if (supplierId) {
+          await updateSupplierYtdSpending(supplierId as string);
+        }
       }
 
       res.json({ message: "Order item deleted successfully" });
@@ -2468,13 +2495,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update YTD and product count for each supplier
       for (const supplier of allSuppliers) {
         try {
-          // Calculate YTD spend
+          // Calculate YTD spend from order items
+          const { orderItems } = await import("@shared/schema");
           const [ytdResult] = await db
-            .select({ total: sql<string>`COALESCE(SUM(${orders.total}), 0)` })
-            .from(orders)
+            .select({ total: sql<string>`COALESCE(SUM(${orderItems.totalPrice}), 0)` })
+            .from(orderItems)
+            .innerJoin(orders, eq(orderItems.orderId, orders.id))
             .where(
               and(
-                eq(orders.supplierId, supplier.id),
+                eq(orderItems.supplierId, supplier.id),
                 gte(orders.createdAt, yearStart)
               )
             );
@@ -5639,6 +5668,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const existingProduct = await storage.getProductBySku(ssProduct.sku);
           
           if (existingProduct) {
+            // Merge colors and sizes with existing data
+            const existingColors = Array.isArray(existingProduct.colors) ? existingProduct.colors : [];
+            const existingSizes = Array.isArray(existingProduct.sizes) ? existingProduct.sizes : [];
+            
+            product.colors = Array.from(new Set([...existingColors, ...product.colors]));
+            product.sizes = Array.from(new Set([...existingSizes, ...product.sizes]));
+            
             // Update existing product
             await storage.updateProduct(existingProduct.id, product);
           } else {
@@ -5815,6 +5851,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const existingProduct = await storage.getProductBySku(sanmarProduct.styleId);
           
           if (existingProduct) {
+            // Merge colors and sizes with existing data
+            const existingColors = Array.isArray(existingProduct.colors) ? existingProduct.colors : [];
+            const existingSizes = Array.isArray(existingProduct.sizes) ? existingProduct.sizes : [];
+            
+            product.colors = Array.from(new Set([...existingColors, ...product.colors]));
+            product.sizes = Array.from(new Set([...existingSizes, ...product.sizes]));
+            
             await storage.updateProduct(existingProduct.id, product);
           } else {
             await storage.createProduct(product);
@@ -6489,7 +6532,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         emailAttachments = attachmentRecords.map(att => ({
           storagePath: att.storagePath,
           originalFilename: att.originalFilename,
-          mimeType: att.mimeType,
+          mimeType: att.mimeType || 'application/octet-stream',
         }));
       }
 
@@ -6889,14 +6932,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const [attachment] = await db
             .insert(attachments)
             .values({
-              orderId,
-              filename: file.filename,
-              originalFilename: file.originalname,
+              orderId: orderId,
+              filename: file.filename || '',
+              originalFilename: file.originalname || '',
               storagePath: uploadedPath,
-              mimeType: file.mimetype,
-              fileSize: file.size,
-              category,
-              uploadedBy: userId,
+              mimeType: file.mimetype || null,
+              fileSize: file.size || null,
+              category: category || 'attachment',
+              uploadedBy: userId || null,
             })
             .returning();
 

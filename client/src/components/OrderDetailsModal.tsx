@@ -2193,7 +2193,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
       <SendApprovalDialog
         open={isSendApprovalOpen}
         onOpenChange={setIsSendApprovalOpen}
-        orderId={orderId}
+        orderId={orderId || ""}
         orderNumber={order.orderNumber}
         orderItems={orderItems}
         defaultClientEmail={order?.companyId ? companies.find((c: any) => c.id === order.companyId)?.email : ""}

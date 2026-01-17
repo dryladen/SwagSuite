@@ -190,6 +190,15 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
 
   // Add product to order items
   const addProduct = (product: any) => {
+    // Warn if product doesn't have a supplier
+    if (!product.supplierId) {
+      toast({
+        title: "Warning: No Vendor Assigned",
+        description: `Product "${product.name}" doesn't have a vendor assigned. Please update the product in the catalog to assign a vendor.`,
+        variant: "default",
+      });
+    }
+    
     // Get first color and size from arrays if available
     const colorsArray = ensureArray(product.colors);
     const sizesArray = ensureArray(product.sizes);
@@ -206,7 +215,7 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
       unitPrice: parseFloat(product.basePrice || "0"),
       discount: 0,
       totalPrice: parseFloat(product.basePrice || "0"),
-      supplierId: product.supplierId,
+      supplierId: product.supplierId || null,
       color: firstColor,
       size: firstSize,
       imprintLocation: "",
@@ -641,8 +650,8 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
                       const isEditing = editingItemId === item.id;
                       
                       return (
-                        <React.Fragment key={item.id}>
-                          <tr className={isEditing ? "bg-blue-50" : ""}>
+                        <>
+                          <tr key={item.id} className={isEditing ? "bg-blue-50" : ""}>
                             <td className="px-3 py-3">
                               <div className="text-sm font-medium">{item.productName}</div>
                               <div className="text-xs text-gray-500">{item.sku || '-'}</div>
@@ -803,7 +812,7 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
                               </td>
                             </tr>
                           )}
-                        </React.Fragment>
+                        </>
                       );
                     })}
                   </tbody>

@@ -355,6 +355,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteCompany(id: string): Promise<void> {
+    // Cascade delete: First delete all related records
+    const { contacts, orders, orderItems } = await import("@shared/schema");
+    
+    // Delete order items for orders belonging to this company
+    const companyOrders = await db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(eq(orders.companyId, id));
+    
+    const orderIds = companyOrders.map(o => o.id);
+    if (orderIds.length > 0) {
+      await db.delete(orderItems).where(
+        sql`${orderItems.orderId} IN ${sql.raw(`(${orderIds.map(id => `'${id}'`).join(',')})`)}`
+      );
+    }
+    
+    // Delete orders
+    await db.delete(orders).where(eq(orders.companyId, id));
+    
+    // Delete contacts
+    await db.delete(contacts).where(eq(contacts.companyId, id));
+    
+    // Finally delete the company
     await db.delete(companies).where(eq(companies.id, id));
   }
 
@@ -465,6 +488,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteContact(id: string): Promise<void> {
+    // Cascade delete: First delete all related records
+    const { orders, orderItems } = await import("@shared/schema");
+    
+    // Get all orders for this contact
+    const contactOrders = await db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(eq(orders.contactId, id));
+    
+    const orderIds = contactOrders.map(o => o.id);
+    if (orderIds.length > 0) {
+      // Delete order items first
+      await db.delete(orderItems).where(
+        sql`${orderItems.orderId} IN ${sql.raw(`(${orderIds.map(id => `'${id}'`).join(',')})`)}`
+      );
+    }
+    
+    // Delete orders
+    await db.delete(orders).where(eq(orders.contactId, id));
+    
+    // Finally delete the contact
     await db.delete(contacts).where(eq(contacts.id, id));
   }
 
@@ -603,8 +647,25 @@ export class DatabaseStorage implements IStorage {
     let orderNumber = order.orderNumber;
 
     if (!orderNumber) {
-      const orderCount = await db.select({ count: sql`count(*)` }).from(orders);
-      orderNumber = `ORD-${new Date().getFullYear()}-${String(Number(orderCount[0].count) + 1).padStart(3, '0')}`;
+      const currentYear = new Date().getFullYear();
+      const prefix = `ORD-${currentYear}-`;
+      
+      // Get the highest order number for current year
+      const lastOrder = await db
+        .select({ orderNumber: orders.orderNumber })
+        .from(orders)
+        .where(sql`${orders.orderNumber} LIKE ${prefix + '%'}`)
+        .orderBy(desc(orders.orderNumber))
+        .limit(1);
+      
+      let nextNumber = 1;
+      if (lastOrder.length > 0 && lastOrder[0].orderNumber) {
+        // Extract number from last order (e.g., "ORD-2026-030" -> 30)
+        const lastNumber = parseInt(lastOrder[0].orderNumber.split('-')[2]);
+        nextNumber = lastNumber + 1;
+      }
+      
+      orderNumber = `${prefix}${String(nextNumber).padStart(3, '0')}`;
     }
 
     const [newOrder] = await db

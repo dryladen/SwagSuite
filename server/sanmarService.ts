@@ -231,12 +231,12 @@ ${body}
     
     // Collect unique colors and sizes
     const colors = new Set<string>();
-    const sizes: string[] = [];
+    const sizes = new Set<string>();
     
     for (const response of responses) {
       const info = response.productBasicInfo || {};
       if (info.color) colors.add(info.color);
-      if (info.size) sizes.push(info.size);
+      if (info.size) sizes.add(info.size);
     }
     
     return {
@@ -264,7 +264,7 @@ ${body}
       
       // Aggregated arrays
       colors: Array.from(colors),
-      sizes: sizes,
+      sizes: Array.from(sizes),
       
       // Images
       productImage: imageInfo.productImage,

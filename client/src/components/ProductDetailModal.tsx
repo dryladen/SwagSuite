@@ -215,7 +215,7 @@ export function ProductDetailModal({ open, onOpenChange, product, supplierName }
                 <img 
                   src={product.imageUrl} 
                   alt={product.name}
-                  className="w-full h-64 object-cover rounded-lg"
+                  className="w-full h-full object-contain rounded-lg"
                 />
               </CardContent>
             </Card>
@@ -255,7 +255,7 @@ export function ProductDetailModal({ open, onOpenChange, product, supplierName }
           {(() => {
             const sizes = parseArrayField(product.sizes);
             return sizes.length > 0 && (
-              <Card>
+              <Card className="md:col-span-2">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <Ruler className="w-5 h-5" />

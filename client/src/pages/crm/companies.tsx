@@ -267,8 +267,8 @@ export default function Companies() {
 
   const deleteCompanyMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await apiRequest("DELETE", `/api/companies/${id}`);
-      return response.json();
+      await apiRequest("DELETE", `/api/companies/${id}`);
+      return true;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/companies"] });
