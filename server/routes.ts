@@ -1746,8 +1746,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.status(201).json(item);
-
-      res.status(201).json(item);
     } catch (error) {
       console.error("Error creating order item:", error);
       res.status(500).json({ message: "Failed to create order item" });
@@ -6693,6 +6691,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('  Subject:', subject);
         console.log('  Attachments:', emailAttachments.length);
         
+        // Extract CC and BCC from request body
+        const { cc, bcc } = req.body;
+        
         try {
           const order = await storage.getOrder(orderId);
           const company = order?.companyId ? await storage.getCompany(order.companyId) : null;
@@ -6710,6 +6711,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               orderNumber: order?.orderNumber,
               companyName: company?.name,
               attachments: emailAttachments,
+              cc,
+              bcc,
             });
             console.log('✅ Client email sent successfully!');
           } else if (communicationType === 'vendor_email') {
@@ -6724,6 +6727,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               orderNumber: order?.orderNumber,
               supplierName: supplier?.name,
               attachments: emailAttachments,
+              cc,
+              bcc,
             });
             console.log('✅ Vendor email sent successfully!');
           }

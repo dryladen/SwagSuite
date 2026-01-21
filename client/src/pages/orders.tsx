@@ -79,6 +79,19 @@ export default function Orders() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
+              <FileText className="text-yellow-600" size={20} />
+              <div>
+                <p className="text-sm text-gray-600">Pending Approval</p>
+                <p className="text-xl font-bold">
+                  {orders?.filter((o: Order) => o.status === 'pending_approval').length || 0}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-2">
               <Calendar className="text-purple-600" size={20} />
               <div>
                 <p className="text-sm text-gray-600">In Production</p>
@@ -102,19 +115,7 @@ export default function Orders() {
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <FileText className="text-yellow-600" size={20} />
-              <div>
-                <p className="text-sm text-gray-600">Pending Approval</p>
-                <p className="text-xl font-bold">
-                  {orders?.filter((o: Order) => o.status === 'pending_approval').length || 0}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+
       </div>
 
       {/* Orders DataTable */}

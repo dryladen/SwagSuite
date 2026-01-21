@@ -69,6 +69,8 @@ class EmailService {
     fromName?: string;
     to: string;
     toName?: string;
+    cc?: string;
+    bcc?: string;
     subject: string;
     body: string;
     orderNumber?: string;
@@ -130,6 +132,16 @@ class EmailService {
       text: data.body,
     };
 
+    // Add CC if provided
+    if (data.cc) {
+      mailOptions.cc = data.cc;
+    }
+
+    // Add BCC if provided
+    if (data.bcc) {
+      mailOptions.bcc = data.bcc;
+    }
+
     // Add attachments if provided
     if (data.attachments && data.attachments.length > 0) {
       const { replitStorage } = await import('./replitStorage');
@@ -155,8 +167,8 @@ class EmailService {
     from?: string;
     fromName?: string;
     to: string;
-    toName?: string;
-    subject: string;
+    toName?: string;    cc?: string;
+    bcc?: string;    subject: string;
     body: string;
     orderNumber?: string;
     supplierName?: string;
@@ -217,6 +229,16 @@ class EmailService {
       html,
       text: data.body,
     };
+
+    // Add CC if provided
+    if (data.cc) {
+      vendorMailOptions.cc = data.cc;
+    }
+
+    // Add BCC if provided
+    if (data.bcc) {
+      vendorMailOptions.bcc = data.bcc;
+    }
 
     // Add attachments if provided
     if (data.attachments && data.attachments.length > 0) {

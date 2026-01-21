@@ -42,6 +42,7 @@ import {
   MessageSquare,
   Package,
   Phone,
+  Plus,
   Send,
   ShoppingCart,
   Tag,
@@ -144,6 +145,8 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
   const [emailFromCustom, setEmailFromCustom] = useState(false);
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
+  const [emailCc, setEmailCc] = useState("");
+  const [emailBcc, setEmailBcc] = useState("");
   const [emailAttachments, setEmailAttachments] = useState<File[]>([]);
   const [vendorEmailTo, setVendorEmailTo] = useState("");
   const [vendorEmailToName, setVendorEmailToName] = useState("");
@@ -152,6 +155,8 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
   const [vendorEmailFromCustom, setVendorEmailFromCustom] = useState(false);
   const [vendorEmailSubject, setVendorEmailSubject] = useState("");
   const [vendorEmailBody, setVendorEmailBody] = useState("");
+  const [vendorEmailCc, setVendorEmailCc] = useState("");
+  const [vendorEmailBcc, setVendorEmailBcc] = useState("");
   const [vendorEmailAttachments, setVendorEmailAttachments] = useState<File[]>([]);
   const [emailPreviewMode, setEmailPreviewMode] = useState<"compose" | "preview">("compose");
   const [vendorEmailPreviewMode, setVendorEmailPreviewMode] = useState<"compose" | "preview">("compose");
@@ -159,8 +164,28 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
   const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isAddProductDialogOpen, setIsAddProductDialogOpen] = useState(false);
+  const [isEditOrderItemOpen, setIsEditOrderItemOpen] = useState(false);
 
   const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [editingOrderItem, setEditingOrderItem] = useState<any>(null);
+  const [newProductForm, setNewProductForm] = useState({
+    productId: "",
+    quantity: "1",
+    unitPrice: "0",
+    color: "",
+    size: "",
+    imprintLocation: "",
+    imprintMethod: "",
+  });
+  const [orderItemForm, setOrderItemForm] = useState({
+    quantity: "1",
+    unitPrice: "0",
+    color: "",
+    size: "",
+  });
+  const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState<any>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
@@ -304,12 +329,96 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
     }
   }, [orderVendors, selectedVendor]);
 
-  // Fetch all products to get current supplier info
+  // Fetch all products to get current supplier info and for add product dialog
   const { data: allProducts = [] } = useQuery<any[]>({
     queryKey: ["/api/products"],
-    enabled: open && !!order && orderItems.length > 0,
+    enabled: open && !!order,
     staleTime: 0,
   });
+
+  // Handler for opening edit order item dialog
+  const handleEditOrderItem = (item: any) => {
+    setEditingOrderItem(item);
+    setOrderItemForm({
+      quantity: item.quantity.toString(),
+      unitPrice: item.unitPrice.toString(),
+      color: item.color || "",
+      size: item.size || "",
+    });
+    setIsEditOrderItemOpen(true);
+  };
+
+  // Handler for saving order item changes
+  const handleSaveOrderItem = () => {
+    if (!editingOrderItem) return;
+    
+    const quantity = parseInt(orderItemForm.quantity);
+    const unitPrice = parseFloat(orderItemForm.unitPrice);
+    
+    if (isNaN(quantity) || quantity <= 0) {
+      toast({
+        title: "Invalid Quantity",
+        description: "Please enter a valid quantity.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (isNaN(unitPrice) || unitPrice < 0) {
+      toast({
+        title: "Invalid Price",
+        description: "Please enter a valid unit price.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    updateOrderItemMutation.mutate({
+      itemId: editingOrderItem.id,
+      updates: {
+        quantity,
+        unitPrice,
+        totalPrice: (quantity * unitPrice).toFixed(2),
+        color: orderItemForm.color || null,
+        size: orderItemForm.size || null,
+      },
+    });
+  };
+
+  // Handler for adding product
+  const handleAddProduct = () => {
+    const quantity = parseInt(newProductForm.quantity);
+    const unitPrice = parseFloat(newProductForm.unitPrice);
+    
+    if (!newProductForm.productId) {
+      toast({
+        title: "Product Required",
+        description: "Please select a product.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (isNaN(quantity) || quantity <= 0) {
+      toast({
+        title: "Invalid Quantity",
+        description: "Please enter a valid quantity.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (isNaN(unitPrice) || unitPrice < 0) {
+      toast({
+        title: "Invalid Price",
+        description: "Please enter a valid unit price.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    addOrderItemMutation.mutate(newProductForm);
+  };
 
   // Fetch project activities (internal notes)
   const { data: activities = [] } = useQuery<ProjectActivity[]>({
@@ -381,6 +490,8 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
       recipientName: string;
       subject: string;
       body: string;
+      cc?: string;
+      bcc?: string;
       attachments?: File[];
       attachmentIds?: string[];
     }) => {
@@ -396,6 +507,8 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
           recipientName: data.recipientName,
           subject: data.subject,
           body: data.body,
+          cc: data.cc,
+          bcc: data.bcc,
           attachmentIds: data.attachmentIds,
         }),
       });
@@ -441,6 +554,8 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
       recipientName: string;
       subject: string;
       body: string;
+      cc?: string;
+      bcc?: string;
       attachments?: File[];
       attachmentIds?: string[];
     }) => {
@@ -456,6 +571,8 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
           recipientName: data.recipientName,
           subject: data.subject,
           body: data.body,
+          cc: data.cc,
+          bcc: data.bcc,
           attachmentIds: data.attachmentIds,
         }),
       });
@@ -487,6 +604,85 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
       toast({
         title: "Email Error",
         description: error.message || "Failed to send vendor email. Please check Settings → Email Config.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation to add product to order
+  const addOrderItemMutation = useMutation({
+    mutationFn: async (data: typeof newProductForm) => {
+      const response = await fetch(`/api/orders/${orderId}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: data.productId,
+          quantity: parseInt(data.quantity),
+          unitPrice: parseFloat(data.unitPrice),
+          totalPrice: (parseInt(data.quantity) * parseFloat(data.unitPrice)).toFixed(2),
+          color: data.color || null,
+          size: data.size || null,
+          imprintLocation: data.imprintLocation || null,
+          imprintMethod: data.imprintMethod || null,
+        }),
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to add product to order");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}/items`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}`] });
+      setIsAddProductDialogOpen(false);
+      setNewProductForm({
+        productId: "",
+        quantity: "1",
+        unitPrice: "0",
+        color: "",
+        size: "",
+        imprintLocation: "",
+        imprintMethod: "",
+      });
+      toast({
+        title: "Product Added",
+        description: "Product has been added to the order successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to add product to order.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation to update order item (quantity/price)
+  const updateOrderItemMutation = useMutation({
+    mutationFn: async (data: { itemId: string; updates: any }) => {
+      const response = await fetch(`/api/orders/${orderId}/items/${data.itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data.updates),
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to update order item");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}/items`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}`] });
+      setIsEditOrderItemOpen(false);
+      setEditingOrderItem(null);
+      toast({
+        title: "Item Updated",
+        description: "Order item has been updated successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update order item.",
         variant: "destructive",
       });
     },
@@ -748,6 +944,8 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
         recipientName: emailToName,
         subject: emailSubject,
         body: emailBody,
+        cc: emailCc || undefined,
+        bcc: emailBcc || undefined,
         attachments: emailAttachments,
         attachmentIds,
       });
@@ -755,6 +953,8 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
       setEmailFrom("");
       setEmailFromName("");
       setEmailTo("");
+      setEmailCc("");
+      setEmailBcc("");
       setEmailSubject("");
       setEmailBody("");
       setEmailAttachments([]);
@@ -806,6 +1006,8 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
         recipientName: vendorEmailToName,
         subject: vendorEmailSubject,
         body: vendorEmailBody,
+        cc: vendorEmailCc || undefined,
+        bcc: vendorEmailBcc || undefined,
         attachments: vendorEmailAttachments,
         attachmentIds,
       });
@@ -814,6 +1016,8 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
       setVendorEmailFromName("");
       setVendorEmailTo("");
       setVendorEmailToName("");
+      setVendorEmailCc("");
+      setVendorEmailBcc("");
       setVendorEmailSubject("");
       setVendorEmailBody("");
       setVendorEmailAttachments([]);
@@ -1529,9 +1733,18 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
             <TabsContent value="products" className="mt-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Package className="w-5 h-5" />
-                    Order Products ({orderItems.length})
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Package className="w-5 h-5" />
+                      Order Products ({orderItems.length})
+                    </div>
+                    <Button
+                      onClick={() => setIsAddProductDialogOpen(true)}
+                      size="sm"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Product
+                    </Button>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1573,46 +1786,9 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      onClick={async () => {
-                                        const prodId = item.productId;
-
-                                        if (!prodId) {
-                                          toast({
-                                            title: "Error",
-                                            description: "Product ID not found in order item",
-                                            variant: "destructive"
-                                          });
-                                          return;
-                                        }
-
-                                        try {
-                                          const response = await fetch(`/api/products/${prodId}`, {
-                                            credentials: 'include'
-                                          });
-
-                                          if (!response.ok) {
-                                            toast({
-                                              title: "Error",
-                                              description: `Failed to load product (${response.status})`,
-                                              variant: "destructive"
-                                            });
-                                            return;
-                                          }
-
-                                          const product = await response.json();
-                                          setEditingProduct(product);
-                                          setIsProductModalOpen(true);
-                                        } catch (error) {
-                                          console.error('Error fetching product:', error);
-                                          toast({
-                                            title: "Error",
-                                            description: "Failed to load product",
-                                            variant: "destructive"
-                                          });
-                                        }
-                                      }}
+                                      onClick={() => handleEditOrderItem(item)}
                                       className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                      title="Edit product"
+                                      title="Edit quantity and price"
                                     >
                                       <Edit className="w-4 h-4" />
                                     </Button>
@@ -2061,6 +2237,24 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                       />
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium">CC (optional):</label>
+                      <Input
+                        placeholder="cc@email.com (comma-separated for multiple)"
+                        value={emailCc}
+                        onChange={(e) => setEmailCc(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">BCC (optional):</label>
+                      <Input
+                        placeholder="bcc@email.com (comma-separated for multiple)"
+                        value={emailBcc}
+                        onChange={(e) => setEmailBcc(e.target.value)}
+                      />
+                    </div>
+                  </div>
                   <div className="">
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-sm font-medium">Message:</label>
@@ -2405,7 +2599,24 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                       </div>
                     </div>
 
-
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium">CC (optional):</label>
+                        <Input
+                          placeholder="cc@vendor.com (comma-separated for multiple)"
+                          value={vendorEmailCc}
+                          onChange={(e) => setVendorEmailCc(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">BCC (optional):</label>
+                        <Input
+                          placeholder="bcc@vendor.com (comma-separated for multiple)"
+                          value={vendorEmailBcc}
+                          onChange={(e) => setVendorEmailBcc(e.target.value)}
+                        />
+                      </div>
+                    </div>
 
                     <div>
                       <div className="flex items-center justify-between mb-2">
@@ -3062,6 +3273,284 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
             </Button>
             <Button onClick={handleSaveShippingInfo} disabled={updateShippingInfoMutation.isPending} className="flex-1">
               {updateShippingInfoMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Product Dialog */}
+      <Dialog open={isAddProductDialogOpen} onOpenChange={setIsAddProductDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add Product to Order</DialogTitle>
+            <DialogDescription>
+              Select a product and specify quantity and pricing
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="relative">
+              <Label htmlFor="add-product">Product *</Label>
+              <Input
+                id="add-product"
+                type="text"
+                placeholder="Search product by name or SKU..."
+                value={productSearchQuery}
+                onChange={(e) => {
+                  setProductSearchQuery(e.target.value);
+                  setShowProductDropdown(true);
+                }}
+                onFocus={() => setShowProductDropdown(true)}
+                onBlur={() => {
+                  // Delay to allow click on dropdown item
+                  setTimeout(() => setShowProductDropdown(false), 200);
+                }}
+              />
+              
+              {/* Selected Product Display */}
+              {newProductForm.productId && (() => {
+                const selectedProduct = allProducts.find((p: any) => p.id === newProductForm.productId);
+                return selectedProduct ? (
+                  <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-sm">{selectedProduct.name}</p>
+                      <p className="text-xs text-gray-600">
+                        {selectedProduct.sku && `SKU: ${selectedProduct.sku} • `}
+                        Price: ${Number(selectedProduct.basePrice || 0).toFixed(2)}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setNewProductForm({ ...newProductForm, productId: "", unitPrice: "0" });
+                        setProductSearchQuery("");
+                      }}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                ) : null;
+              })()}
+              
+              {/* Dropdown */}
+              {showProductDropdown && (() => {
+                const filteredProducts = allProducts.filter((p: any) => {
+                  const search = productSearchQuery.toLowerCase();
+                  return (
+                    p.name?.toLowerCase().includes(search) ||
+                    p.sku?.toLowerCase().includes(search)
+                  );
+                }).slice(0, 10);
+                
+                return filteredProducts.length > 0 ? (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                    {filteredProducts.map((product: any) => (
+                      <button
+                        key={product.id}
+                        type="button"
+                        className="w-full text-left px-3 py-2 hover:bg-gray-100 border-b last:border-b-0 cursor-pointer"
+                        onClick={() => {
+                          setNewProductForm({
+                            ...newProductForm,
+                            productId: product.id,
+                            unitPrice: (Number(product.basePrice) || 0).toFixed(2),
+                          });
+                          setProductSearchQuery(product.name);
+                          setShowProductDropdown(false);
+                        }}
+                      >
+                        <div className="font-medium text-sm">{product.name}</div>
+                        <div className="text-xs text-gray-600">
+                          {product.sku && `SKU: ${product.sku} • `}
+                          Price: ${Number(product.basePrice || 0).toFixed(2)}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : productSearchQuery ? (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg p-3 text-sm text-gray-500">
+                    No products found
+                  </div>
+                ) : null;
+              })()}
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="add-quantity">Quantity *</Label>
+                <Input
+                  id="add-quantity"
+                  type="number"
+                  min="1"
+                  value={newProductForm.quantity}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, quantity: e.target.value })}
+                  placeholder="1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="add-unit-price">Unit Price *</Label>
+                <Input
+                  id="add-unit-price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newProductForm.unitPrice}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, unitPrice: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="add-color">Color</Label>
+                <Input
+                  id="add-color"
+                  value={newProductForm.color}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, color: e.target.value })}
+                  placeholder="e.g., Red, Blue"
+                />
+              </div>
+              <div>
+                <Label htmlFor="add-size">Size</Label>
+                <Input
+                  id="add-size"
+                  value={newProductForm.size}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, size: e.target.value })}
+                  placeholder="e.g., S, M, L, XL"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="add-imprint-location">Imprint Location</Label>
+                <Input
+                  id="add-imprint-location"
+                  value={newProductForm.imprintLocation}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, imprintLocation: e.target.value })}
+                  placeholder="e.g., Front Center"
+                />
+              </div>
+              <div>
+                <Label htmlFor="add-imprint-method">Imprint Method</Label>
+                <Input
+                  id="add-imprint-method"
+                  value={newProductForm.imprintMethod}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, imprintMethod: e.target.value })}
+                  placeholder="e.g., Screen Print, Embroidery"
+                />
+              </div>
+            </div>
+
+            {newProductForm.productId && newProductForm.quantity && newProductForm.unitPrice && (
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-green-800">Total:</span>
+                  <span className="text-2xl font-bold text-green-600">
+                    ${(parseFloat(newProductForm.quantity) * parseFloat(newProductForm.unitPrice)).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsAddProductDialogOpen(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button onClick={handleAddProduct} disabled={addOrderItemMutation.isPending} className="flex-1">
+              {addOrderItemMutation.isPending ? "Adding..." : "Add Product"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Order Item Dialog */}
+      <Dialog open={isEditOrderItemOpen} onOpenChange={setIsEditOrderItemOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Order Item</DialogTitle>
+            <DialogDescription>
+              Update quantity, price, color, and size for {editingOrderItem?.productName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-600">Product</p>
+              <p className="font-semibold">{editingOrderItem?.productName}</p>
+              {editingOrderItem?.productSku && (
+                <p className="text-xs text-gray-500">SKU: {editingOrderItem.productSku}</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-quantity">Quantity *</Label>
+                <Input
+                  id="edit-quantity"
+                  type="number"
+                  min="1"
+                  value={orderItemForm.quantity}
+                  onChange={(e) => setOrderItemForm({ ...orderItemForm, quantity: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-unit-price">Unit Price *</Label>
+                <Input
+                  id="edit-unit-price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={orderItemForm.unitPrice}
+                  onChange={(e) => setOrderItemForm({ ...orderItemForm, unitPrice: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-color">Color</Label>
+                <Input
+                  id="edit-color"
+                  value={orderItemForm.color}
+                  onChange={(e) => setOrderItemForm({ ...orderItemForm, color: e.target.value })}
+                  placeholder="e.g., Red, Blue"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-size">Size</Label>
+                <Input
+                  id="edit-size"
+                  value={orderItemForm.size}
+                  onChange={(e) => setOrderItemForm({ ...orderItemForm, size: e.target.value })}
+                  placeholder="e.g., S, M, L, XL"
+                />
+              </div>
+            </div>
+
+            {orderItemForm.quantity && orderItemForm.unitPrice && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-blue-800">New Total:</span>
+                  <span className="text-2xl font-bold text-blue-600">
+                    ${(parseFloat(orderItemForm.quantity) * parseFloat(orderItemForm.unitPrice)).toFixed(2)}
+                  </span>
+                </div>
+                {editingOrderItem && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    Previous: ${(editingOrderItem.quantity * parseFloat(editingOrderItem.unitPrice)).toFixed(2)}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsEditOrderItemOpen(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button onClick={handleSaveOrderItem} disabled={updateOrderItemMutation.isPending} className="flex-1">
+              {updateOrderItemMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </div>
         </DialogContent>
