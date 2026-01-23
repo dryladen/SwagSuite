@@ -57,6 +57,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { useLocation } from "wouter";
 import { loadStages, saveStages, resetStages, DEFAULT_STAGES, STAGE_STATUS_MAP, type ProductionStage } from "@/lib/productionStages";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ProductionOrder {
   id: string;
@@ -854,7 +855,7 @@ export default function ProductionReport() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stage</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progress</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignee</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CSR</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -931,10 +932,8 @@ export default function ProductionReport() {
                             </div>
                           </td>
                           <td className="px-4 py-4">
-                            <div className="flex items-center space-x-2">
-                              <UserAvatar name={order.assignedTo} size="sm" />
-                              <span className="text-sm text-gray-700">{order.assignedTo}</span>
-                            </div>
+                            <UserAvatar name={order.assignedTo} size="sm" />
+                            <span className="text-sm text-gray-700">{order.csrAssignedTo}</span>
                           </td>
                           <td className="px-4 py-4">
                             <div className="text-sm font-semibold">${order.orderValue.toLocaleString()}</div>
@@ -1094,19 +1093,38 @@ export default function ProductionReport() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 w-full items-center justify-between">
                     <div>
-                      <div className="flex items-center space-x-3 mb-2">
+                      <div className="flex items-center space-x-3">
                         <UserAvatar
                           name={order.companyName}
                           size="sm"
                         />
-                        <span className="text-gray-600">{order.companyName} • {order.productName} (Qty: {order.quantity})</span>
+                        <span className="text-gray-600">{order.companyName} - {order.productName} (Qty: {order.quantity})</span>
                       </div>
-                      <div className="flex items-center space-x-3">
-                        <UserAvatar
-                          name={order.assignedTo}
-                          size="sm"
-                        />
-                        <span className="text-sm text-gray-500">Sales Rep: {order.assignedTo}</span>
+                      {/* Production Team & CSR Assignment */}
+                      <div className="mt-4 flex items-center justify-between">
+                        <div className="flex flex-col gap-2 justify-start">
+                          <div className="grid grid-cols-2">
+                            <span className="text-sm font-semibold text-gray-700">Sales Rep:</span>
+                            <div className="flex gap-2">
+                              <UserAvatar
+                                name={order.assignedTo}
+                                size="sm"
+                              />
+                              <span className="text-sm text-gray-700">{order.assignedTo}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2">
+                            <span className="text-sm font-semibold text-gray-700">CSR:</span>
+                            <div className="flex gap-2">
+                              <UserAvatar
+                                name={order.csrAssignedTo}
+                                size="sm"
+                              />
+                              <span className="text-sm text-gray-700">{order.csrAssignedTo || 'Unassigned'}</span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                     <div className="text-right">
@@ -1115,6 +1133,7 @@ export default function ProductionReport() {
                     </div>
                   </div>
                 </div>
+
 
                 {/* Progress Bar */}
                 <div className="mb-4">
@@ -1131,38 +1150,38 @@ export default function ProductionReport() {
                 </div>
 
                 {/* Stage Pipeline */}
-                <div className="flex items-center space-x-2 overflow-x-auto p-2">
+                <div className="flex items-center space-x-2 z-20 p-2  overflow-x-scroll md:overflow-x-auto">
                   {stages.map((stage, index) => {
                     const isCompleted = order.stagesCompleted.includes(stage.id);
                     const isCurrent = order.currentStage === stage.id;
 
                     return (
-                      <div key={stage.id} className="flex items-center space-x-2 flex-shrink-0">
-                        <div className="relative">
-                          <div
-                            className={`
+                      <div key={stage.id} className="flex items-center space-x-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div
+                              className={`
                               w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium cursor-pointer hover:scale-110 transition-transform
                               ${isCompleted ? 'bg-green-500 text-white' :
-                                isCurrent ? 'bg-swag-primary text-white' : 'bg-gray-200 text-gray-600'}
+                                  isCurrent ? 'bg-swag-primary text-white' : 'bg-gray-200 text-gray-600'}
                             `}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openStageAction(order, stage.id);
-                            }}
-                          >
-                            {(() => {
-                              const StageIcon = getStageIcon(stage.icon);
-                              return <StageIcon className="h-4 w-4" />;
-                            })()}
-                          </div>
-                          {isCurrent && (
-                            <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
-                              <Badge className={stage.color} variant="outline">
-                                {stage.name}
-                              </Badge>
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openStageAction(order, stage.id);
+                              }}
+                            >
+                              {(() => {
+                                const StageIcon = getStageIcon(stage.icon);
+                                return <StageIcon className="h-4 w-4" />;
+                              })()}
                             </div>
-                          )}
-                        </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className={`z-50 rounded-full ${stage.color}`}>
+                            <span className="text-sm font-semibold">
+                              {stage.name}
+                            </span>
+                          </TooltipContent>
+                        </Tooltip>
                         {index < stages.length - 1 && (
                           <ArrowRight className="h-4 w-4 text-gray-400" />
                         )}
@@ -1228,28 +1247,7 @@ export default function ProductionReport() {
                   </div>
                 )}
 
-                {/* Production Team & CSR Assignment */}
-                <div className="mt-4 flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-500">Production:</span>
-                      <UserAvatar
-                        name={order.assignedTo}
-                        size="sm"
-                      />
-                      <span className="text-sm text-gray-700">{order.assignedTo}</span>
-                    </div>
 
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-500">CSR:</span>
-                      <UserAvatar
-                        name={order.csrAssignedTo}
-                        size="sm"
-                      />
-                      <span className="text-sm text-gray-700">{order.csrAssignedTo || 'Unassigned'}</span>
-                    </div>
-                  </div>
-                </div>
               </CardContent>
             </Card>
           ))}

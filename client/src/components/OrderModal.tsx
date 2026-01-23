@@ -198,14 +198,14 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
         variant: "default",
       });
     }
-    
+
     // Get first color and size from arrays if available
     const colorsArray = ensureArray(product.colors);
     const sizesArray = ensureArray(product.sizes);
-    
+
     const firstColor = colorsArray.length > 0 ? colorsArray[0] : "";
     const firstSize = sizesArray.length > 0 ? sizesArray[0] : "";
-    
+
     const newItem = {
       id: `temp-${Date.now()}`,
       productId: product.id,
@@ -225,7 +225,7 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
       availableColors: colorsArray,
       availableSizes: sizesArray,
     };
-    
+
     setOrderItems(prev => [...prev, newItem]);
     setEditingItemId(newItem.id);
     setProductSearch("");
@@ -288,7 +288,7 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
   const subtotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
   const orderDiscountAmount = (subtotal * parseFloat(formData.orderDiscount || "0")) / 100;
   const total = subtotal - orderDiscountAmount;
-  
+
   // Calculate margin (assuming 30% cost for now - should be from product cost)
   const estimatedCost = subtotal * 0.70; // 70% of selling price
   const profit = total - estimatedCost;
@@ -480,7 +480,7 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
                 </PopoverContent>
               </Popover>
             </div>
-            
+
             <div>
               <Label htmlFor="contactId">Contact Person</Label>
               <Select
@@ -589,7 +589,7 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
                   {filteredProducts.slice(0, 10).map((product: any) => {
                     const colorsArray = ensureArray(product.colors);
                     const sizesArray = ensureArray(product.sizes);
-                    
+
                     return (
                       <div
                         key={product.id}
@@ -648,7 +648,7 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
                     {orderItems.map((item) => {
                       const itemSupplier = suppliers.find((s: any) => s.id === item.supplierId);
                       const isEditing = editingItemId === item.id;
-                      
+
                       return (
                         <>
                           <tr key={item.id} className={isEditing ? "bg-blue-50" : ""}>
@@ -715,7 +715,7 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
                               </Button>
                             </td>
                           </tr>
-                          
+
                           {/* Item Details Row (collapsed/expanded) */}
                           {isEditing && (
                             <tr className="bg-blue-50">
@@ -892,22 +892,6 @@ export default function OrderModal({ open, onOpenChange, order, initialCompanyId
               onChange={(e) => handleFieldChange("notes", e.target.value)}
               rows={3}
             />
-          </div>
-
-          {/* Artwork Upload Placeholder */}
-          <div>
-            <Label>Artwork Files</Label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-swag-primary transition-colors">
-              <div className="text-gray-400 text-3xl mb-2">☁️</div>
-              <p className="text-sm text-gray-600">Drop files here or click to upload</p>
-              <p className="text-xs text-gray-500 mt-1">Supports: AI, EPS, PDF, PNG, JPG</p>
-              <input
-                type="file"
-                className="hidden"
-                multiple
-                accept=".ai,.eps,.pdf,.png,.jpg,.jpeg"
-              />
-            </div>
           </div>
 
           {/* Action Buttons */}
