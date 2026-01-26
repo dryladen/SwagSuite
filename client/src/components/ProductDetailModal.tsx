@@ -13,7 +13,9 @@ import {
   Building2,
   Calendar,
   ExternalLink,
-  Box
+  Box,
+  Edit,
+  Trash2
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -41,6 +43,8 @@ interface ProductDetailModalProps {
     updatedAt?: string;
   } | null;
   supplierName?: string;
+  onEdit?: (product: any) => void;
+  onDelete?: (productId: string) => void;
 }
 
 // Helper function to parse array fields that might be stored as strings or JSON
@@ -63,7 +67,7 @@ const parseArrayField = (field: any): string[] => {
   return [];
 };
 
-export function ProductDetailModal({ open, onOpenChange, product, supplierName }: ProductDetailModalProps) {
+export function ProductDetailModal({ open, onOpenChange, product, supplierName, onEdit, onDelete }: ProductDetailModalProps) {
   const [, setLocation] = useLocation();
 
   // Fetch orders that include this product
@@ -84,19 +88,59 @@ export function ProductDetailModal({ open, onOpenChange, product, supplierName }
     onOpenChange(false);
   };
 
+  const handleEdit = () => {
+    if (onEdit) {
+      onEdit(product);
+      onOpenChange(false);
+    }
+  };
+
+  const handleDelete = () => {
+    if (onDelete && confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
+      onDelete(product.id);
+      onOpenChange(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <Package className="w-6 h-6" />
-            {product.name}
-            {product.sku && (
-              <Badge variant="outline" className="font-mono">
-                {product.sku}
-              </Badge>
-            )}
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-3">
+              <Package className="w-6 h-6" />
+              {product.name}
+              {product.sku && (
+                <Badge variant="outline" className="font-mono">
+                  {product.sku}
+                </Badge>
+              )}
+            </DialogTitle>
+            <div className="flex gap-2">
+              {onEdit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleEdit}
+                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                >
+                  <Edit className="w-4 h-4 mr-1" />
+                  Edit
+                </Button>
+              )}
+              {onDelete && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDelete}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  Delete
+                </Button>
+              )}
+            </div>
+          </div>
         </DialogHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

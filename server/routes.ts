@@ -1852,6 +1852,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Cloudinary upload endpoint for product images
+  app.post('/api/cloudinary/upload', isAuthenticated, upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      // File is uploaded to Cloudinary via multer-storage-cloudinary
+      // req.file.path contains the Cloudinary URL
+      const cloudinaryUrl = (req.file as any).path;
+      const publicId = (req.file as any).filename || (req.file as any).public_id;
+
+      res.status(200).json({
+        url: cloudinaryUrl,
+        publicId: publicId,
+        fileName: req.file.originalname,
+        size: req.file.size,
+        mimeType: req.file.mimetype
+      });
+    } catch (error) {
+      console.error("Error uploading to Cloudinary:", error);
+      res.status(500).json({ message: "Failed to upload file to Cloudinary" });
+    }
+  });
+
   // Data Upload routes for AI processing
   app.post('/api/data-uploads', isAuthenticated, upload.single('file'), async (req, res) => {
     try {

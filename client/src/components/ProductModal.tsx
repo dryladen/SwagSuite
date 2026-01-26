@@ -96,6 +96,8 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
     phone: "",
     website: "",
   });
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -149,6 +151,8 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
         size: sizesString,
       });
       setSelectedProductImage(product.imageUrl || "");
+      setImageFile(null); // Clear any previous file selection
+      setIsUploadingImage(false);
     } else if (!product && open) {
       resetForm();
     }
@@ -168,6 +172,8 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
       size: "",
     });
     setSelectedProductImage("");
+    setImageFile(null);
+    setIsUploadingImage(false);
     setSearchQuery("");
     setSageSearchQuery("");
     setSearchResults([]);
@@ -175,6 +181,36 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
     setSearchError("");
     setDataSource("manual");
     setActiveTab("manual");
+    // Clear file input
+    const fileInput = document.getElementById('productImage') as HTMLInputElement;
+    if (fileInput) fileInput.value = '';
+  };
+
+  const handleImageUpload = async (file: File): Promise<string> => {
+    setIsUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/cloudinary/upload', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(errorData.message || 'Failed to upload image');
+      }
+
+      const data = await response.json();
+      console.log('Cloudinary upload response:', data);
+      return data.url;
+    } catch (error) {
+      console.error('Image upload error:', error);
+      setIsUploadingImage(false);
+      throw error;
+    }
   };
 
   const searchProductMutation = useMutation({
@@ -665,7 +701,7 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.name || !formData.sku) {
@@ -686,27 +722,49 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
       return;
     }
 
-    // Build colors and sizes arrays from comma-separated strings
-    const colorsArray = formData.color ? formData.color.split(',').map(c => c.trim()).filter(c => c) : [];
-    const sizesArray = formData.size ? formData.size.split(',').map(s => s.trim()).filter(s => s) : [];
+    try {
+      // Upload image to Cloudinary if new file selected
+      let imageUrl = selectedProductImage;
+      if (imageFile) {
+        console.log('Uploading image file:', imageFile.name);
+        imageUrl = await handleImageUpload(imageFile);
+        console.log('Image uploaded successfully, URL:', imageUrl);
+        setSelectedProductImage(imageUrl);
+        setImageFile(null); // Clear file after successful upload
+      }
 
-    const productData = {
-      sku: formData.sku,
-      name: formData.name,
-      description: formData.description,
-      basePrice: (parseFloat(formData.price) || 0).toString(),
-      supplierId: formData.supplierId,
-      brand: formData.brand || null,
-      category: formData.category || null,
-      colors: colorsArray.length > 0 ? colorsArray : null,
-      sizes: sizesArray.length > 0 ? sizesArray : null,
-      imageUrl: selectedProductImage || undefined,
-    };
+      // Build colors and sizes arrays from comma-separated strings
+      const colorsArray = formData.color ? formData.color.split(',').map(c => c.trim()).filter(c => c) : [];
+      const sizesArray = formData.size ? formData.size.split(',').map(s => s.trim()).filter(s => s) : [];
 
-    if (product) {
-      updateProductMutation.mutate(productData);
-    } else {
-      createProductMutation.mutate(productData);
+      const productData = {
+        sku: formData.sku,
+        name: formData.name,
+        description: formData.description,
+        basePrice: (parseFloat(formData.price) || 0).toString(),
+        supplierId: formData.supplierId,
+        brand: formData.brand || null,
+        category: formData.category || null,
+        colors: colorsArray.length > 0 ? colorsArray : null,
+        sizes: sizesArray.length > 0 ? sizesArray : null,
+        imageUrl: imageUrl || undefined,
+      };
+
+      console.log('Submitting product data:', productData);
+
+      if (product) {
+        updateProductMutation.mutate(productData);
+      } else {
+        createProductMutation.mutate(productData);
+      }
+    } catch (error) {
+      console.error('Error in handleSubmit:', error);
+      setIsUploadingImage(false);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to process product",
+        variant: "destructive",
+      });
     }
   };
 
@@ -1049,23 +1107,67 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
               )}
             </div>
           )}
-          {/* Selected Product Image */}
-          {selectedProductImage && (
-            <div className="flex justify-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-              <div className="text-center">
-                <img
-                  src={selectedProductImage}
-                  alt="Selected Product"
-                  className="w-32 h-32 object-cover rounded-lg border shadow-md mx-auto"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    setSelectedProductImage("");
+          {/* Product Image Upload */}
+          <div className="space-y-2">
+            <Label htmlFor="productImage">Product Image</Label>
+            <div className="flex gap-4 items-start">
+              {(selectedProductImage || imageFile) && (
+                <div className="flex-shrink-0">
+                  <img
+                    src={imageFile ? URL.createObjectURL(imageFile) : selectedProductImage}
+                    alt="Product preview"
+                    className="w-32 h-32 object-cover rounded-lg border shadow-md"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      if (!imageFile) setSelectedProductImage("");
+                    }}
+                  />
+                  <p className="text-xs text-gray-500 mt-1 text-center">Current Image</p>
+                </div>
+              )}
+              <div className="flex-1 space-y-2">
+                <Input
+                  id="productImage"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      // Validate file size (max 5MB)
+                      if (file.size > 5 * 1024 * 1024) {
+                        toast({
+                          title: "File Too Large",
+                          description: "Image must be less than 5MB",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      setImageFile(file);
+                    }
                   }}
+                  className="cursor-pointer"
                 />
-                <p className="text-xs text-gray-500 mt-2">Product Image</p>
+                <p className="text-xs text-muted-foreground">
+                  Upload a product image (max 5MB). Supports JPG, PNG, WEBP.
+                </p>
+                {(selectedProductImage || imageFile) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setImageFile(null);
+                      setSelectedProductImage("");
+                      const input = document.getElementById('productImage') as HTMLInputElement;
+                      if (input) input.value = '';
+                    }}
+                  >
+                    Remove Image
+                  </Button>
+                )}
               </div>
             </div>
-          )}
+          </div>
 
           {/* Product Details Section */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1211,12 +1313,12 @@ export default function ProductModal({ open, onOpenChange, product }: ProductMod
             </Button>
             <Button
               type="submit"
-              disabled={createProductMutation.isPending || updateProductMutation.isPending}
+              disabled={createProductMutation.isPending || updateProductMutation.isPending || isUploadingImage}
             >
-              {(createProductMutation.isPending || updateProductMutation.isPending) ? (
+              {(createProductMutation.isPending || updateProductMutation.isPending || isUploadingImage) ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {product ? 'Updating...' : 'Adding...'}
+                  {isUploadingImage ? 'Uploading Image...' : (product ? 'Updating...' : 'Adding...')}
                 </>
               ) : (
                 product ? 'Update Product' : 'Add Product'

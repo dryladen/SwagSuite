@@ -158,6 +158,11 @@ export default function Products() {
         onOpenChange={setIsDetailModalOpen}
         product={selectedProduct}
         supplierName={selectedProduct ? suppliers.find((s: Supplier) => s.id === selectedProduct.supplierId)?.name : undefined}
+        onEdit={(product) => {
+          setEditingProduct(product);
+          setIsDetailModalOpen(false);
+        }}
+        onDelete={handleDeleteProduct}
       />
 
       {/* Main Content */}
