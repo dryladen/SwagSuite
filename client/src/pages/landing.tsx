@@ -135,7 +135,7 @@ export default function Landing() {
                   className="w-full"
                   size="lg"
                 >
-                  {isLocalDev ? "Quick Dev Login (Auto)" : "Sign in with OAuth"}
+                  {isLocalDev ? "Quick Dev Login (Auto)" : "Sign in with Replit"}
                 </Button>
 
                 <div className="mt-6 text-center">
@@ -211,7 +211,7 @@ export default function Landing() {
                     size="lg"
                     disabled={isLoading}
                   >
-                    {isLocalDev ? "Quick Dev Login (Auto)" : "Sign in with OAuth"}
+                    {isLocalDev ? "Quick Dev Login (Auto)" : "Sign in with Replit"}
                   </Button>
                   
                   <Button
