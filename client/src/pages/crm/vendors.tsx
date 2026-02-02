@@ -1017,7 +1017,7 @@ export default function Vendors() {
                       data-testid={`vendor-card-${vendor.id}`}
                     >
                       <CardHeader>
-                        <div className="flex items-start justify-between">
+                        <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <CardTitle className="text-lg text-swag-navy">{vendor.name}</CardTitle>
@@ -1154,30 +1154,12 @@ export default function Vendors() {
                             </div>
                           )}
                         </div>
-
-                        <div className="flex items-center justify-between pt-2">
-                          <div className="flex items-center gap-2">
-                            {vendor.apiIntegrationStatus === "active" && (
-                              <Badge className="bg-green-100 text-green-800">API Connected</Badge>
-                            )}
-                            {/* Add to Preferred Button for non-preferred vendors */}
-                            {!vendor.isPreferred && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleTogglePreferred(vendor);
-                                }}
-                                disabled={togglePreferredMutation.isPending}
-                                className="text-xs hover:bg-yellow-50 hover:border-yellow-300"
-                              >
-                                <Star className="h-3 w-3 mr-1" />
-                                Add to Preferred
-                              </Button>
-                            )}
-                          </div>
-                          <Button variant="outline" size="sm">
+                        {vendor.apiIntegrationStatus === "active" && (
+                          <Badge className="bg-green-100 text-green-800">API Connected</Badge>
+                        )}
+                        <div className="flex items-center flex-wrap gap-2 justify-between">
+                          
+                          <Button variant="outline" className="w-full" size="sm">
                             <Package className="mr-1" size={12} />
                             View Products
                           </Button>

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -508,7 +508,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
 
   const handleSaveArtwork = async () => {
     if (!currentOrderItemId) return;
-    
+
     if (!artworkForm.name.trim()) {
       toast({
         title: "Name Required",
@@ -526,7 +526,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
       formData.append('color', artworkForm.color);
       formData.append('size', artworkForm.size);
       formData.append('status', artworkForm.status);
-      
+
       if (artworkForm.file) {
         formData.append('file', artworkForm.file);
       }
@@ -534,7 +534,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
       const url = editingArtwork
         ? `/api/order-items/${currentOrderItemId}/artworks/${editingArtwork.id}`
         : `/api/order-items/${currentOrderItemId}/artworks`;
-      
+
       const method = editingArtwork ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
@@ -650,9 +650,9 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
     queryKey: [`/api/orders/${orderId}/all-artworks`],
     queryFn: async () => {
       if (!orderItems || orderItems.length === 0) return {};
-      
+
       const artworksByItem: Record<string, any[]> = {};
-      
+
       await Promise.all(
         orderItems.map(async (item: any) => {
           try {
@@ -668,7 +668,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
           }
         })
       );
-      
+
       return artworksByItem;
     },
     enabled: open && !!orderItems && orderItems.length > 0,
@@ -720,13 +720,47 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
 
   const [selectedVendor, setSelectedVendor] = useState<any>(null);
 
-  // Set first vendor as selected when vendors load
+  // Fetch vendor contacts for the selected vendor
+  const { data: vendorContacts = [] } = useQuery<any[]>({
+    queryKey: [`/api/contacts`, { supplierId: selectedVendor?.id }],
+    queryFn: async () => {
+      if (!selectedVendor?.id) return [];
+      const response = await fetch(`/api/contacts?supplierId=${selectedVendor.id}`);
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: open && !!selectedVendor?.id,
+  });
+
+  // Get primary contact or first contact for vendor
+  const vendorPrimaryContact = vendorContacts.find((c: any) => c.isPrimary) || vendorContacts[0];
+
+  // Set first vendor as selected when vendors load and auto-fill email from contact
   useEffect(() => {
     if (orderVendors.length > 0 && !selectedVendor) {
       setSelectedVendor(orderVendors[0]);
-      setVendorEmailTo(orderVendors[0].email || "");
     }
   }, [orderVendors, selectedVendor]);
+
+  // Auto-fill vendor email from primary contact when vendor or contacts change
+  useEffect(() => {
+    if (selectedVendor && vendorPrimaryContact) {
+      setVendorEmailTo(vendorPrimaryContact.email || "");
+      setVendorEmailToName(`${vendorPrimaryContact.firstName || ''} ${vendorPrimaryContact.lastName || ''}`.trim() || selectedVendor.name);
+    } else if (selectedVendor && vendorContacts.length === 0) {
+      // No contacts for this vendor
+      setVendorEmailTo("");
+      setVendorEmailToName(selectedVendor.name || "");
+    }
+  }, [selectedVendor, vendorPrimaryContact, vendorContacts]);
+
+  // Auto-fill client email recipient from primary contact
+  useEffect(() => {
+    if (primaryContact && !emailTo) {
+      setEmailTo(primaryContact.email);
+      setEmailToName(`${primaryContact.firstName} ${primaryContact.lastName}`);
+    }
+  }, [primaryContact, emailTo]);
 
   // Fetch all products to get current supplier info and for add product dialog
   const { data: allProducts = [] } = useQuery<any[]>({
@@ -816,7 +850,14 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
       return;
     }
 
-    addOrderItemMutation.mutate(newProductForm);
+    // Get product's supplier ID
+    const selectedProduct = allProducts.find((p: any) => p.id === newProductForm.productId);
+    const dataToSend = {
+      ...newProductForm,
+      supplierId: selectedProduct?.supplierId || null,
+    };
+
+    addOrderItemMutation.mutate(dataToSend);
   };
 
   // Fetch project activities (internal notes)
@@ -1130,12 +1171,13 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
 
   // Mutation to add product to order
   const addOrderItemMutation = useMutation({
-    mutationFn: async (data: typeof newProductForm) => {
+    mutationFn: async (data: typeof newProductForm & { supplierId?: string | null }) => {
       const response = await fetch(`/api/orders/${orderId}/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productId: data.productId,
+          supplierId: data.supplierId || null,
           quantity: parseInt(data.quantity),
           unitPrice: parseFloat(data.unitPrice),
           totalPrice: (parseInt(data.quantity) * parseFloat(data.unitPrice)).toFixed(2),
@@ -2965,9 +3007,10 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                   </div>
                 </CardContent>
               </Card>
+              
             </TabsContent>
 
-            <TabsContent value="email" className="mt-6">
+            <TabsContent value="email" className="mt-6 flex flex-col gap-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -3276,49 +3319,56 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                       </Button>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
 
-                  {/* Recent Emails */}
-                  <Separator />
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-medium text-gray-700">Recent Communications</h4>
-                    <div className="space-y-2">
-                      {clientCommunications.length === 0 ? (
-                        <div className="p-3 bg-gray-50 rounded-lg text-center text-sm text-gray-500">
-                          No client emails yet. Send your first email above.
-                        </div>
-                      ) : (
-                        clientCommunications.slice(0, 5).map((comm: Communication) => {
-                          const isSent = comm.direction === "sent";
-                          const bgColor = isSent ? "bg-blue-50 border-blue-500" : "bg-green-50 border-green-500";
+              {/* Recent Client Communications */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="w-5 h-5" />
+                    Recent Client Communications
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-2">
+                    {clientCommunications.length === 0 ? (
+                      <div className="p-3 bg-gray-50 rounded-lg text-center text-sm text-gray-500">
+                        No client communications yet. Send your first email above.
+                      </div>
+                    ) : (
+                      clientCommunications.slice(0, 5).map((comm: Communication) => {
+                        const isSent = comm.direction === "sent";
+                        const bgColor = isSent ? "bg-blue-50 border-blue-500" : "bg-green-50 border-green-500";
 
-                          return (
-                            <div key={comm.id} className={`p-3 rounded-lg border-l-4 ${bgColor}`}>
-                              <div className="flex justify-between items-start mb-1">
-                                <span className="text-sm font-medium">
-                                  {isSent ? "Sent: " : "Received: "}
-                                  {comm.subject}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  {new Date(comm.sentAt).toLocaleString('en-US', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: 'numeric',
-                                    minute: '2-digit'
-                                  })}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-700 line-clamp-2">{comm.body}</p>
-                              {comm.recipientEmail && (
-                                <p className="text-xs text-gray-500 mt-1">
-                                  {isSent ? "To: " : "From: "}
-                                  {comm.recipientEmail}
-                                </p>
-                              )}
+                        return (
+                          <div key={comm.id} className={`p-3 rounded-lg border-l-4 ${bgColor}`}>
+                            <div className="flex justify-between items-start mb-1">
+                              <span className="text-sm font-medium">
+                                {isSent ? "Sent: " : "Received: "}
+                                {comm.subject}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {new Date(comm.sentAt).toLocaleString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit'
+                                })}
+                              </span>
                             </div>
-                          );
-                        })
-                      )}
-                    </div>
+                            <p className="text-sm text-gray-700 line-clamp-2">{comm.body}</p>
+                            {comm.recipientEmail && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                {isSent ? "To: " : "From: "}
+                                {comm.recipientEmail}
+                                {comm.recipientName && ` (${comm.recipientName})`}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -3326,7 +3376,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
 
             <TabsContent value="vendor" className="mt-6">
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="flex flex-col gap-6">
                 {/* Vendor Communication */}
                 <Card>
                   <CardHeader>
@@ -3334,8 +3384,89 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                       <Truck className="w-5 h-5" />
                       Vendor Communication
                     </CardTitle>
+                    <CardDescription>
+                      {orderVendors.length > 0
+                        ? `${orderVendors.length} vendor${orderVendors.length > 1 ? 's' : ''} from order items`
+                        : "No vendors assigned to order items"}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    {/* Vendor Selector */}
+                    {orderVendors.length > 0 ? (
+                      <div>
+                        <label className="text-sm font-medium">Select Vendor:</label>
+                        <Select
+                          value={selectedVendor?.id || ""}
+                          onValueChange={(vendorId) => {
+                            const vendor = orderVendors.find((v: any) => v.id === vendorId);
+                            if (vendor) {
+                              setSelectedVendor(vendor);
+                            }
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a vendor from order items..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {orderVendors.map((vendor: any) => (
+                              <SelectItem key={vendor.id} value={vendor.id}>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{vendor.name}</span>
+                                  <span className="text-xs text-gray-500">
+                                    {vendor.products.length} product{vendor.products.length > 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        
+                        {/* Contact info */}
+                        {selectedVendor && vendorContacts.length > 0 && vendorPrimaryContact && (
+                          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                            <p className="text-xs font-medium text-blue-900">Contact: {vendorPrimaryContact.firstName} {vendorPrimaryContact.lastName}</p>
+                            <p className="text-xs text-blue-700">{vendorPrimaryContact.email}</p>
+                            {vendorPrimaryContact.phone && (
+                              <p className="text-xs text-blue-700">{vendorPrimaryContact.phone}</p>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* Warning if no contacts */}
+                        {selectedVendor && vendorContacts.length === 0 && (
+                          <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-md">
+                            <p className="text-xs font-medium text-amber-900">⚠️ No contacts for this vendor</p>
+                            <p className="text-xs text-amber-700">Please add a contact for {selectedVendor.name} in the Suppliers page.</p>
+                          </div>
+                        )}
+
+                        {/* Show products for selected vendor */}
+                        {selectedVendor && selectedVendor.products && selectedVendor.products.length > 0 && (
+                          <div className="mt-2 p-3 bg-gray-50 rounded-md border">
+                            <p className="text-xs font-medium text-gray-700 mb-2">Products from this vendor:</p>
+                            <div className="space-y-1">
+                              {selectedVendor.products.map((product: any) => (
+                                <div key={product.id} className="text-xs text-gray-600 flex items-center gap-2">
+                                  <Package className="w-3 h-3" />
+                                  <span className="font-medium">{product.productName}</span>
+                                  {product.productSku && <span className="text-gray-400">({product.productSku})</span>}
+                                  <span>× {product.quantity}</span>
+                                  {product.color && <Badge variant="outline" className="text-xs">{product.color}</Badge>}
+                                  {product.size && <Badge variant="outline" className="text-xs">{product.size}</Badge>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+                        <p className="text-sm text-yellow-800">
+                          ⚠️ No vendors found. Please assign suppliers to your order items first.
+                        </p>
+                      </div>
+                    )}
+
                     <div>
                       <label className="text-sm font-medium">Subject:</label>
                       <Input
@@ -3343,6 +3474,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                         value={vendorEmailSubject}
                         onChange={(e) => setVendorEmailSubject(e.target.value)}
                         data-testid="input-vendor-email-subject"
+                        disabled={orderVendors.length === 0}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -3409,57 +3541,28 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                         />
                       </div>
                       <div>
-                        <label className="text-sm font-medium">To:</label>
-                        <div className="relative">
-                          <Input
-                            placeholder={selectedVendor?.email || "vendor@supplier.com"}
-                            value={vendorEmailTo || selectedVendor?.email || ""}
-                            onChange={(e) => {
-                              setVendorEmailTo(e.target.value);
-                              setVendorEmailSearchQuery(e.target.value);
-                            }}
-                            onFocus={() => setVendorEmailSearchQuery(vendorEmailTo || selectedVendor?.email || "")}
-                            onBlur={() => setTimeout(() => setVendorEmailSearchQuery(""), 200)}
-                            data-testid="input-vendor-email-to"
-                          />
-                          {vendorEmailSearchQuery && orderVendors.length > 0 && (
-                            <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
-                              {orderVendors
-                                .filter((v: any) =>
-                                  v.email?.toLowerCase().includes(vendorEmailSearchQuery.toLowerCase()) ||
-                                  v.name?.toLowerCase().includes(vendorEmailSearchQuery.toLowerCase())
-                                )
-                                .slice(0, 5)
-                                .map((vendor: any) => (
-                                  <button
-                                    key={vendor.id}
-                                    type="button"
-                                    className="w-full px-3 py-2 text-left hover:bg-gray-100 flex items-center gap-2"
-                                    onClick={() => {
-                                      setVendorEmailTo(vendor.email);
-                                      setVendorEmailToName(vendor.name);
-                                      setVendorEmailSearchQuery("");
-                                      setSelectedVendor(vendor);
-                                    }}
-                                  >
-                                    <div>
-                                      <div className="font-medium text-sm">{vendor.name}</div>
-                                      <div className="text-xs text-gray-500">{vendor.email}</div>
-                                    </div>
-                                  </button>
-                                ))
-                              }
-                            </div>
-                          )}
-                        </div>
+                        <label className="text-sm font-medium">To (Vendor Contact Email):</label>
+                        <Input
+                          placeholder={vendorPrimaryContact?.email || "vendor@supplier.com"}
+                          value={vendorEmailTo || ""}
+                          onChange={(e) => setVendorEmailTo(e.target.value)}
+                          data-testid="input-vendor-email-to"
+                          disabled={orderVendors.length === 0 || (selectedVendor && vendorContacts.length === 0)}
+                        />
+                        {selectedVendor && vendorContacts.length === 0 && (
+                          <p className="text-xs text-amber-600 mt-1">
+                            ⚠️ No contact found for this vendor. Add a contact first.
+                          </p>
+                        )}
                       </div>
                       <div>
                         <label className="text-sm font-medium">To Name:</label>
                         <Input
-                          placeholder={selectedVendor?.email || "Vendor Name"}
-                          value={vendorEmailToName || selectedVendor?.email || ""}
+                          placeholder={vendorPrimaryContact ? `${vendorPrimaryContact.firstName} ${vendorPrimaryContact.lastName}` : selectedVendor?.name || "Vendor Name"}
+                          value={vendorEmailToName || ""}
                           onChange={(e) => setVendorEmailToName(e.target.value)}
                           data-testid="input-vendor-email-to-name"
+                          disabled={orderVendors.length === 0 || (selectedVendor && vendorContacts.length === 0)}
                         />
                       </div>
                     </div>
@@ -3581,7 +3684,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                     <div className="flex gap-2">
                       <Button
                         onClick={handleSendVendorEmail}
-                        disabled={!vendorEmailFrom || !vendorEmailTo || !vendorEmailSubject || !vendorEmailBody.trim()}
+                        disabled={!vendorEmailFrom || !vendorEmailTo || !vendorEmailSubject || !vendorEmailBody.trim() || orderVendors.length === 0}
                         className="flex-1"
                         data-testid="button-send-vendor-email"
                       >
@@ -3645,96 +3748,6 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
 
                 {/* Vendor Information & Communication History */}
                 <div className="space-y-6">
-                  {/* Current Vendor Information */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Building2 className="w-5 h-5" />
-                        Assigned Vendor
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {selectedVendor ? (
-                        <>
-                          <div className="flex items-center space-x-3">
-                            <UserAvatar name={selectedVendor.name} size="sm" />
-                            <div>
-                              <p className="font-semibold">{selectedVendor.name}</p>
-                              <p className="text-sm text-gray-600">{selectedVendor.isPreferred ? 'Preferred Vendor' : 'Vendor'}</p>
-                            </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            {selectedVendor.contactPerson && (
-                              <div className="flex items-center gap-2">
-                                <User className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm">Contact: {selectedVendor.contactPerson}</span>
-                              </div>
-                            )}
-
-                            {selectedVendor.email && (
-                              <div className="flex items-center gap-2">
-                                <Mail className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm">{selectedVendor.email}</span>
-                              </div>
-                            )}
-
-                            {selectedVendor.phone && (
-                              <div className="flex items-center gap-2">
-                                <Phone className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm">{selectedVendor.phone}</span>
-                              </div>
-                            )}
-
-                            {selectedVendor.website && (
-                              <div className="flex items-center gap-2">
-                                <ExternalLink className="w-4 h-4 text-gray-500" />
-                                <a href={selectedVendor.website} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
-                                  {selectedVendor.website}
-                                </a>
-                              </div>
-                            )}
-
-                            {selectedVendor.address && (
-                              <div className="flex items-center gap-2">
-                                <MapPin className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm">{selectedVendor.address}</span>
-                              </div>
-                            )}
-
-                            {selectedVendor.paymentTerms && (
-                              <div className="flex items-center gap-2">
-                                <CreditCard className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm">Terms: {selectedVendor.paymentTerms}</span>
-                              </div>
-                            )}
-                          </div>
-
-                          <Separator />
-
-                          <div className="space-y-2">
-                            <h4 className="text-sm font-medium text-gray-700">Vendor Performance</h4>
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                              <div>
-                                <p className="text-gray-500">On-Time Delivery</p>
-                                <p className="font-medium text-green-600">94%</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-500">Quality Rating</p>
-                                <p className="font-medium text-green-600">4.8/5</p>
-                              </div>
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="text-center py-4">
-                          <p className="text-sm text-gray-500">No vendor assigned to this order</p>
-                          <p className="text-xs text-gray-400 mt-1">Assign a vendor in the order details</p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
                   {/* Recent Vendor Communications */}
                   <Card>
                     <CardHeader>
@@ -4530,7 +4543,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                             />
                           </div>
                         )}
-                        
+
                         {/* Artwork Details */}
                         <div className="w-full ">
                           <h3 className="font-semibold text-lg md:text-xl text-gray-900">{artwork.name}</h3>
@@ -4538,7 +4551,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                             <div className="col-span-2 flex gap-2 items-center">
                               <span className="font-medium text-gray-700">Status:</span>
                               <div className="mt-1">
-                                <Badge 
+                                <Badge
                                   variant={artwork.status === 'approved' ? 'default' : 'secondary'}
                                   className="text-xs"
                                 >
@@ -4553,7 +4566,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                               </div>
                             )}
                             {artwork.location && (
-                              <div  className="flex gap-2 items-center">
+                              <div className="flex gap-2 items-center">
                                 <span className="font-medium text-gray-700">Location:</span>
                                 <div className="text-gray-900">{artwork.location}</div>
                               </div>
@@ -4570,7 +4583,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                                 <div className="text-gray-900">{artwork.size}</div>
                               </div>
                             )}
-                            
+
                             {artwork.fileName && (
                               <div className="col-span-2 flex gap-2 items-center">
                                 <span className="font-medium text-gray-700">File:</span>
@@ -4753,15 +4766,15 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
             </div>
           </div>
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => setIsArtworkDialogOpen(false)} 
+            <Button
+              variant="outline"
+              onClick={() => setIsArtworkDialogOpen(false)}
               className="flex-1"
             >
               Cancel
             </Button>
-            <Button 
-              onClick={handleSaveArtwork} 
+            <Button
+              onClick={handleSaveArtwork}
               className="flex-1"
             >
               {editingArtwork ? 'Update' : 'Add'} Artwork

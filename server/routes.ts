@@ -2016,10 +2016,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/orders/:orderId/items', isAuthenticated, async (req, res) => {
     try {
-      const validatedData = insertOrderItemSchema.parse({
+      // If supplierId is not provided, get it from the product
+      let dataToInsert = {
         ...req.body,
         orderId: req.params.orderId,
-      });
+      };
+
+      if (!dataToInsert.supplierId && dataToInsert.productId) {
+        const { db } = await import("./db");
+        const { products } = await import("@shared/schema");
+        const { eq } = await import("drizzle-orm");
+        
+        const [product] = await db
+          .select()
+          .from(products)
+          .where(eq(products.id, dataToInsert.productId))
+          .limit(1);
+        
+        if (product && product.supplierId) {
+          dataToInsert.supplierId = product.supplierId;
+          console.log(`Auto-populated supplierId ${product.supplierId} from product ${product.id}`);
+        }
+      }
+
+      const validatedData = insertOrderItemSchema.parse(dataToInsert);
 
       const item = await storage.createOrderItem(validatedData);
 
