@@ -2856,6 +2856,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                   size: item.size,
                   quantity: item.quantity,
                 }))}
+                artworkItems={allArtworkItems}
                 onSwitchToEmail={(emailData) => {
                   setEmailSubject(emailData.subject);
                   setEmailBody(emailData.body);
@@ -4493,9 +4494,9 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
 
       {/* Artwork List Dialog */}
       <Dialog open={isArtworkListDialogOpen} onOpenChange={setIsArtworkListDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
+            <DialogTitle className="flex items-center justify-between pr-4">
               <span>Artwork List</span>
               <Button
                 size="sm"
@@ -4504,21 +4505,21 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                   handleOpenArtworkDialog(currentOrderItemId!);
                 }}
               >
-                <Plus className="w-4 h-4 mr-2" />
+                <Plus className="w-4 h-4" />
                 Add Artwork
               </Button>
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             {currentOrderItemId && allArtworkItems[currentOrderItemId]?.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 {allArtworkItems[currentOrderItemId].map((artwork: any) => (
                   <Card key={artwork.id}>
                     <CardContent className="p-4">
-                      <div className="space-y-3">
+                      <div className="flex items-center gap-4">
                         {/* Artwork Image Preview */}
                         {artwork.filePath && (
-                          <div className="relative w-full h-48 bg-gray-100 rounded-lg overflow-hidden">
+                          <div className="relative w-48 h-48 bg-gray-100 rounded-lg overflow-hidden">
                             <img
                               src={artwork.filePath}
                               alt={artwork.name}
@@ -4531,35 +4532,11 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                         )}
                         
                         {/* Artwork Details */}
-                        <div>
-                          <h3 className="font-semibold text-lg text-gray-900">{artwork.name}</h3>
-                          <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
-                            {artwork.artworkType && (
-                              <div>
-                                <span className="font-medium text-gray-600">Type:</span>
-                                <div className="text-gray-900">{artwork.artworkType}</div>
-                              </div>
-                            )}
-                            {artwork.location && (
-                              <div>
-                                <span className="font-medium text-gray-600">Location:</span>
-                                <div className="text-gray-900">{artwork.location}</div>
-                              </div>
-                            )}
-                            {artwork.color && (
-                              <div>
-                                <span className="font-medium text-gray-600">Color:</span>
-                                <div className="text-gray-900">{artwork.color}</div>
-                              </div>
-                            )}
-                            {artwork.size && (
-                              <div>
-                                <span className="font-medium text-gray-600">Size:</span>
-                                <div className="text-gray-900">{artwork.size}</div>
-                              </div>
-                            )}
-                            <div className="col-span-2">
-                              <span className="font-medium text-gray-600">Status:</span>
+                        <div className="w-full ">
+                          <h3 className="font-semibold text-lg md:text-xl text-gray-900">{artwork.name}</h3>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div className="col-span-2 flex gap-2 items-center">
+                              <span className="font-medium text-gray-700">Status:</span>
                               <div className="mt-1">
                                 <Badge 
                                   variant={artwork.status === 'approved' ? 'default' : 'secondary'}
@@ -4569,15 +4546,40 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                                 </Badge>
                               </div>
                             </div>
+                            {artwork.artworkType && (
+                              <div className="flex gap-2 items-center">
+                                <span className="font-medium text-gray-700">Type:</span>
+                                <div className="text-gray-900">{artwork.artworkType}</div>
+                              </div>
+                            )}
+                            {artwork.location && (
+                              <div  className="flex gap-2 items-center">
+                                <span className="font-medium text-gray-700">Location:</span>
+                                <div className="text-gray-900">{artwork.location}</div>
+                              </div>
+                            )}
+                            {artwork.color && (
+                              <div className="flex gap-2 items-center">
+                                <span className="font-medium text-gray-700">Color:</span>
+                                <div className="text-gray-900">{artwork.color}</div>
+                              </div>
+                            )}
+                            {artwork.size && (
+                              <div className="flex gap-2 items-center">
+                                <span className="font-medium text-gray-700">Size:</span>
+                                <div className="text-gray-900">{artwork.size}</div>
+                              </div>
+                            )}
+                            
                             {artwork.fileName && (
-                              <div className="col-span-2">
-                                <span className="font-medium text-gray-600">File:</span>
+                              <div className="col-span-2 flex gap-2 items-center">
+                                <span className="font-medium text-gray-700">File:</span>
                                 <div className="text-gray-900 truncate">{artwork.fileName}</div>
                               </div>
                             )}
                             {artwork.notes && (
                               <div className="col-span-2">
-                                <span className="font-medium text-gray-600">Notes:</span>
+                                <span className="font-medium text-gray-700">Notes:</span>
                                 <div className="text-gray-900">{artwork.notes}</div>
                               </div>
                             )}
@@ -4585,26 +4587,26 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="flex gap-2 pt-2 border-t">
+                        <div className="flex flex-col justify-start h-full gap-2">
                           <Button
                             variant="outline"
-                            size="sm"
-                            className="flex-1"
+                            size="lg"
+                            className="flex-1 py-2"
                             onClick={() => {
                               handleEditArtwork(currentOrderItemId, artwork);
                               setIsArtworkListDialogOpen(false);
                             }}
                           >
-                            <Edit className="w-4 h-4 mr-2" />
+                            <Edit className="w-4 h-4" />
                             Edit
                           </Button>
                           <Button
                             variant="outline"
-                            size="sm"
-                            className="flex-1 text-red-600 hover:text-red-700"
+                            size="lg"
+                            className="flex-1 py-2 text-red-600 hover:text-red-700"
                             onClick={() => handleDeleteArtwork(currentOrderItemId, artwork.id)}
                           >
-                            <Trash2 className="w-4 h-4 mr-2" />
+                            <Trash2 className="w-4 h-4" />
                             Delete
                           </Button>
                         </div>

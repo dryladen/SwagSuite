@@ -13,12 +13,22 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { X, FileText, Image as ImageIcon, Upload, AlertCircle } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card } from "@/components/ui/card";
+import { X, FileText, Image as ImageIcon, Upload, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface FilePreview {
     file: File;
     preview?: string;
     productId?: string;
+}
+
+interface ArtworkSelection {
+    artworkId: string;
+    artworkName: string;
+    filePath: string;
+    fileName: string;
+    productId: string;
 }
 
 interface UploadFilesModalProps {
@@ -38,6 +48,7 @@ interface UploadFilesModalProps {
         color?: string;
         size?: string;
     }>;
+    artworkItems?: Record<string, any[]>;
     uploading?: boolean;
 }
 
@@ -48,9 +59,12 @@ export function UploadFilesModal({
     fileType,
     products,
     availableProducts,
+    artworkItems,
     uploading = false,
 }: UploadFilesModalProps) {
     const [filePreviews, setFilePreviews] = useState<FilePreview[]>([]);
+    const [selectedArtworks, setSelectedArtworks] = useState<ArtworkSelection[]>([]);
+    const [uploadMode, setUploadMode] = useState<'upload' | 'select'>('upload');
     const [notes, setNotes] = useState("");
 
     const isCustomerProof = fileType === "customer_proof";
@@ -90,21 +104,84 @@ export function UploadFilesModal({
         setFilePreviews(newPreviews);
     };
 
-    const handleUpload = () => {
-        // Validate customer proof files have product assigned
-        if (isCustomerProof) {
-            const unassignedFiles = filePreviews.filter(fp => !fp.productId);
-            if (unassignedFiles.length > 0) {
-                return; // Don't upload if validation fails
+    const handleArtworkSelect = (artwork: any, productId: string) => {
+        const isSelected = selectedArtworks.some(a => a.artworkId === artwork.id);
+        
+        if (isSelected) {
+            setSelectedArtworks(selectedArtworks.filter(a => a.artworkId !== artwork.id));
+        } else {
+            // Check if product is already assigned
+            const alreadyAssigned = selectedArtworks.some(a => a.productId === productId);
+            if (alreadyAssigned) {
+                // Remove old assignment
+                setSelectedArtworks([
+                    ...selectedArtworks.filter(a => a.productId !== productId),
+                    {
+                        artworkId: artwork.id,
+                        artworkName: artwork.name,
+                        filePath: artwork.filePath,
+                        fileName: artwork.fileName,
+                        productId: productId,
+                    }
+                ]);
+            } else {
+                setSelectedArtworks([
+                    ...selectedArtworks,
+                    {
+                        artworkId: artwork.id,
+                        artworkName: artwork.name,
+                        filePath: artwork.filePath,
+                        fileName: artwork.fileName,
+                        productId: productId,
+                    }
+                ]);
             }
         }
+    };
 
-        const uploads = filePreviews.map(fp => ({
-            file: fp.file,
-            productId: fp.productId,
-        }));
+    const handleUpload = () => {
+        if (uploadMode === 'upload') {
+            // Validate customer proof files have product assigned
+            if (isCustomerProof) {
+                const unassignedFiles = filePreviews.filter(fp => !fp.productId);
+                if (unassignedFiles.length > 0) {
+                    return; // Don't upload if validation fails
+                }
+            }
 
-        onUpload(uploads, notes);
+            const uploads = filePreviews.map(fp => ({
+                file: fp.file,
+                productId: fp.productId,
+            }));
+
+            onUpload(uploads, notes);
+        } else {
+            // Handle artwork selection - convert artwork to file objects
+            if (selectedArtworks.length === 0) return;
+            
+            // For selected artworks, fetch images and create File objects
+            Promise.all(
+                selectedArtworks.map(async (artwork) => {
+                    try {
+                        const response = await fetch(artwork.filePath);
+                        const blob = await response.blob();
+                        const file = new File([blob], artwork.fileName, { type: blob.type });
+                        return {
+                            file,
+                            productId: artwork.productId,
+                        };
+                    } catch (error) {
+                        console.error('Error fetching artwork:', error);
+                        return null;
+                    }
+                })
+            ).then((uploads) => {
+                const validUploads = uploads.filter((u): u is { file: File; productId: string } => u !== null);
+                if (validUploads.length > 0) {
+                    onUpload(validUploads, notes);
+                }
+            });
+        }
         handleClose();
     };
 
@@ -116,12 +193,17 @@ export function UploadFilesModal({
             }
         });
         setFilePreviews([]);
+        setSelectedArtworks([]);
+        setUploadMode('upload');
         setNotes("");
         onClose();
     };
 
-    const canUpload = filePreviews.length > 0 && (
-        !isCustomerProof || filePreviews.every(fp => fp.productId)
+    const canUpload = (
+        (uploadMode === 'upload' && filePreviews.length > 0 && (
+            !isCustomerProof || filePreviews.every(fp => fp.productId)
+        )) ||
+        (uploadMode === 'select' && selectedArtworks.length > 0)
     );
 
     // Check if there are more files than available products (for customer proof)
@@ -141,154 +223,242 @@ export function UploadFilesModal({
                     <DialogTitle>Upload Files - {fileType.replace('_', ' ').toUpperCase()}</DialogTitle>
                     <DialogDescription>
                         {isCustomerProof
-                            ? "Add files and assign each to a product. One file per product."
+                            ? "Upload new files or select from existing artworks. One file per product."
                             : "Add files to upload to cloud storage."}
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4">
-                    {/* File Input */}
-                    <div>
-                        <input
-                            type="file"
-                            multiple
-                            onChange={handleFileSelect}
-                            className="hidden"
-                            id="file-upload-modal"
-                            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
-                        />
-                        <Button
-                            onClick={() => document.getElementById('file-upload-modal')?.click()}
-                            variant="outline"
-                            className="w-full"
-                            disabled={uploading}
-                        >
-                            <Upload className="w-4 h-4 mr-2" />
-                            Add Files
-                        </Button>
-                    </div>
+                <Tabs value={uploadMode} onValueChange={(v) => setUploadMode(v as 'upload' | 'select')}>
+                    <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="upload">Upload New Files</TabsTrigger>
+                        <TabsTrigger value="select" disabled={!isCustomerProof || !artworkItems || Object.keys(artworkItems).length === 0}>
+                            Select from Artworks
+                        </TabsTrigger>
+                    </TabsList>
 
-                    {/* Warnings */}
-                    {hasMoreFilesThanProducts && (
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-2">
-                            <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                            <div className="text-sm text-yellow-800">
-                                <p className="font-medium">More files than available products</p>
-                                <p className="text-xs mt-1">
-                                    You have {filePreviews.length} files but only {productsToShow.length} products available.
-                                    Each product can only have one proof. Please remove extra files or select different file type.
-                                </p>
-                            </div>
+                    <TabsContent value="upload" className="space-y-4">
+                        {/* File Input */}
+                        <div>
+                            <input
+                                type="file"
+                                multiple
+                                onChange={handleFileSelect}
+                                className="hidden"
+                                id="file-upload-modal"
+                                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                            />
+                            <Button
+                                onClick={() => document.getElementById('file-upload-modal')?.click()}
+                                variant="outline"
+                                className="w-full"
+                                disabled={uploading}
+                            >
+                                <Upload className="w-4 h-4 mr-2" />
+                                Add Files
+                            </Button>
                         </div>
-                    )}
 
-                    {hasDuplicateProducts && (
-                        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
-                            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                            <div className="text-sm text-red-800">
-                                <p className="font-medium">Duplicate product assignment</p>
-                                <p className="text-xs mt-1">
-                                    Each product can only have one proof. Please assign different products to each file.
-                                </p>
+                        {/* Warnings */}
+                        {hasMoreFilesThanProducts && (
+                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-2">
+                                <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                                <div className="text-sm text-yellow-800">
+                                    <p className="font-medium">More files than available products</p>
+                                    <p className="text-xs mt-1">
+                                        You have {filePreviews.length} files but only {productsToShow.length} products available.
+                                        Each product can only have one proof. Please remove extra files or select different file type.
+                                    </p>
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    {/* File Previews */}
-                    {filePreviews.length > 0 && (
-                        <ScrollArea className="h-[400px] rounded-lg border p-4">
-                            <div className="space-y-4">
-                                {filePreviews.map((filePreview, index) => (
-                                    <div
-                                        key={index}
-                                        className="flex gap-4 p-4 bg-gray-50 rounded-lg border"
-                                    >
-                                        {/* Preview */}
-                                        <div className="w-32 h-32 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
-                                            {filePreview.preview ? (
-                                                <img
-                                                    src={filePreview.preview}
-                                                    alt={filePreview.file.name}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            ) : filePreview.file.type.includes('pdf') ? (
-                                                <FileText className="w-12 h-12 text-red-500" />
-                                            ) : (
-                                                <FileText className="w-12 h-12 text-gray-500" />
-                                            )}
-                                        </div>
+                        {hasDuplicateProducts && (
+                            <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                                <div className="text-sm text-red-800">
+                                    <p className="font-medium">Duplicate product assignment</p>
+                                    <p className="text-xs mt-1">
+                                        Each product can only have one proof. Please assign different products to each file.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
 
-                                        {/* Info & Product Selection */}
-                                        <div className="flex-1 space-y-2">
-                                            <div className="flex items-start justify-between">
-                                                <div>
-                                                    <p className="font-medium text-sm truncate max-w-md">
-                                                        {filePreview.file.name}
-                                                    </p>
-                                                    <p className="text-xs text-gray-500">
-                                                        {(filePreview.file.size / 1024).toFixed(1)} KB
-                                                    </p>
-                                                </div>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleRemoveFile(index)}
-                                                    className="h-8 w-8 p-0"
-                                                >
-                                                    <X className="w-4 h-4" />
-                                                </Button>
+                        {/* File Previews */}
+                        {filePreviews.length > 0 && (
+                            <ScrollArea className="h-[400px] rounded-lg border p-4">
+                                <div className="space-y-4">
+                                    {filePreviews.map((filePreview, index) => (
+                                        <div
+                                            key={index}
+                                            className="flex gap-4 p-4 bg-gray-50 rounded-lg border"
+                                        >
+                                            {/* Preview */}
+                                            <div className="w-32 h-32 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
+                                                {filePreview.preview ? (
+                                                    <img
+                                                        src={filePreview.preview}
+                                                        alt={filePreview.file.name}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                ) : filePreview.file.type.includes('pdf') ? (
+                                                    <FileText className="w-12 h-12 text-red-500" />
+                                                ) : (
+                                                    <FileText className="w-12 h-12 text-gray-500" />
+                                                )}
                                             </div>
 
-                                            {/* Product Selection for Customer Proof */}
-                                            {isCustomerProof && (
-                                                <div>
-                                                    <Label className="text-xs">
-                                                        Assign to Product <span className="text-red-500">*</span>
-                                                    </Label>
-                                                    <Select
-                                                        value={filePreview.productId || "none"}
-                                                        onValueChange={(value) => handleProductChange(index, value)}
+                                            {/* Info & Product Selection */}
+                                            <div className="flex-1 space-y-2">
+                                                <div className="flex items-start justify-between">
+                                                    <div>
+                                                        <p className="font-medium text-sm truncate max-w-md">
+                                                            {filePreview.file.name}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500">
+                                                            {(filePreview.file.size / 1024).toFixed(1)} KB
+                                                        </p>
+                                                    </div>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleRemoveFile(index)}
+                                                        className="h-8 w-8 p-0"
                                                     >
-                                                        <SelectTrigger
-                                                            className={`h-9 ${!filePreview.productId ? 'border-red-300' : ''}`}
-                                                        >
-                                                            <SelectValue placeholder="Select product..." />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="none" disabled>
-                                                                <span className="text-gray-400">-- Select a product --</span>
-                                                            </SelectItem>
-                                                            {productsToShow.map((product) => {
-                                                                // Disable if already assigned to another file
-                                                                const alreadyAssigned = filePreviews.some(
-                                                                    (fp, i) => i !== index && fp.productId === product.id
-                                                                );
-                                                                return (
-                                                                    <SelectItem
-                                                                        key={product.id}
-                                                                        value={product.id}
-                                                                        disabled={alreadyAssigned}
-                                                                    >
-                                                                        {product.productName}
-                                                                        {product.color && ` - ${product.color}`}
-                                                                        {product.size && ` / ${product.size}`}
-                                                                        {alreadyAssigned && " (assigned)"}
-                                                                    </SelectItem>
-                                                                );
-                                                            })}
-                                                        </SelectContent>
-                                                    </Select>
+                                                        <X className="w-4 h-4" />
+                                                    </Button>
                                                 </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </ScrollArea>
-                    )}
 
-                    {/* Notes */}
-                    <div>
+                                                {/* Product Selection for Customer Proof */}
+                                                {isCustomerProof && (
+                                                    <div>
+                                                        <Label className="text-xs">
+                                                            Assign to Product <span className="text-red-500">*</span>
+                                                        </Label>
+                                                        <Select
+                                                            value={filePreview.productId || "none"}
+                                                            onValueChange={(value) => handleProductChange(index, value)}
+                                                        >
+                                                            <SelectTrigger
+                                                                className={`h-9 ${!filePreview.productId ? 'border-red-300' : ''}`}
+                                                            >
+                                                                <SelectValue placeholder="Select product..." />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="none" disabled>
+                                                                    <span className="text-gray-400">-- Select a product --</span>
+                                                                </SelectItem>
+                                                                {productsToShow.map((product) => {
+                                                                    // Disable if already assigned to another file
+                                                                    const alreadyAssigned = filePreviews.some(
+                                                                        (fp, i) => i !== index && fp.productId === product.id
+                                                                    );
+                                                                    return (
+                                                                        <SelectItem
+                                                                            key={product.id}
+                                                                            value={product.id}
+                                                                            disabled={alreadyAssigned}
+                                                                        >
+                                                                            {product.productName}
+                                                                            {product.color && ` - ${product.color}`}
+                                                                            {product.size && ` / ${product.size}`}
+                                                                            {alreadyAssigned && " (assigned)"}
+                                                                        </SelectItem>
+                                                                    );
+                                                                })}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </ScrollArea>
+                        )}
+                    </TabsContent>
+
+                    <TabsContent value="select" className="space-y-4">
+                        {/* Artwork Selection */}
+                        {artworkItems && Object.keys(artworkItems).length > 0 ? (
+                            <ScrollArea className="h-[450px] rounded-lg border p-4">
+                                <div className="space-y-6">
+                                    {Object.entries(artworkItems).map(([productId, artworks]: [string, any[]]) => {
+                                        const product = products.find(p => p.id === productId);
+                                        if (!product || artworks.length === 0) return null;
+
+                                        const selectedArtworkForProduct = selectedArtworks.find(a => a.productId === productId);
+
+                                        return (
+                                            <div key={productId} className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <h4 className="font-medium text-sm">
+                                                        {product.productName}
+                                                        {product.color && ` - ${product.color}`}
+                                                        {product.size && ` / ${product.size}`}
+                                                    </h4>
+                                                    {selectedArtworkForProduct && (
+                                                        <Badge variant="default" className="gap-1">
+                                                            <CheckCircle2 className="w-3 h-3" />
+                                                            Selected
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-3">
+                                                    {artworks.map((artwork) => {
+                                                        const isSelected = selectedArtworkForProduct?.artworkId === artwork.id;
+                                                        return (
+                                                            <Card
+                                                                key={artwork.id}
+                                                                className={`cursor-pointer transition-all hover:shadow-md ${isSelected ? 'ring-2 ring-primary' : ''
+                                                                    }`}
+                                                                onClick={() => handleArtworkSelect(artwork, productId)}
+                                                            >
+                                                                <div className="p-3 space-y-2">
+                                                                    <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center relative">
+                                                                        {artwork.filePath ? (
+                                                                            <img
+                                                                                src={artwork.filePath}
+                                                                                alt={artwork.name}
+                                                                                className="w-full h-full object-cover"
+                                                                            />
+                                                                        ) : (
+                                                                            <ImageIcon className="w-8 h-8 text-gray-400" />
+                                                                        )}
+                                                                        {isSelected && (
+                                                                            <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                                                                                <CheckCircle2 className="w-8 h-8 text-primary" />
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-xs font-medium truncate">{artwork.name}</p>
+                                                                        <p className="text-xs text-gray-500">{artwork.artworkType}</p>
+                                                                        {artwork.location && (
+                                                                            <p className="text-xs text-gray-400">{artwork.location}</p>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </Card>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </ScrollArea>
+                        ) : (
+                            <div className="text-center py-12 text-gray-500">
+                                <ImageIcon className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                                <p>No artworks available</p>
+                                <p className="text-sm">Add artworks to products first to select them here.</p>
+                            </div>
+                        )}
+                    </TabsContent>
+
+                    {/* Notes - Common for both tabs */}
+                    <div className="pt-4">
                         <Label htmlFor="upload-notes">Notes (Optional)</Label>
                         <Input
                             id="upload-notes"
@@ -298,7 +468,7 @@ export function UploadFilesModal({
                             disabled={uploading}
                         />
                     </div>
-                </div>
+                </Tabs>
 
                 <DialogFooter>
                     <Button variant="outline" onClick={handleClose} disabled={uploading}>
@@ -306,9 +476,14 @@ export function UploadFilesModal({
                     </Button>
                     <Button
                         onClick={handleUpload}
-                        disabled={!canUpload || uploading || hasMoreFilesThanProducts || hasDuplicateProducts}
+                        disabled={!canUpload || uploading || (uploadMode === 'upload' && (hasMoreFilesThanProducts || hasDuplicateProducts))}
                     >
-                        {uploading ? "Uploading..." : `Upload ${filePreviews.length} File${filePreviews.length !== 1 ? 's' : ''}`}
+                        {uploading 
+                            ? "Uploading..." 
+                            : uploadMode === 'upload'
+                                ? `Upload ${filePreviews.length} File${filePreviews.length !== 1 ? 's' : ''}`
+                                : `Use ${selectedArtworks.length} Artwork${selectedArtworks.length !== 1 ? 's' : ''}`
+                        }
                     </Button>
                 </DialogFooter>
             </DialogContent>

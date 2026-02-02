@@ -81,6 +81,7 @@ interface FilesTabProps {
         size?: string;
         quantity: number;
     }>;
+    artworkItems?: Record<string, any[]>; // Add artwork items prop
     onSwitchToEmail?: (emailData: { body: string; subject: string }) => void;
 }
 
@@ -92,7 +93,7 @@ const FILE_TYPE_OPTIONS = [
     { value: "other_document", label: "Other Document", color: "bg-gray-500" },
 ];
 
-export function FilesTab({ orderId, products, onSwitchToEmail }: FilesTabProps) {
+export function FilesTab({ orderId, products, artworkItems, onSwitchToEmail }: FilesTabProps) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
 
@@ -639,6 +640,7 @@ export function FilesTab({ orderId, products, onSwitchToEmail }: FilesTabProps) 
                 fileType={selectedFileType}
                 products={products}
                 availableProducts={availableProductsForProof}
+                artworkItems={artworkItems}
                 uploading={uploadMutation.isPending}
             />
 
