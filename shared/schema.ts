@@ -280,12 +280,30 @@ export const orderItems = pgTable("order_items", {
   decorationCost: decimal("decoration_cost", { precision: 10, scale: 2 }), // Decoration/imprint cost
   charges: decimal("charges", { precision: 10, scale: 2 }), // Additional charges
   sizePricing: jsonb("size_pricing"), // For SanMar/S&S: { 'XS': { cost: 10, price: 20, quantity: 5 }, 'S': {...}, ... }
+  uomFactory: integer("uom_factory"), // Unit of Measure from factory (e.g., 12 pieces per box)
   color: varchar("color"),
   size: varchar("size"),
   imprintLocation: varchar("imprint_location"),
   imprintMethod: varchar("imprint_method"),
   notes: text("notes"), // Product-specific notes
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Artwork items per order item
+export const artworkItems = pgTable("artwork_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderItemId: varchar("order_item_id").references(() => orderItems.id).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  artworkType: varchar("artwork_type", { length: 100 }), // embroidery, screen-print, heat-transfer, etc.
+  location: varchar("location", { length: 255 }), // e.g., "Front - Centered"
+  color: varchar("color", { length: 100 }), // e.g., "White", "PMS 186"
+  size: varchar("size", { length: 100 }), // e.g., "3\" x 3\""
+  status: varchar("status", { length: 50 }).notNull().default("pending"), // pending, in-review, approved, rejected, revision-needed
+  fileName: varchar("file_name", { length: 500 }),
+  filePath: varchar("file_path", { length: 500 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Note: Vendors are now managed at order_item level (each product has its own vendor)
@@ -464,7 +482,7 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   errors: many(errors),
 }));
 
-export const orderItemsRelations = relations(orderItems, ({ one }) => ({
+export const orderItemsRelations = relations(orderItems, ({ one, many }) => ({
   order: one(orders, {
     fields: [orderItems.orderId],
     references: [orders.id],
@@ -472,6 +490,14 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
   product: one(products, {
     fields: [orderItems.productId],
     references: [products.id],
+  }),
+  artworkItems: many(artworkItems),
+}));
+
+export const artworkItemsRelations = relations(artworkItems, ({ one }) => ({
+  orderItem: one(orderItems, {
+    fields: [artworkItems.orderItemId],
+    references: [orderItems.id],
   }),
 }));
 
@@ -1374,6 +1400,8 @@ export type Order = typeof orders.$inferSelect;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
+export type ArtworkItem = typeof artworkItems.$inferSelect;
+export type InsertArtworkItem = typeof artworkItems.$inferInsert;
 export type ArtworkFile = typeof artworkFiles.$inferSelect;
 export type InsertArtworkFile = z.infer<typeof insertArtworkFileSchema>;
 export type Activity = typeof activities.$inferSelect;

@@ -166,6 +166,20 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isAddProductDialogOpen, setIsAddProductDialogOpen] = useState(false);
   const [isEditOrderItemOpen, setIsEditOrderItemOpen] = useState(false);
+  const [isArtworkDialogOpen, setIsArtworkDialogOpen] = useState(false);
+  const [isArtworkListDialogOpen, setIsArtworkListDialogOpen] = useState(false);
+  const [currentOrderItemId, setCurrentOrderItemId] = useState<string | null>(null);
+  const [editingArtwork, setEditingArtwork] = useState<any>(null);
+  const [expandedArtworkItems, setExpandedArtworkItems] = useState<Set<string>>(new Set());
+  const [artworkForm, setArtworkForm] = useState({
+    name: "",
+    artworkType: "",
+    location: "",
+    color: "",
+    size: "",
+    status: "pending",
+    file: null as File | null
+  });
 
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [editingOrderItem, setEditingOrderItem] = useState<any>(null);
@@ -454,6 +468,129 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
     updateEditedItem(itemId, { uomFactory });
   };
 
+  // Artwork handlers
+  const handleOpenArtworkDialog = (orderItemId: string) => {
+    setCurrentOrderItemId(orderItemId);
+    setEditingArtwork(null);
+    setArtworkForm({
+      name: "",
+      artworkType: "",
+      location: "",
+      color: "",
+      size: "",
+      status: "pending",
+      file: null
+    });
+    setIsArtworkDialogOpen(true);
+  };
+
+  const toggleArtworkList = (orderItemId: string, e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    setCurrentOrderItemId(orderItemId);
+    setIsArtworkListDialogOpen(true);
+  };
+
+  const handleEditArtwork = (orderItemId: string, artwork: any) => {
+    setCurrentOrderItemId(orderItemId);
+    setEditingArtwork(artwork);
+    setArtworkForm({
+      name: artwork.name,
+      artworkType: artwork.artworkType,
+      location: artwork.location,
+      color: artwork.color,
+      size: artwork.size,
+      status: artwork.status,
+      file: null
+    });
+    setIsArtworkDialogOpen(true);
+  };
+
+  const handleSaveArtwork = async () => {
+    if (!currentOrderItemId) return;
+    
+    if (!artworkForm.name.trim()) {
+      toast({
+        title: "Name Required",
+        description: "Please enter an artwork name.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('name', artworkForm.name);
+      formData.append('artworkType', artworkForm.artworkType);
+      formData.append('location', artworkForm.location);
+      formData.append('color', artworkForm.color);
+      formData.append('size', artworkForm.size);
+      formData.append('status', artworkForm.status);
+      
+      if (artworkForm.file) {
+        formData.append('file', artworkForm.file);
+      }
+
+      const url = editingArtwork
+        ? `/api/order-items/${currentOrderItemId}/artworks/${editingArtwork.id}`
+        : `/api/order-items/${currentOrderItemId}/artworks`;
+      
+      const method = editingArtwork ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save artwork');
+      }
+
+      toast({
+        title: editingArtwork ? "Artwork Updated" : "Artwork Added",
+        description: `${artworkForm.name} has been ${editingArtwork ? 'updated' : 'added'} successfully.`,
+      });
+
+      // Refetch artwork items
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}/all-artworks`] });
+      setIsArtworkDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving artwork:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save artwork. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteArtwork = async (orderItemId: string, artworkId: string) => {
+    try {
+      const response = await fetch(`/api/order-items/${orderItemId}/artworks/${artworkId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete artwork');
+      }
+
+      toast({
+        title: "Artwork Deleted",
+        description: "Artwork has been removed.",
+      });
+
+      // Refetch artwork items
+      queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}/all-artworks`] });
+    } catch (error) {
+      console.error('Error deleting artwork:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete artwork. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const [emailSearchQuery, setEmailSearchQuery] = useState("");
   const [vendorEmailSearchQuery, setVendorEmailSearchQuery] = useState("");
 
@@ -506,6 +643,35 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
     enabled: open && !!order,
     staleTime: 0, // Force fresh data
     gcTime: 0, // Don't cache (replaces cacheTime in newer versions)
+  });
+
+  // Fetch artwork items for all order items
+  const { data: allArtworkItems = {} } = useQuery<Record<string, any[]>>({
+    queryKey: [`/api/orders/${orderId}/all-artworks`],
+    queryFn: async () => {
+      if (!orderItems || orderItems.length === 0) return {};
+      
+      const artworksByItem: Record<string, any[]> = {};
+      
+      await Promise.all(
+        orderItems.map(async (item: any) => {
+          try {
+            const response = await fetch(`/api/order-items/${item.id}/artworks`);
+            if (response.ok) {
+              artworksByItem[item.id] = await response.json();
+            } else {
+              artworksByItem[item.id] = [];
+            }
+          } catch (error) {
+            console.error(`Error fetching artworks for item ${item.id}:`, error);
+            artworksByItem[item.id] = [];
+          }
+        })
+      );
+      
+      return artworksByItem;
+    },
+    enabled: open && !!orderItems && orderItems.length > 0,
   });
 
   // Fetch suppliers data (must be before orderVendors useMemo)
@@ -2394,7 +2560,6 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                                               key={size}
                                               type="number"
                                               className="w-[70px] h-7 text-xs text-center"
-                                              defaultValue={0}
                                               value={editedItem.sizePricing[size]?.quantity || ''}
                                               onChange={(e) => handleSizePricingChange(item.id, size, 'quantity', parseInt(e.target.value) || 0)}
                                             />
@@ -2575,23 +2740,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                                   </div>
                                   <div className="flex col-span-4 items-center">
                                     <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-8 w-8 p-0"
-                                      title="Artwork"
-                                      onClick={() => {
-                                        // TODO: Open artwork assignment dialog
-                                        toast({
-                                          title: "Coming Soon",
-                                          description: "Artwork assignment feature will be available soon.",
-                                        });
-                                      }}
-                                    >
-                                      <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                                        <Eye className="w-4 h-4 text-white" />
-                                      </div>
-                                    </Button>
-                                    <Button
+                                      type="button"
                                       variant="ghost"
                                       size="sm"
                                       className="h-8 w-8 p-0"
@@ -2607,6 +2756,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                                       </div>
                                     </Button>
                                     <Button
+                                      type="button"
                                       variant="ghost"
                                       size="sm"
                                       className="h-8 w-8 p-0"
@@ -2622,6 +2772,7 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                                       <MessageSquare className="w-5 h-5 text-gray-400" />
                                     </Button>
                                     <Button
+                                      type="button"
                                       variant="ghost"
                                       size="sm"
                                       className="h-8 w-8 p-0"
@@ -2632,6 +2783,45 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
                                       </div>
                                     </Button>
                                   </div>
+                                </div>
+
+                                {/* Artwork Management Section - Outside Grid */}
+                                <div className="mt-4 flex items-center gap-2 relative z-10">
+                                  {/* View Artworks Button */}
+                                  <Button
+                                    type="button"
+                                    variant={allArtworkItems[item.id]?.length > 0 ? "default" : "outline"}
+                                    size="sm"
+                                    className="h-8 text-xs relative z-10 pointer-events-auto"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      toggleArtworkList(item.id);
+                                    }}
+                                  >
+                                    <Eye className="w-3 h-3 mr-1" />
+                                    View Artworks
+                                    {allArtworkItems[item.id]?.length > 0 && (
+                                      <Badge variant="secondary" className="ml-1 h-4 px-1 text-xs">
+                                        {allArtworkItems[item.id].length}
+                                      </Badge>
+                                    )}
+                                  </Button>
+                                  {/* Add Artwork Button */}
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs relative z-10 pointer-events-auto"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleOpenArtworkDialog(item.id);
+                                    }}
+                                  >
+                                    <Plus className="w-3 h-3 mr-1" />
+                                    Add Artwork
+                                  </Button>
                                 </div>
                               </div>
                             </div>
@@ -4296,6 +4486,283 @@ function OrderDetailsModal({ open, onOpenChange, orderId }: OrderDetailsModalPro
             </Button>
             <Button onClick={handleSaveOrderItem} disabled={updateOrderItemMutation.isPending} className="flex-1">
               {updateOrderItemMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Artwork List Dialog */}
+      <Dialog open={isArtworkListDialogOpen} onOpenChange={setIsArtworkListDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>Artwork List</span>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setIsArtworkListDialogOpen(false);
+                  handleOpenArtworkDialog(currentOrderItemId!);
+                }}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Artwork
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            {currentOrderItemId && allArtworkItems[currentOrderItemId]?.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {allArtworkItems[currentOrderItemId].map((artwork: any) => (
+                  <Card key={artwork.id}>
+                    <CardContent className="p-4">
+                      <div className="space-y-3">
+                        {/* Artwork Image Preview */}
+                        {artwork.filePath && (
+                          <div className="relative w-full h-48 bg-gray-100 rounded-lg overflow-hidden">
+                            <img
+                              src={artwork.filePath}
+                              alt={artwork.name}
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"%3E%3Crect fill="%23f3f4f6" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="14" fill="%239ca3af"%3ENo Preview%3C/text%3E%3C/svg%3E';
+                              }}
+                            />
+                          </div>
+                        )}
+                        
+                        {/* Artwork Details */}
+                        <div>
+                          <h3 className="font-semibold text-lg text-gray-900">{artwork.name}</h3>
+                          <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
+                            {artwork.artworkType && (
+                              <div>
+                                <span className="font-medium text-gray-600">Type:</span>
+                                <div className="text-gray-900">{artwork.artworkType}</div>
+                              </div>
+                            )}
+                            {artwork.location && (
+                              <div>
+                                <span className="font-medium text-gray-600">Location:</span>
+                                <div className="text-gray-900">{artwork.location}</div>
+                              </div>
+                            )}
+                            {artwork.color && (
+                              <div>
+                                <span className="font-medium text-gray-600">Color:</span>
+                                <div className="text-gray-900">{artwork.color}</div>
+                              </div>
+                            )}
+                            {artwork.size && (
+                              <div>
+                                <span className="font-medium text-gray-600">Size:</span>
+                                <div className="text-gray-900">{artwork.size}</div>
+                              </div>
+                            )}
+                            <div className="col-span-2">
+                              <span className="font-medium text-gray-600">Status:</span>
+                              <div className="mt-1">
+                                <Badge 
+                                  variant={artwork.status === 'approved' ? 'default' : 'secondary'}
+                                  className="text-xs"
+                                >
+                                  {artwork.status}
+                                </Badge>
+                              </div>
+                            </div>
+                            {artwork.fileName && (
+                              <div className="col-span-2">
+                                <span className="font-medium text-gray-600">File:</span>
+                                <div className="text-gray-900 truncate">{artwork.fileName}</div>
+                              </div>
+                            )}
+                            {artwork.notes && (
+                              <div className="col-span-2">
+                                <span className="font-medium text-gray-600">Notes:</span>
+                                <div className="text-gray-900">{artwork.notes}</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2 pt-2 border-t">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => {
+                              handleEditArtwork(currentOrderItemId, artwork);
+                              setIsArtworkListDialogOpen(false);
+                            }}
+                          >
+                            <Edit className="w-4 h-4 mr-2" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 text-red-600 hover:text-red-700"
+                            onClick={() => handleDeleteArtwork(currentOrderItemId, artwork.id)}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                <Package className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                <p className="text-lg font-medium mb-2">No artworks yet</p>
+                <p className="text-sm mb-4">Click "Add Artwork" to create your first artwork</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Artwork Dialog */}
+      <Dialog open={isArtworkDialogOpen} onOpenChange={setIsArtworkDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingArtwork ? 'Edit' : 'Add'} Artwork</DialogTitle>
+            <DialogDescription>
+              {editingArtwork ? 'Update' : 'Add'} artwork details for this product
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Label htmlFor="artwork-name">Artwork Name *</Label>
+                <Input
+                  id="artwork-name"
+                  placeholder="e.g., Company Logo"
+                  value={artworkForm.name}
+                  onChange={(e) => setArtworkForm({ ...artworkForm, name: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="artwork-type">Artwork Type</Label>
+                <Select
+                  value={artworkForm.artworkType}
+                  onValueChange={(value) => setArtworkForm({ ...artworkForm, artworkType: value })}
+                >
+                  <SelectTrigger id="artwork-type">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="embroidery">Embroidery</SelectItem>
+                    <SelectItem value="screen-print">Screen Print</SelectItem>
+                    <SelectItem value="heat-transfer">Heat Transfer</SelectItem>
+                    <SelectItem value="dtg">Direct to Garment (DTG)</SelectItem>
+                    <SelectItem value="sublimation">Sublimation</SelectItem>
+                    <SelectItem value="laser-engraving">Laser Engraving</SelectItem>
+                    <SelectItem value="pad-print">Pad Print</SelectItem>
+                    <SelectItem value="deboss">Deboss</SelectItem>
+                    <SelectItem value="emboss">Emboss</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="artwork-location">Location</Label>
+                <Input
+                  id="artwork-location"
+                  placeholder="e.g., Front - Centered"
+                  value={artworkForm.location}
+                  onChange={(e) => setArtworkForm({ ...artworkForm, location: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="artwork-color">Color</Label>
+                <Input
+                  id="artwork-color"
+                  placeholder="e.g., White, PMS 186"
+                  value={artworkForm.color}
+                  onChange={(e) => setArtworkForm({ ...artworkForm, color: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="artwork-size">Size</Label>
+                <Input
+                  id="artwork-size"
+                  placeholder='e.g., 3" x 3"'
+                  value={artworkForm.size}
+                  onChange={(e) => setArtworkForm({ ...artworkForm, size: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="artwork-status">Status</Label>
+                <Select
+                  value={artworkForm.status}
+                  onValueChange={(value) => setArtworkForm({ ...artworkForm, status: value })}
+                >
+                  <SelectTrigger id="artwork-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="in-review">In Review</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                    <SelectItem value="revision-needed">Revision Needed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="col-span-2">
+                <Label htmlFor="artwork-file">Artwork File</Label>
+                <div className="mt-1">
+                  <input
+                    id="artwork-file"
+                    type="file"
+                    accept="image/*,.pdf,.ai,.eps,.svg"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      setArtworkForm({ ...artworkForm, file });
+                    }}
+                    className="block w-full text-sm text-gray-500
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-md file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-blue-50 file:text-blue-700
+                      hover:file:bg-blue-100"
+                  />
+                  {artworkForm.file && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      Selected: {artworkForm.file.name}
+                    </p>
+                  )}
+                  {editingArtwork?.fileName && !artworkForm.file && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      Current: {editingArtwork.fileName}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsArtworkDialogOpen(false)} 
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveArtwork} 
+              className="flex-1"
+            >
+              {editingArtwork ? 'Update' : 'Add'} Artwork
             </Button>
           </div>
         </DialogContent>

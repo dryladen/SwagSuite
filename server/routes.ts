@@ -2105,6 +2105,131 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Artwork Items routes (per order item)
+  app.get('/api/order-items/:orderItemId/artworks', isAuthenticated, async (req, res) => {
+    try {
+      const { db } = await import("./db");
+      const { artworkItems } = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+
+      const artworks = await db
+        .select()
+        .from(artworkItems)
+        .where(eq(artworkItems.orderItemId, req.params.orderItemId));
+
+      res.json(artworks);
+    } catch (error) {
+      console.error("Error fetching artwork items:", error);
+      res.status(500).json({ message: "Failed to fetch artwork items" });
+    }
+  });
+
+  app.post('/api/order-items/:orderItemId/artworks', isAuthenticated, upload.single('file'), async (req, res) => {
+    try {
+      const { db } = await import("./db");
+      const { artworkItems } = await import("@shared/schema");
+      
+      let filePath = null;
+      let fileName = null;
+
+      // Handle file upload if present
+      if (req.file) {
+        filePath = (req.file as any).path; // Cloudinary URL
+        fileName = req.file.originalname;
+      }
+
+      const artworkData = {
+        orderItemId: req.params.orderItemId,
+        name: req.body.name,
+        artworkType: req.body.artworkType || null,
+        location: req.body.location || null,
+        color: req.body.color || null,
+        size: req.body.size || null,
+        status: req.body.status || 'pending',
+        fileName: fileName,
+        filePath: filePath,
+        notes: req.body.notes || null,
+      };
+
+      const [artwork] = await db
+        .insert(artworkItems)
+        .values(artworkData)
+        .returning();
+
+      res.status(201).json(artwork);
+    } catch (error) {
+      console.error("Error creating artwork item:", error);
+      res.status(500).json({ message: "Failed to create artwork item" });
+    }
+  });
+
+  app.put('/api/order-items/:orderItemId/artworks/:artworkId', isAuthenticated, upload.single('file'), async (req, res) => {
+    try {
+      const { db } = await import("./db");
+      const { artworkItems } = await import("@shared/schema");
+      const { eq, and } = await import("drizzle-orm");
+
+      const updateData: any = {
+        name: req.body.name,
+        artworkType: req.body.artworkType || null,
+        location: req.body.location || null,
+        color: req.body.color || null,
+        size: req.body.size || null,
+        status: req.body.status,
+        notes: req.body.notes || null,
+        updatedAt: new Date(),
+      };
+
+      // Handle file upload if present
+      if (req.file) {
+        updateData.filePath = (req.file as any).path; // Cloudinary URL
+        updateData.fileName = req.file.originalname;
+      }
+
+      const [artwork] = await db
+        .update(artworkItems)
+        .set(updateData)
+        .where(
+          and(
+            eq(artworkItems.id, req.params.artworkId),
+            eq(artworkItems.orderItemId, req.params.orderItemId)
+          )
+        )
+        .returning();
+
+      if (!artwork) {
+        return res.status(404).json({ message: "Artwork not found" });
+      }
+
+      res.json(artwork);
+    } catch (error) {
+      console.error("Error updating artwork item:", error);
+      res.status(500).json({ message: "Failed to update artwork item" });
+    }
+  });
+
+  app.delete('/api/order-items/:orderItemId/artworks/:artworkId', isAuthenticated, async (req, res) => {
+    try {
+      const { db } = await import("./db");
+      const { artworkItems } = await import("@shared/schema");
+      const { eq, and } = await import("drizzle-orm");
+
+      await db
+        .delete(artworkItems)
+        .where(
+          and(
+            eq(artworkItems.id, req.params.artworkId),
+            eq(artworkItems.orderItemId, req.params.orderItemId)
+          )
+        );
+
+      res.json({ message: "Artwork deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting artwork item:", error);
+      res.status(500).json({ message: "Failed to delete artwork item" });
+    }
+  });
+
   // Artwork upload routes
   app.post('/api/artwork/upload', isAuthenticated, upload.single('file'), async (req, res) => {
     try {
